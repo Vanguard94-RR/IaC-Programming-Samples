@@ -1,0 +1,8 @@
+object Host "{{ i2_agent_fqdn }}" {
+    import "generic-host"
+    check_command = "hostalive"
+    address = "{{ i2_agent_public_ipv4_addr }}"
+    address6 = "{{ i2_agent_public_ipv6_addr }}"
+    vars.os = "Linux"
+    vars.dist = "{{ ansible_distribution }}"
+}
