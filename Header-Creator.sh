@@ -11,13 +11,15 @@
 
 today=$(date +%Y%m%d)
 div="======================================"
-
+div1="=========================="
 /usr/bin/clear
 
 _select_title() {
 
     # Get the user input.
-    printf "Enter a title: "
+    echo -e "$div1 .sh File Header Creator $div1"
+    echo
+    printf "Enter a file name for the script: "
     read -r title
 
     # Remove the spaces from the title if necessary.
@@ -57,9 +59,9 @@ printf "%-16s\n\
 %-16s%-8s\n\
 %-16s%-8s\n\
 %-16s%-8s\n\
-%s\n\n\n" '#!/bin/bash -' '#title' ":$title" '#description' \
-    ":${dscrpt}" '#author' ":$name" '#date' ":$today" '#version' \
-    ":$vnum" '#usage' ":./$title" '#notes' ':' '#bash_version' \
+%s\n\n\n" '#!/bin/bash -' '#File name' ":$title" '#Description' \
+    ":${dscrpt}" '#Author' ":$name" '#Date' ":$today" '#Version' \
+    ":$vnum" '#Usage' ":./$title or bash $title" '#Notes' ':' '#Bash_version' \
     ":${BASH_VERSION}" \#$div${div} >$title
 
 # Make the file executable.
