@@ -1,9 +1,10 @@
 # System-Admin-Helper-using-Bash-Shell-Scripting
+
 ***open in raw form for better readability***
 ######################################################################################
 
-	This System Admin Helper GUI program
-     	     was created by/AHMED ZENBAA
+ This System Admin Helper GUI program
+           was created by/Manuel Cortes
 
 ######################################################################################
 Mind the following:
