@@ -1,0 +1,10 @@
+---
+i2_agent_fqdn:                "{{ inventory_hostname }}"   # Agent public FQDN
+i2_agent_public_ipv4_addr:    "{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}"
+i2_agent_public_ipv6_addr:    "{{ hostvars[inventory_hostname]['ansible_default_ipv6']['address'] }}"
+i2_master_fqdn:               icingamaster.domain.tld     # (Ansible) FQDN of the master
+i2_master_internal_hostname:  "{{ inventory_hostname }}"      # Internal Hostname / IP of Icinga master
+i2_apt_key:                   "https://packages.icinga.com/icinga.key"
+i2_apt_url:                   "deb http://packages.icinga.com/{{ ansible_distribution|lower }} icinga-{{ ansible_distribution_release }} main"
+i2_yum_key:                   "https://packages.icinga.com/icinga.key"
+i2_yum_url:                   "http://packages.icinga.com/epel/$releasever/release/"

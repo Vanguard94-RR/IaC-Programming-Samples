@@ -1,0 +1,28 @@
+---
+
+
+- name: create pki folder
+  file: 
+    path: /etc/icinga2/pki 
+    state: directory 
+    mode: 0700 
+    owner: "{{ i2_user }}" 
+    group: "{{ i2_group }}"
+- name: create cert
+  shell: icinga2 pki new-cert --cn {{ i2_agent_fqdn }} --key /etc/icinga2/pki/{{ i2_agent_fqdn }}.key --cert /etc/icinga2/pki/{{ i2_agent_fqdn }}.crt
+- name: save the masters cert as trustedcert
+  shell: icinga2 pki save-cert --key /etc/icinga2/pki/{{ i2_agent_fqdn }}.key --cert /etc/icinga2/pki/{{ i2_agent_fqdn }}.crt --trustedcert /etc/icinga2/pki/trusted-master.crt --host {{ i2_master_internal_hostname }}
+- name: request the certificate from the icinga server
+  shell: icinga2 pki request --host {{ i2_master_internal_hostname }} --port 5665 --ticket {{ ticket }} --key /etc/icinga2/pki/{{ i2_agent_fqdn }}.key --cert /etc/icinga2/pki/{{ i2_agent_fqdn }}.crt --trustedcert /etc/icinga2/pki/trusted-master.crt --ca /etc/icinga2/pki/ca.key
+- name: Connect Icinga agent to master instance
+  shell: |
+    icinga2 node setup \
+    --ticket {{ ticket }} \
+    --endpoint "{{ i2_master_fqdn }},{{ i2_master_internal_hostname }},5665" \
+    --zone {{ i2_agent_fqdn }} \
+    --parent_host {{ i2_master_internal_hostname }} \
+    --trustedcert /etc/icinga2/pki/trusted-master.crt \
+    --cn {{ i2_agent_fqdn }} \
+    --accept-config \
+    --accept-commands \
+    --disable-confd

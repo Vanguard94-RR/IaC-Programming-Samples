@@ -1,0 +1,11 @@
+- name: Restart-sysmon
+  ansible.windows.win_shell: "Restart-Service {{ sysmon_servicename }}"
+
+- name: Reload-sysmon
+  ansible.windows.win_command: "\"{{ sysmon_install_path }}\\{{ sysmon_exe }}\" -c \"{{ sysmon_install_path }}\"\\sysmonconfig.xml"
+  args:
+    chdir: "{{ sysmon_install_path }}"
+
+- name: Reload-linux-sysmon
+  ansible.builtin.command:
+    cmd: sysmon -c /etc/sysmon/config.xml

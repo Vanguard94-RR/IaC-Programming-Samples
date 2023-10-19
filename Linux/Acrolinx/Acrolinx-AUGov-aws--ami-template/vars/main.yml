@@ -1,0 +1,20 @@
+---
+# vars file for aws-custom_ami_pipeline
+
+aws:
+  access_key_tower: '{{ lookup("env", "AWS_ACCESS_KEY") }}'
+  secret_key_tower: '{{ lookup("env", "AWS_SECURITY_KEY") }}'
+  security_token_tower: '{{ lookup("env", "AWS_SECURITY_TOKEN") }}'
+  access_key: ACCESSKEY
+  secret_key: SECRETKEY
+  security_token: SECURITYTOKEN
+  ami_id: ami-0810abbfb78d37cdf
+  region: ap-southeast-2
+  sec_group: sg-0c5897546d56f2c31
+  subnet_id: subnet-0583bd52d696beb67
+  instance_type: t2.micro
+  key: svc_soe_ansible
+  id: rhel8soe_v5
+  tag: '{"Name":"SOE_RHEL8"}'
+  ami_prefix: aws-rhel8-soe
+  ami_suffix: '{{ lookup("pipe","date +%s") }}'
