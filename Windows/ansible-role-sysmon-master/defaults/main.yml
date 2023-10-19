@@ -1,3 +1,0 @@
-sysmon_install_path: "C:\\Program Files\\Sysmon"
-sysmon_version: "14.11"
-sysmon_config: swiftonsecurity-sysmonconfig.xml
