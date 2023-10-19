@@ -1,0 +1,81 @@
+---
+- name: Get packages that can be upgraded
+  become: true
+  check_mode: true
+  ansible.builtin.command:
+    list: upgrades
+    state: latest
+    update_cache: true
+  register: reg_yum_output_all
+  when: ev_security_only == "no"
+
+- name: List packages that can be upgraded
+  ansible.builtin.debug:
+    check_mode: true
+    msg: "{{ reg_yum_output_all.results | map(attribute='name') | list }}"
+  when: ev_security_only == "no"
+
+- name: Get packages that can be patched with security fixes
+  become: true
+  check_mode: true
+  ansible.builtin.yum:
+    security: yes
+    list: updates
+    #state: latest
+    update_cache: yes
+  register: reg_yum_output_secu
+  when: ev_security_only == "yes"
+
+- name: List packages that can be patched with security fixes
+  check_mode: true
+  ansible.builtin.debug:
+    msg: "{{ reg_yum_output_secu.results | map(attribute='name') | list }}"
+  when: ev_security_only == "yes"
+
+- name: Request user confirmation
+  check_mode: true
+  ansible.builtin.pause:
+    prompt: |
+
+      The packages listed above will be upgraded. Do you want to continue ? 
+      -> Press RETURN to continue.
+      -> Press Ctrl+c and then "a" to abort.
+  when: reg_yum_output_all is defined or reg_yum_output_secu is defined
+
+- name: Install yum-utils
+  become: true
+  check_mode: true
+  ansible.builtin.yum:
+    name: "yum-utils"
+    state: latest
+    update_cache: yes
+
+- name: Check if a reboot is required
+  become: true
+  check_mode: true
+  command: needs-restarting -r
+  register: reg_reboot_required
+  ignore_errors: true
+  failed_when: false
+  changed_when: reg_reboot_required.rc != 0
+  notify:
+    - Reboot server
+
+- name: Reboot server
+  become: true
+  check_mode: true
+  command: shutdown -r now
+  register: reg_reboot_required
+  ignore_errors: true
+  failed_when: false
+  when: ev_security_only == "yes"
+  notify:
+    - Reboot server
+
+---
+- name: Reboot server
+  check_mode: true
+  ansible.builtin.reboot:
+    msg: "Reboot initiated by Ansible after OS update"
+    reboot_timeout: 10
+    test_command: uptime

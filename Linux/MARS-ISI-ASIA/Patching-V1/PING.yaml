@@ -1,0 +1,37 @@
+---
+
+- name: Ping Test Update and Reboot
+  hosts: all
+  gather_facts: false
+  become: true
+  tasks:
+
+    - name: Ping function
+      ansible.builtin.ping:
+        data: pong
+
+    - name: Task Update servers
+      check_mode: true
+      ansible.builtin.yum:
+        security: true
+        state: latest
+      async: 0
+      poll: 0
+      register: yum_output
+      ignore_errors: true
+
+    - name: Show that yum output
+      debug:
+        var: yum_output
+
+    - name: Task Reboot CentOS/RedHat systems
+      check_mode: true
+      ansible.builtin.reboot:
+        post_reboot_delay: 15
+        test_command: uptime
+      async: 0
+      poll: 0
+      register: reboot_started
+      ignore_errors: true
+
+...

@@ -1,0 +1,32 @@
+---
+galaxy_info:
+  role_name: sysmon
+  namespace: j91321
+  author: Ján Trenčanský
+  description: Install Sysmon on Windows and Linux. Rulesets included.
+  license: MIT
+  min_ansible_version: "2.11"
+  platforms:
+    - name: Windows
+      versions:
+        - "2016"
+        - "2019"
+    - name: Debian
+      versions:
+        - buster
+        - bullseye
+    - name: Ubuntu
+      versions:
+        - bionic
+        - focal
+    - name: EL
+      versions:
+        - "8"
+  galaxy_tags:
+    - security
+    - windows
+    - logging
+    - monitoring
+    - sysmon
+
+dependencies: []

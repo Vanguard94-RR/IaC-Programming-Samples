@@ -1,0 +1,51 @@
+<!-- manu1331@LAPTOP-U3P21DJ7:~/Rax-Maintenance$ aws ec2 describe-instances --instance-ids i-07c0be78504bc2692 --output text
+RESERVATIONS 829234802244 r-076601c8981203e3e
+INSTANCES 0 x86_64 165121259642499237 True True xen ami-065ec1e661d619058 i-07c0be78504bc2692 r5.xlarge ACROLINX-IRELAND 2022-04-29T06:10:00+00:00 Red Hat Enterprise Linux ip-10-1-33-158.eu-west-1.compute.internal 10.1.33.158 ec2-18-202-137-122.eu-west-1.compute.amazonaws.com 18.202.137.122 /dev/sda1 ebs True subnet-0188eb62e084bdece RunInstances:0010 2022-04-29T06:10:00+00:00 hvm vpc-55a5a930
+BLOCKDEVICEMAPPINGS /dev/sda1
+EBS 2022-04-29T06:10:00+00:00 True attached vol-0d619db9233f16595
+BLOCKDEVICEMAPPINGS /dev/sdb
+EBS 2022-04-29T06:10:00+00:00 False attached vol-0b6185f3cfbc57d05
+CAPACITYRESERVATIONSPECIFICATION open
+CPUOPTIONS 2 2
+ENCLAVEOPTIONS False
+HIBERNATIONOPTIONS False
+IAMINSTANCEPROFILE arn:aws:iam::829234802244:instance-profile/Rackspace-Instance-Profile AIPA4CER65ZCBAJBLUA3X
+MAINTENANCEOPTIONS default
+METADATAOPTIONS enabled disabled 1 optional disabled applied
+MONITORING enabled
+NETWORKINTERFACES Primary network interface interface 0a:72:2d:2f:2a:1d eni-03cb5e06649e8911e 829234802244 ip-10-1-33-158.eu-west-1.compute.internal 10.1.33.158 True in-use subnet-0188eb62e084bdece vpc-55a5a930
+ASSOCIATION 829234802244 ec2-18-202-137-122.eu-west-1.compute.amazonaws.com 18.202.137.122
+ATTACHMENT 2022-04-29T06:10:00+00:00 eni-attach-0d223612de040668d True 0 0 attached
+GROUPS sg-5217ce2e ACROLINX-MGMT
+GROUPS sg-07ffa804cbff134ed NON-INCAPSULA
+GROUPS sg-aa0ed7d6 DP-MSS-ProtectedHosts
+GROUPS sg-01e41b7d9db3a6f37 ec2-alb
+PRIVATEIPADDRESSES True ip-10-1-33-158.eu-west-1.compute.internal 10.1.33.158
+ASSOCIATION 829234802244 ec2-18-202-137-122.eu-west-1.compute.amazonaws.com 18.202.137.122
+PLACEMENT eu-west-1b default
+PRIVATEDNSNAMEOPTIONS False False ip-name
+SECURITYGROUPS sg-5217ce2e ACROLINX-MGMT
+SECURITYGROUPS sg-07ffa804cbff134ed NON-INCAPSULA
+SECURITYGROUPS sg-aa0ed7d6 DP-MSS-ProtectedHosts
+SECURITYGROUPS sg-01e41b7d9db3a6f37 ec2-alb
+STATE 16 running
+TAGS TZ GMT
+TAGS RackspaceManaged True
+TAGS env prod
+TAGS Backup True
+TAGS Name bajajfinserv.acrolinx.cloud
+ -->
+
+# Script to Get instance data
+
+## To get instance id from instance name
+
+$ aws ec2 describe-instances --filters 'Name=tag:Name,Values=bajajfinserv.acrolinx.cloud' --output text --query 'Reservations[*].Instances[*].InstanceId'
+
+## To get instance availability zone from instance name
+
+$ aws ec2 describe-instances --filters 'Name=tag:Name,Values=bajajfinserv.acrolinx.cloud' --output text --query 'Reservations[*].Instances[*].InstanceId' --query 'Reservations[*].Instances[*].Placement[].AvailabilityZone'
+
+## To get instance region name from availability zone
+
+$ aws ec2 describe-availability-zones --filters 'Name=zone-name,Values=eu-west-1b' --output text --query 'AvailabilityZones[].RegionName[]'

@@ -1,0 +1,11 @@
+Nombre del Bastion y de la Region
+
+This is going to create an AMi for <CHG-ServerNane-Date> do you want to proceed
+
+Image created ami-0683b824dd7980f4e > creating image Wait until image is ready
+
+- Pending in red
+- Available on Green
+  To confirm image is ready
+
+Run this as a lock for the previous script to avoid premature termination

@@ -1,0 +1,9 @@
+---
+- name: OS update
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: OS update - all packages or security fixes only
+      ansible.builtin.import_role:
+        name: roles/
+        
