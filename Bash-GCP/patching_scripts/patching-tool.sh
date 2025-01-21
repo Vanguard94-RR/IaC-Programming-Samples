@@ -2,7 +2,7 @@
 # --------------------------------------------------------
 # Name   : patching-tool.sh
 # Desc   : Automating patching steps
-# Author : Gene Ordanza II <geronimo.ordanza@fisglobal.com>
+# Author : Juan MAnuel Cortes <vanguard9417@gmail.com>
 # Group  : ETS Linux/Unix Patching
 # History: 20140610 (initial draft)
 # --------------------------------------------------------
