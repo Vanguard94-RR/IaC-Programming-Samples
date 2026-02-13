@@ -1273,7 +1273,7 @@ operation_cleanup() {
     
     echo ""
     echo -e "${RED}⚠ This action cannot be undone${NC}"
-    echo -ne "${YELLOW}Are you sure?? (Y/N): ${NC}"
+    echo -ne "${YELLOW}Are you sure? (Y/N): ${NC}"
     read confirm
     
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
