@@ -474,22 +474,52 @@ get_ksa_annotation() {
 list_workload_identities() {
     local namespace="$1"
     
-    echo -e "${WHITE}Kubernetes Service Accounts con Workload Identity en namespace: ${LCYAN}${namespace}${NC}"
+    echo -e "${WHITE}Kubernetes Service Accounts with Workload Identity in namespace: ${LCYAN}${namespace}${NC}"
     echo ""
     
-    local ksas=$(kubectl get serviceaccounts -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+    # Get all KSAs in namespace using kubectl
+    local ksa_output=$(kubectl get serviceaccounts -n "$namespace" -o json 2>/dev/null)
+    
+    if [[ -z "$ksa_output" ]]; then
+        echo -e "  ${GRAY}No Service Accounts found in namespace${NC}"
+        return 0
+    fi
     
     local found=false
-    for ksa in $ksas; do
-        local annotation=$(get_ksa_annotation "$ksa" "$namespace")
+    
+    # Parse JSON output
+    echo "$ksa_output" | jq -r '.items[] | "\(.metadata.name)|\(.metadata.annotations["iam.gke.io/gcp-service-account"] // "")"' 2>/dev/null | while IFS='|' read -r ksa annotation; do
+        if [[ -z "$ksa" ]]; then
+            continue
+        fi
+        
         if [[ -n "$annotation" ]]; then
-            echo -e "  ${LCYAN}$ksa${NC} → ${LGREEN}$annotation${NC}"
-            found=true
+            echo -e "  ${LCYAN}•${NC} KSA: ${LGREEN}${ksa}${NC}"
+            echo -e "    IAM SA: ${LCYAN}${annotation}${NC}"
+            echo ""
         fi
     done
     
-    if [[ "$found" == "false" ]]; then
-        echo -e "  ${GRAY}No KSAs found with Workload Identity configured${NC}"
+    # Count total and show availability
+    local total=$(echo "$ksa_output" | jq '.items | length' 2>/dev/null)
+    
+    # Show all KSAs if none have annotations
+    echo "$ksa_output" | jq -r '.items[] | select(.metadata.annotations["iam.gke.io/gcp-service-account"] == null or .metadata.annotations["iam.gke.io/gcp-service-account"] == "") | .metadata.name' 2>/dev/null | while read -r ksa; do
+        if [[ -n "$ksa" ]]; then
+            found=false
+        fi
+    done
+    
+    # If found no configured ones, show all
+    if ! echo "$ksa_output" | jq '.items[] | select(.metadata.annotations["iam.gke.io/gcp-service-account"] != null and .metadata.annotations["iam.gke.io/gcp-service-account"] != "")' 2>/dev/null | grep -q .; then
+        echo -e "  ${GRAY}✗ No KSAs with Workload Identity annotation${NC}"
+        echo ""
+        echo -e "${WHITE}Available Service Accounts in namespace (${total}):${NC}"
+        echo "$ksa_output" | jq -r '.items[] | .metadata.name' 2>/dev/null | while read -r ksa; do
+            if [[ -n "$ksa" ]]; then
+                echo -e "  ${YELLOW}•${NC} ${LGREEN}${ksa}${NC}"
+            fi
+        done
     fi
 }
 
@@ -621,7 +651,8 @@ operation_setup() {
     
     # --- Step 0: Ticket/CTask (Optional) ---
     echo -e "${GRAY}  (Optional) Associate with ticket for organizing logs${NC}"
-    prompt_input "Ticket or CTask number (optional, press Enter to skip)" "TICKET_ID" ""
+    prompt_input "Ticket or CTASK number (optional, press Enter to skip)" "TICKET_ID" ""
+    G_TICKET_ID="$TICKET_ID"
     
     # Setup log directory based on ticket
     setup_log_directory "$G_TICKET_ID"
@@ -877,9 +908,48 @@ operation_verify() {
     setup_log_directory ""
     log "Session started - Operation: VERIFY"
     
+    # --- List active projects from registry ---
+    if [[ -f "$G_CONTROL_FILE" ]]; then
+        echo -e "${WHITE}Active configurations from registry:${NC}"
+        echo ""
+        
+        # Use awk to process CSV and filter active configurations
+        local active_count=$(awk -F',' 'NR>1 && $9 ~ /^activo/ {count++} END {print count+0}' "$G_CONTROL_FILE")
+        
+        if [[ $active_count -gt 0 ]]; then
+            awk -F',' 'NR>1 && $9 ~ /^activo/ {
+                printf "  \033[1;36m•\033[0m Project: \033[1;37m%s\033[0m\n", $3
+                printf "    Cluster: \033[1;36m%s\033[0m | Location: \033[1;33m%s\033[0m\n", $4, $5
+                printf "    Namespace: \033[1;33m%s\033[0m | KSA: \033[1;32m%s\033[0m\n", $6, $7
+                printf "    IAM SA: \033[1;34m%s\033[0m\n\n", $8
+            }' "$G_CONTROL_FILE"
+        else
+            echo -e "  ${GRAY}(No active configurations)${NC}"
+        fi
+        
+        echo ""
+    else
+        print_warning "No registry file found. Manual configuration entry required."
+        echo ""
+    fi
+    
+    # --- Menu options ---
+    echo -e "${WHITE}Options:${NC}"
+    echo -e "  ${LCYAN}1)${NC} Continue with verification"
+    echo -e "  ${LCYAN}0)${NC} Return to main menu"
+    echo ""
+    echo -ne "${YELLOW}Select an option: ${NC}"
+    read verify_option
+    
+    if [[ "$verify_option" != "1" ]]; then
+        return 0
+    fi
+    
+    echo ""
+    
     # --- Project ID ---
     local current_project=$(get_current_project)
-    prompt_input "Enter Project ID" "project_id" "$current_project"
+    prompt_input "Enter Project ID to verify" "project_id" "$current_project"
     
     if [[ -z "$project_id" ]]; then
         print_error "Project ID is required"
@@ -1042,21 +1112,6 @@ ask_confirmation() {
     
     # Accept: yes, y, or empty (default yes for critical operations)
     if [[ ! "$response1" =~ ^(yes|y)$ ]]; then
-        echo -e "${LGREEN}✓ Operation cancelled${NC}"
-        return 1
-    fi
-    
-    # Second confirmation (double verification)
-    echo -e "\n${RED}⚠ This action cannot be undone${NC}"
-    echo -ne "Type '${action}' to confirm: "
-    local response2
-    read response2
-    
-    # Convert to lowercase
-    response2=$(echo "$response2" | tr '[:upper:]' '[:lower:]')
-    local action_lower=$(echo "$action" | tr '[:upper:]' '[:lower:]')
-    
-    if [[ "$response2" != "$action_lower" ]]; then
         echo -e "${LGREEN}✓ Operation cancelled${NC}"
         return 1
     fi
@@ -1629,23 +1684,35 @@ operation_view_registry() {
         return 0
     fi
     
-    # Count records
-    local total=$(($(wc -l < "$G_CONTROL_FILE") - 1))
-    local active=$(tail -n +2 "$G_CONTROL_FILE" | awk -F',' '$9 == "activo"' | wc -l)
+    # Count records (handle missing trailing newline)
+    local total=$(cat "$G_CONTROL_FILE" | tail -n +2 | wc -l)
+    # If last line doesn't end with newline, add 1
+    if [[ $(tail -c 1 "$G_CONTROL_FILE" | wc -l) -eq 0 ]]; then
+        ((total++))
+    fi
+    
+    # Count active records
+    local active=$(cat "$G_CONTROL_FILE" | tail -n +2 | awk -F',' '{status=$NF; gsub(/^[[:space:]]+|[[:space:]]+$/, "", status); if (status == "activo") count++} END {print count+0}')
     local deleted=$((total - active))
     echo -e "${WHITE}Total records:${NC} ${LCYAN}${total}${NC} (${LGREEN}${active} active${NC}, ${RED}${deleted} deleted${NC})"
     echo ""
     
-    # Show last 20 records
-    echo -e "${WHITE}Últimos registros:${NC}"
+    # Show all records
+    echo -e "${WHITE}All records:${NC}"
     echo -e "${GRAY}──────────────────────────────────────────────────────────────────────────────────────────────${NC}"
     
     # Header
     echo -e "${WHITE}Fecha               | Ticket     | Project          | Namespace | KSA              | Status${NC}"
     echo -e "${GRAY}──────────────────────────────────────────────────────────────────────────────────────────────${NC}"
     
-    # Data (skip header, show last 15)
-    tail -n +2 "$G_CONTROL_FILE" | tail -15 | while IFS=',' read -r fecha ticket project cluster location namespace ksa iam_sa status; do
+    # Data (skip header, show all records - add newline to handle EOF without newline)
+    (cat "$G_CONTROL_FILE" && echo "") | tail -n +2 | while IFS=',' read -r fecha ticket project cluster location namespace ksa iam_sa status; do
+        # Skip empty lines
+        [[ -z "$fecha" ]] && continue
+        
+        # Trim status
+        status=$(echo "$status" | xargs)
+        
         local status_color="${LGREEN}"
         [[ "$status" =~ ^eliminado ]] && status_color="${RED}"
         printf "${LCYAN}%-19s${NC} | ${YELLOW}%-10s${NC} | ${WHITE}%-16s${NC} | ${LCYAN}%-9s${NC} | ${LGREEN}%-16s${NC} | ${status_color}%s${NC}\n" \
@@ -1654,7 +1721,7 @@ operation_view_registry() {
     
     echo -e "${GRAY}────────────────────────────────────────────────────────────────────────────────${NC}"
     echo ""
-    echo -e "${GRAY}Archivo: $G_CONTROL_FILE${NC}"
+    echo -e "${GRAY}File: $G_CONTROL_FILE${NC}"
     
     echo ""
     echo -ne "${YELLOW}Press Enter to continue...${NC}"
