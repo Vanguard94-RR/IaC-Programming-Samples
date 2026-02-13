@@ -1,0 +1,23 @@
+# Gitignore for Workload Identity project
+
+# Environment files
+.env
+.env.local
+
+# Logs
+logs/
+*.log
+
+# System files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.bak
