@@ -1,0 +1,79 @@
+# Ejemplo: Crear Topics en un proyecto y Suscripciones en otro
+# 
+# Paso 1: Crear topics en gnp-stela-uat
+# Paso 2: Crear suscripciones en gnp-ods-uat que consumen esos topics
+#
+# Flujo de uso:
+# 1. ./create-pubsub-manager.sh
+#    - Ticket: CTASK0123456
+#    - Proyecto: gnp-stela-uat
+#    - Config: example-create-topics-then-subs.yaml
+#    (Esto creará solo los topics)
+#
+# 2. ./create-pubsub-manager.sh
+#    - Ticket: CTASK0123456
+#    - Proyecto: gnp-ods-uat
+#    - Config: example-create-topics-then-subs.yaml
+#    (Esto creará solo las suscripciones)
+
+# Proyecto BASE - define donde se crearán las suscripciones por defecto
+project: gnp-ods-uat
+
+# Service account que necesita permisos en los topics del otro proyecto
+service_account: consumer-app@gnp-ods-uat.iam.gserviceaccount.com
+
+resources:
+  # ==========================================================================
+  # TOPICS - Se crean en gnp-stela-uat (especificado con topic_project)
+  # ==========================================================================
+  
+  - type: topic
+    name: eventos.tesoreria.pagos.recibidos
+    topic_project: gnp-stela-uat
+    retention_days: 7
+  
+  - type: topic
+    name: eventos.tesoreria.pagos.rechazados
+    topic_project: gnp-stela-uat
+    retention_days: 7
+  
+  - type: topic
+    name: eventos.tesoreria.conciliacion.completada
+    topic_project: gnp-stela-uat
+    retention_days: 14
+  
+  # ==========================================================================
+  # SUBSCRIPTIONS - Se crean en gnp-ods-uat (proyecto base)
+  # Consumen topics de gnp-stela-uat
+  # ==========================================================================
+  
+  - type: subscription
+    name: ods.pagos.recibidos.consumer
+    topic: projects/gnp-stela-uat/topics/eventos.tesoreria.pagos.recibidos
+    topic_project: gnp-stela-uat
+    ack_deadline: 600
+    retention_days: 7
+  
+  - type: subscription
+    name: ods.pagos.rechazados.consumer
+    topic: projects/gnp-stela-uat/topics/eventos.tesoreria.pagos.rechazados
+    topic_project: gnp-stela-uat
+    ack_deadline: 600
+    retention_days: 7
+  
+  - type: subscription
+    name: ods.conciliacion.consumer
+    topic: projects/gnp-stela-uat/topics/eventos.tesoreria.conciliacion.completada
+    topic_project: gnp-stela-uat
+    ack_deadline: 900
+    retention_days: 14
+
+# NOTAS:
+# - Los topics se crean en gnp-stela-uat porque tienen topic_project: gnp-stela-uat
+# - Las suscripciones se crean en gnp-ods-uat (proyecto base del archivo)
+# - Las suscripciones apuntan a topics en gnp-stela-uat usando rutas completas
+# - Después de crear, asignar permisos manualmente:
+#   gcloud pubsub topics add-iam-policy-binding TOPIC_NAME \
+#     --project=gnp-stela-uat \
+#     --member="serviceAccount:consumer-app@gnp-ods-uat.iam.gserviceaccount.com" \
+#     --role="roles/pubsub.viewer"

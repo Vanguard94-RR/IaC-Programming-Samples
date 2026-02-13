@@ -1,0 +1,48 @@
+# Ejemplo Simple: Solo Crear Suscripciones (Topics ya existen)
+#
+# Prerequisito: Los topics deben existir en gnp-stela-uat
+#
+# Uso:
+# ./create-pubsub-manager.sh
+#   - Ticket: CTASK0123456
+#   - Proyecto: gnp-ods-uat
+#   - Config: example-only-subs.yaml
+
+project: gnp-ods-uat
+
+service_account: consumer-app@gnp-ods-uat.iam.gserviceaccount.com
+
+resources:
+  # ==========================================================================
+  # SUBSCRIPTIONS - Se crean en gnp-ods-uat
+  # Consumen topics existentes en gnp-stela-uat
+  # ==========================================================================
+  
+  - type: subscription
+    name: ods.pagos.recibidos.consumer
+    topic: projects/gnp-stela-uat/topics/eventos.tesoreria.pagos.recibidos
+    topic_project: gnp-stela-uat
+    ack_deadline: 600
+    retention_days: 7
+  
+  - type: subscription
+    name: ods.pagos.rechazados.consumer
+    topic: projects/gnp-stela-uat/topics/eventos.tesoreria.pagos.rechazados
+    topic_project: gnp-stela-uat
+    ack_deadline: 600
+    retention_days: 7
+  
+  - type: subscription
+    name: ods.conciliacion.consumer
+    topic: projects/gnp-stela-uat/topics/eventos.tesoreria.conciliacion.completada
+    topic_project: gnp-stela-uat
+    ack_deadline: 900
+    retention_days: 14
+
+# NOTA: Asignar permisos manualmente después:
+# for topic in eventos.tesoreria.pagos.recibidos eventos.tesoreria.pagos.rechazados eventos.tesoreria.conciliacion.completada; do
+#   gcloud pubsub topics add-iam-policy-binding $topic \
+#     --project=gnp-stela-uat \
+#     --member="serviceAccount:consumer-app@gnp-ods-uat.iam.gserviceaccount.com" \
+#     --role="roles/pubsub.viewer"
+# done
