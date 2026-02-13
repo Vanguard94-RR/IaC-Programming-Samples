@@ -1,12 +1,30 @@
 #!/bin/bash
 # =============================================================================
-# Workload Identity Manager
+# Workload Identity Manager for GCP/GKE
 # Configure GCP Workload Identity between GCP SA and Kubernetes SA
+# 
+# Features:
+#   - Interactive menu system with colored output
+#   - Automatic ticket-based log organization
+#   - CSV registry of all operations with status tracking
+#   - Robust error handling and validation
+#   - Support for batch operations
 # =============================================================================
 
-set -e
+# Script safety settings
+set -euo pipefail
+IFS=$'\n\t'
 
-# --- Colors ---
+# Trap errors and cleanup
+trap 'handle_error $? $LINENO' ERR
+handle_error() {
+    local exit_code=$1
+    local line_no=$2
+    echo -e "\n${RED}✗ Error en línea $line_no (código: $exit_code)${NC}" >&2
+    exit "$exit_code"
+}
+
+# --- Colors for terminal output ---
 LGREEN='\033[1;32m'
 LCYAN='\033[1;36m'
 YELLOW='\033[1;33m'
@@ -15,27 +33,44 @@ RED='\033[0;31m'
 GRAY='\033[0;37m'
 NC='\033[0m'
 
-# --- Variables ---
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BASE_DIR="$(dirname "$SCRIPT_DIR")"
-TICKETS_DIR="$BASE_DIR/Tickets"
-CONTROL_FILE="$SCRIPT_DIR/workload-identity-registry.csv"
-LOG_DIR=""
-LOG_FILE=""
-TICKET_ID=""
-NAMESPACE="apps"
+# --- Global Variables (prefixed with G_) ---
+readonly G_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly G_BASE_DIR="$(dirname "$G_SCRIPT_DIR")"
+readonly G_TICKETS_DIR="$G_BASE_DIR/Tickets"
+readonly G_CONTROL_FILE="$G_SCRIPT_DIR/workload-identity-registry.csv"
+readonly G_TEMP_DIR="/tmp/workload-identity-$$"
 
-# --- Initialize control file if not exists ---
+G_LOG_DIR=""
+G_LOG_FILE=""
+G_TICKET_ID=""
+G_PROJECT_ID=""
+G_CLUSTER_NAME=""
+G_NAMESPACE="apps"
+
+# Cleanup on exit
+trap 'cleanup' EXIT
+cleanup() {
+    rm -rf "$G_TEMP_DIR" 2>/dev/null || true
+}
+mkdir -p "$G_TEMP_DIR"
+
+# --- Initialize and secure control file ---
 init_control_file() {
-    if [[ ! -f "$CONTROL_FILE" ]]; then
-        echo "Fecha,Ticket,ProjectId,Cluster,Location,Namespace,KSA,IAM_SA,Status" > "$CONTROL_FILE"
-    else
-        # Migrate old format (without Status column) to new format
-        local header=$(head -1 "$CONTROL_FILE")
-        if [[ ! "$header" =~ "Status" ]]; then
-            # Add Status column to header and 'activo' to all existing records
-            sed -i '1s/$/,Status/' "$CONTROL_FILE"
-            sed -i '2,$s/$/,activo/' "$CONTROL_FILE"
+    if [[ ! -f "$G_CONTROL_FILE" ]]; then
+        echo "Fecha,Ticket,ProjectId,Cluster,Location,Namespace,KSA,IAM_SA,Status" > "$G_CONTROL_FILE"
+    fi
+    
+    # Secure file permissions (sensitive data)
+    chmod 600 "$G_CONTROL_FILE" 2>/dev/null || true
+    
+    # Migrate old format if needed
+    if [[ -f "$G_CONTROL_FILE" ]]; then
+        local header
+        header=$(head -1 "$G_CONTROL_FILE" 2>/dev/null || echo "")
+        if [[ -n "$header" && ! "$header" =~ "Status" ]]; then
+            sed -i '1s/$/,Status/' "$G_CONTROL_FILE"
+            sed -i '2,$s/$/,activo/' "$G_CONTROL_FILE"
+            chmod 600 "$G_CONTROL_FILE"
         fi
     fi
 }
@@ -55,10 +90,10 @@ register_execution() {
     # Use "-" if no ticket
     [[ -z "$ticket" ]] && ticket="-"
     
-    echo "${timestamp},${ticket},${project},${cluster},${location},${namespace},${ksa},${iam_sa},${status}" >> "$CONTROL_FILE"
+    echo "${timestamp},${ticket},${project},${cluster},${location},${namespace},${ksa},${iam_sa},${status}" >> "$G_CONTROL_FILE"
 }
 
-# --- Update registry status (mark as eliminated) ---
+# --- Update registry status (optimized with awk) ---
 update_registry_status() {
     local project="$1"
     local cluster="$2"
@@ -66,48 +101,61 @@ update_registry_status() {
     local ksa="$4"
     local new_status="$5"
     
-    if [[ ! -f "$CONTROL_FILE" ]]; then
-        return 1
-    fi
+    [[ ! -f "$G_CONTROL_FILE" ]] && return 1
     
-    # Create temp file with updated status
-    local temp_file=$(mktemp)
+    # Use awk for efficient single-pass update
+    local temp_file
+    temp_file=$(mktemp --tmpdir="$G_TEMP_DIR")
     
-    # Keep header
-    head -1 "$CONTROL_FILE" > "$temp_file"
+    awk -F',' -v p="$project" -v c="$cluster" -v ns="$namespace" -v k="$ksa" -v s="$new_status" '
+        BEGIN { OFS="," }
+        NR==1 { print; next }
+        $3==p && $4==c && $6==ns && $7==k { $9=s }
+        { print }
+    ' "$G_CONTROL_FILE" > "$temp_file"
     
-    # Process data lines
-    tail -n +2 "$CONTROL_FILE" | while IFS=',' read -r fecha ticket proj clust loc ns ksa_name iam_sa status; do
-        if [[ "$proj" == "$project" && "$clust" == "$cluster" && "$ns" == "$namespace" && "$ksa_name" == "$ksa" ]]; then
-            echo "${fecha},${ticket},${proj},${clust},${loc},${ns},${ksa_name},${iam_sa},${new_status}"
-        else
-            echo "${fecha},${ticket},${proj},${clust},${loc},${ns},${ksa_name},${iam_sa},${status}"
-        fi
-    done >> "$temp_file"
-    
-    mv "$temp_file" "$CONTROL_FILE"
+    mv "$temp_file" "$G_CONTROL_FILE"
+    chmod 600 "$G_CONTROL_FILE"
 }
 
 # --- Setup log directory (called after ticket input) ---
 setup_log_directory() {
     local ticket="$1"
-    local timestamp=$(date +%Y%m%d_%H%M%S)
+    local timestamp
+    timestamp=$(date +%Y%m%d_%H%M%S)
     
     if [[ -n "$ticket" ]]; then
         # Create ticket folder structure
-        LOG_DIR="$TICKETS_DIR/$ticket/logs"
-        mkdir -p "$LOG_DIR"
-        LOG_FILE="$LOG_DIR/workload_identity_${timestamp}.log"
+        G_LOG_DIR="$G_TICKETS_DIR/$ticket/logs"
+        mkdir -p "$G_LOG_DIR" 2>/dev/null || {
+            echo -e "${RED}✗ Failed to create log directory: $G_LOG_DIR${NC}" >&2
+            return 1
+        }
+        G_LOG_FILE="$G_LOG_DIR/workload_identity_${timestamp}.log"
         
         # Create additional folders for ticket
-        mkdir -p "$TICKETS_DIR/$ticket/docs"
-        mkdir -p "$TICKETS_DIR/$ticket/scripts"
+        mkdir -p "$G_TICKETS_DIR/$ticket/docs" 2>/dev/null || true
+        mkdir -p "$G_TICKETS_DIR/$ticket/scripts" 2>/dev/null || true
     else
         # Use default logs folder
-        LOG_DIR="$SCRIPT_DIR/logs"
-        mkdir -p "$LOG_DIR"
-        LOG_FILE="$LOG_DIR/workload_identity_${timestamp}.log"
+        G_LOG_DIR="$G_SCRIPT_DIR/logs"
+        mkdir -p "$G_LOG_DIR" 2>/dev/null || {
+            echo -e "${RED}✗ Failed to create log directory: $G_LOG_DIR${NC}" >&2
+            return 1
+        }
+        G_LOG_FILE="$G_LOG_DIR/workload_identity_${timestamp}.log"
     fi
+    
+    # Initialize log file with header
+    {
+        echo "===================================="
+        echo "Workload Identity Manager - Execution Log"
+        echo "Started: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "===================================="
+        echo ""
+    } > "$G_LOG_FILE"
+    
+    return 0
 }
 
 # =============================================================================
@@ -117,9 +165,9 @@ setup_log_directory() {
 log() {
     local message="$1"
     # Only log if LOG_FILE is set
-    [[ -z "$LOG_FILE" ]] && return 0
+    [[ -z "$G_LOG_FILE" ]] && return 0
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[$timestamp] $message" >> "$LOG_FILE"
+    echo "[$timestamp] $message" >> "$G_LOG_FILE"
 }
 
 log_and_print() {
@@ -227,6 +275,60 @@ list_gke_clusters() {
     gcloud container clusters list --project "$project_id" --format="value(name,location)" 2>/dev/null
 }
 
+# =============================================================================
+# Validation Functions
+# =============================================================================
+
+# Validate GCP project ID format and existence
+validate_project_id() {
+    local project="$1"
+    
+    if [[ ! "$project" =~ ^[a-z0-9][a-z0-9-]*[a-z0-9]$ ]]; then
+        echo -e "${RED}✗ Invalid project ID format: $project${NC}" >&2
+        return 1
+    fi
+    
+    if ! gcloud projects describe "$project" &>/dev/null; then
+        echo -e "${RED}✗ Project not found or you lack permissions: $project${NC}" >&2
+        return 1
+    fi
+    return 0
+}
+
+# Validate IAM SA email format
+validate_iam_sa_email() {
+    local email="$1"
+    
+    if [[ ! "$email" =~ ^[a-z0-9-]+@[a-z0-9-]+\.iam\.gserviceaccount\.com$ ]]; then
+        echo -e "${RED}✗ Invalid IAM Service Account email: $email${NC}" >&2
+        return 1
+    fi
+    return 0
+}
+
+# Validate Kubernetes name format (DNS-1123 subdomain)
+validate_k8s_name() {
+    local name="$1"
+    local context="$2"  # For error message
+    
+    if [[ ! "$name" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || (( ${#name} > 63 )); then
+        echo -e "${RED}✗ Invalid $context name: $name (must be lowercase alphanumeric with hyphens, max 63 chars)${NC}" >&2
+        return 1
+    fi
+    return 0
+}
+
+# Validate namespace exists
+validate_namespace() {
+    local namespace="$1"
+    
+    if ! kubectl get namespace "$namespace" &>/dev/null; then
+        echo -e "${RED}✗ Namespace not found: $namespace${NC}" >&2
+        return 1
+    fi
+    return 0
+}
+
 connect_to_cluster() {
     local cluster_name="$1"
     local location="$2"
@@ -237,10 +339,10 @@ connect_to_cluster() {
     # Determine if regional or zonal
     if [[ "$location" =~ ^[a-z]+-[a-z]+[0-9]+$ ]]; then
         # Regional (e.g., us-central1)
-        if [[ -n "$LOG_FILE" ]]; then
+        if [[ -n "$G_LOG_FILE" ]]; then
             gcloud container clusters get-credentials "$cluster_name" \
                 --region "$location" \
-                --project "$project_id" 2>&1 | tee -a "$LOG_FILE"
+                --project "$project_id" 2>&1 | tee -a "$G_LOG_FILE"
         else
             gcloud container clusters get-credentials "$cluster_name" \
                 --region "$location" \
@@ -248,10 +350,10 @@ connect_to_cluster() {
         fi
     else
         # Zonal (e.g., us-central1-a)
-        if [[ -n "$LOG_FILE" ]]; then
+        if [[ -n "$G_LOG_FILE" ]]; then
             gcloud container clusters get-credentials "$cluster_name" \
                 --zone "$location" \
-                --project "$project_id" 2>&1 | tee -a "$LOG_FILE"
+                --project "$project_id" 2>&1 | tee -a "$G_LOG_FILE"
         else
             gcloud container clusters get-credentials "$cluster_name" \
                 --zone "$location" \
@@ -274,7 +376,7 @@ create_iam_sa() {
     
     gcloud iam service-accounts create "$sa_name" \
         --project "$project_id" \
-        --display-name "$display_name" 2>&1 | tee -a "$LOG_FILE"
+        --display-name "$display_name" 2>&1 | tee -a "$G_LOG_FILE"
 }
 
 create_namespace() {
@@ -285,7 +387,7 @@ create_namespace() {
         return 0
     fi
     
-    kubectl create namespace "$namespace" 2>&1 | tee -a "$LOG_FILE"
+    kubectl create namespace "$namespace" 2>&1 | tee -a "$G_LOG_FILE"
 }
 
 create_ksa() {
@@ -297,7 +399,7 @@ create_ksa() {
         return 0
     fi
     
-    kubectl create serviceaccount "$ksa_name" -n "$namespace" 2>&1 | tee -a "$LOG_FILE"
+    kubectl create serviceaccount "$ksa_name" -n "$namespace" 2>&1 | tee -a "$G_LOG_FILE"
 }
 
 add_iam_binding() {
@@ -311,7 +413,7 @@ add_iam_binding() {
     gcloud iam service-accounts add-iam-policy-binding "$iam_sa_email" \
         --project "$project_id" \
         --role "roles/iam.workloadIdentityUser" \
-        --member "$member" 2>&1 | tee -a "$LOG_FILE"
+        --member "$member" 2>&1 | tee -a "$G_LOG_FILE"
 }
 
 annotate_ksa() {
@@ -322,7 +424,7 @@ annotate_ksa() {
     kubectl annotate serviceaccount "$ksa_name" \
         --namespace "$namespace" \
         "iam.gke.io/gcp-service-account=${iam_sa_email}" \
-        --overwrite 2>&1 | tee -a "$LOG_FILE"
+        --overwrite 2>&1 | tee -a "$G_LOG_FILE"
 }
 
 remove_iam_binding() {
@@ -336,14 +438,14 @@ remove_iam_binding() {
     gcloud iam service-accounts remove-iam-policy-binding "$iam_sa_email" \
         --project "$project_id" \
         --role "roles/iam.workloadIdentityUser" \
-        --member "$member" 2>&1 | tee -a "$LOG_FILE"
+        --member "$member" 2>&1 | tee -a "$G_LOG_FILE"
 }
 
 delete_ksa() {
     local ksa_name="$1"
     local namespace="$2"
     
-    kubectl delete serviceaccount "$ksa_name" -n "$namespace" 2>&1 | tee -a "$LOG_FILE"
+    kubectl delete serviceaccount "$ksa_name" -n "$namespace" 2>&1 | tee -a "$G_LOG_FILE"
 }
 
 get_ksa_annotation() {
@@ -413,15 +515,15 @@ operation_setup() {
     prompt_input "Ingrese el número de Ticket o CTask (Enter para omitir)" "TICKET_ID" ""
     
     # Setup log directory based on ticket
-    setup_log_directory "$TICKET_ID"
+    setup_log_directory "$G_TICKET_ID"
     
-    if [[ -n "$TICKET_ID" ]]; then
-        echo -e "${LGREEN}✓ Logs se guardarán en: ${LCYAN}Tickets/$TICKET_ID/logs/${NC}"
+    if [[ -n "$G_TICKET_ID" ]]; then
+        echo -e "${LGREEN}✓ Logs se guardarán en: ${LCYAN}Tickets/$G_TICKET_ID/logs/${NC}"
     fi
     
     echo ""
     log "Session started - Operation: SETUP"
-    [[ -n "$TICKET_ID" ]] && log "Ticket/CTask: $TICKET_ID"
+    [[ -n "$G_TICKET_ID" ]] && log "Ticket/CTask: $G_TICKET_ID"
     
     # --- Step 1: Project ID ---
     local current_project=$(get_current_project)
@@ -536,8 +638,8 @@ operation_setup() {
     
     # --- Confirmation ---
     print_header "Configuración"
-    if [[ -n "$TICKET_ID" ]]; then
-        print_info "Ticket/CTask" "$TICKET_ID"
+    if [[ -n "$G_TICKET_ID" ]]; then
+        print_info "Ticket/CTask" "$G_TICKET_ID"
     fi
     print_info "Project ID" "$project_id"
     print_info "Cluster" "$selected_cluster"
@@ -625,12 +727,12 @@ operation_setup() {
     echo ""
     
     # --- Register in control file ---
-    register_execution "$TICKET_ID" "$project_id" "$selected_cluster" "$selected_location" "$namespace" "$ksa_name" "$iam_sa_email"
+    register_execution "$G_TICKET_ID" "$project_id" "$selected_cluster" "$selected_location" "$namespace" "$ksa_name" "$iam_sa_email"
     
     # --- Final Summary ---
     print_header "Workload Identity Configurado"
-    if [[ -n "$TICKET_ID" ]]; then
-        print_info "Ticket" "$TICKET_ID"
+    if [[ -n "$G_TICKET_ID" ]]; then
+        print_info "Ticket" "$G_TICKET_ID"
     fi
     print_info "Project" "$project_id"
     print_info "Cluster" "$selected_cluster"
@@ -640,10 +742,10 @@ operation_setup() {
     echo -e "${LGREEN}========================================${NC}"
     
     echo ""
-    echo -e "${GRAY}Log guardado en: $LOG_FILE${NC}"
-    echo -e "${GRAY}Registro agregado a: $CONTROL_FILE${NC}"
+    echo -e "${GRAY}Log guardado en: $G_LOG_FILE${NC}"
+    echo -e "${GRAY}Registro agregado a: $G_CONTROL_FILE${NC}"
     log "Session completed successfully"
-    log "Registered in control file: $CONTROL_FILE"
+    log "Registered in control file: $G_CONTROL_FILE"
     
     echo ""
     echo -ne "${YELLOW}Presione Enter para continuar...${NC}"
@@ -821,9 +923,9 @@ operation_cleanup() {
     local ksa_name=""
     local annotation=""
     
-    if [[ -f "$CONTROL_FILE" ]]; then
+    if [[ -f "$G_CONTROL_FILE" ]]; then
         # Get active records from CSV
-        local active_records=$(tail -n +2 "$CONTROL_FILE" | awk -F',' '$9 == "activo"')
+        local active_records=$(tail -n +2 "$G_CONTROL_FILE" | awk -F',' '$9 == "activo"')
         
         if [[ -n "$active_records" ]]; then
             echo -e "${WHITE}Configuraciones activas en el registro:${NC}"
@@ -1110,9 +1212,9 @@ operation_list() {
     local current_project=$(get_current_project)
     
     # Check if registry has projects (only active ones)
-    if [[ -f "$CONTROL_FILE" ]]; then
+    if [[ -f "$G_CONTROL_FILE" ]]; then
         # Get unique projects from CSV (column 3) - only active records (Status = activo)
-        local registry_projects=$(tail -n +2 "$CONTROL_FILE" | awk -F',' '$9 == "activo" {print $3}' | sort -u | grep -v '^$')
+        local registry_projects=$(tail -n +2 "$G_CONTROL_FILE" | awk -F',' '$9 == "activo" {print $3}' | sort -u | grep -v '^$')
         
         if [[ -n "$registry_projects" ]]; then
             echo -e "${WHITE}Proyectos en el registro:${NC}"
@@ -1164,9 +1266,9 @@ operation_list() {
     local selected_location=""
     
     # Check if registry has clusters for this project
-    if [[ -f "$CONTROL_FILE" ]]; then
+    if [[ -f "$G_CONTROL_FILE" ]]; then
         # Get unique clusters for this project (columns 4=cluster, 5=location) - only active records
-        local registry_clusters=$(tail -n +2 "$CONTROL_FILE" | awk -F',' -v proj="$project_id" '$3 == proj && $9 == "activo" {print $4 "," $5}' | sort -u | grep -v '^,$')
+        local registry_clusters=$(tail -n +2 "$G_CONTROL_FILE" | awk -F',' -v proj="$project_id" '$3 == proj && $9 == "activo" {print $4 "," $5}' | sort -u | grep -v '^,$')
         
         if [[ -n "$registry_clusters" ]]; then
             echo -e "${WHITE}Clusters en el registro para ${LCYAN}$project_id${NC}:${NC}"
@@ -1337,7 +1439,7 @@ operation_view_registry() {
     print_header "Registro de Operaciones"
     echo ""
     
-    if [[ ! -f "$CONTROL_FILE" ]]; then
+    if [[ ! -f "$G_CONTROL_FILE" ]]; then
         print_warning "No hay registros disponibles"
         echo ""
         echo -ne "${YELLOW}Presione Enter para continuar...${NC}"
@@ -1346,8 +1448,8 @@ operation_view_registry() {
     fi
     
     # Count records
-    local total=$(($(wc -l < "$CONTROL_FILE") - 1))
-    local activos=$(tail -n +2 "$CONTROL_FILE" | awk -F',' '$9 == "activo"' | wc -l)
+    local total=$(($(wc -l < "$G_CONTROL_FILE") - 1))
+    local activos=$(tail -n +2 "$G_CONTROL_FILE" | awk -F',' '$9 == "activo"' | wc -l)
     local eliminados=$((total - activos))
     echo -e "${WHITE}Total de registros:${NC} ${LCYAN}${total}${NC} (${LGREEN}${activos} activos${NC}, ${RED}${eliminados} eliminados${NC})"
     echo ""
@@ -1361,7 +1463,7 @@ operation_view_registry() {
     echo -e "${GRAY}──────────────────────────────────────────────────────────────────────────────────────────────${NC}"
     
     # Data (skip header, show last 15)
-    tail -n +2 "$CONTROL_FILE" | tail -15 | while IFS=',' read -r fecha ticket project cluster location namespace ksa iam_sa status; do
+    tail -n +2 "$G_CONTROL_FILE" | tail -15 | while IFS=',' read -r fecha ticket project cluster location namespace ksa iam_sa status; do
         local status_color="${LGREEN}"
         [[ "$status" =~ ^eliminado ]] && status_color="${RED}"
         printf "${LCYAN}%-19s${NC} | ${YELLOW}%-10s${NC} | ${WHITE}%-16s${NC} | ${LCYAN}%-9s${NC} | ${LGREEN}%-16s${NC} | ${status_color}%s${NC}\n" \
@@ -1370,7 +1472,7 @@ operation_view_registry() {
     
     echo -e "${GRAY}────────────────────────────────────────────────────────────────────────────────${NC}"
     echo ""
-    echo -e "${GRAY}Archivo: $CONTROL_FILE${NC}"
+    echo -e "${GRAY}Archivo: $G_CONTROL_FILE${NC}"
     
     echo ""
     echo -ne "${YELLOW}Presione Enter para continuar...${NC}"

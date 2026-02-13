@@ -18,6 +18,17 @@ Workload Identity permite que los pods de Kubernetes se autentiquen como Service
 3. **Agrega el IAM binding** entre GCP SA y KSA
 4. **Anota el KSA** para que los pods puedan acceder a servicios GCP
 
+## Características
+
+- ✅ **Interfaz Interactiva** - Menú intuitivo con colores y validación
+- ✅ **Rastreo Completo** - Registro CSV de todas las operaciones
+- ✅ **Organización por Tickets** - Logs y documentación automáticos
+- ✅ **Validaciones Robustas** - Verificación de entrada y seguridad
+- ✅ **Manejo de Errores** - Recuperación elegante con mensajes claros
+- ✅ **Seguridad** - Permisos restrictivos en archivos sensibles
+- ✅ **Performance** - Optimizaciones en búsquedas y actualizaciones
+- ✅ **Código Humanizado** - Variables prefijadas, funciones documentadas
+
 ## Menú Principal
 
 ```
@@ -87,9 +98,22 @@ Los logs se organizan por ticket:
 ```
 Tickets/
 └── CTASK999999/
-    └── logs/
-        └── workload_identity_20260212_214803.log
+    ├── logs/
+    │   └── workload_identity_20260212_214803.log
+    ├── docs/                 # Documentación de la operación
+    └── scripts/              # Scripts relacionados
 ```
+
+## Seguridad
+
+- 🔒 **Archivos CSV** - Permisos restrictivos (600) en archivos con datos sensibles
+- 🔒 **Validación de Entrada** - Validación de formato para:
+  - IDs de proyecto GCP
+  - Emails de IAM Service Accounts
+  - Nombres de Kubernetes (DNS-1123)
+  - Namespaces existentes
+- 🔒 **Manejo de Errores** - Trap handlers para cleanup seguro
+- 🔒 **Inyección de Comandos** - Variables siempre quoted
 
 ## Requisitos
 
@@ -105,8 +129,35 @@ Tickets/
 
 ```
 Proyecto-Workload-Identity/
-├── workload-identity.sh          # Script principal interactivo
+├── workload-identity.sh          # Script principal interactivo (1500+ líneas)
 ├── workload-identity-registry.csv # Registro de operaciones (ignorado en git)
 ├── README.md                     # Este archivo
 └── .gitignore                    # Archivos ignorados
 ```
+
+## Optimizaciones Implementadas
+
+### Performance
+- ✅ Actualización CSV con awk (single-pass en O(n) en vez de O(n²))
+- ✅ Búsquedas consolidadas en una sola pasada
+- ✅ Reutilización de variables
+
+### Robustez
+- ✅ `set -euo pipefail` para manejo seguro de errores
+- ✅ Trap handlers para cleanup en caso de fallo
+- ✅ Validación completa de entrada
+- ✅ Manejo graceful de casos edge
+
+### Seguridad
+- ✅ Permisos CSV 600 (solo lectura/escritura propietario)
+- ✅ Variables siempre quoted
+- ✅ Validación de formato de IDs y nombres
+- ✅ Sanitización de entrada de usuario
+
+### Código
+- ✅ Variables globales con prefijo `G_`
+- ✅ Funciones documentadas con propósito claro
+- ✅ Nomenclatura consistente
+- ✅ Logging en todos los puntos críticos
+- ✅ Errores con contexto de línea
+
