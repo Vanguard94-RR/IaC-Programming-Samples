@@ -3,17 +3,32 @@
 # Workload Identity Manager for GCP/GKE
 # Configure GCP Workload Identity between GCP SA and Kubernetes SA
 # 
+# Project: GCP Infrastructure Management
+# Version: 2.0.0
+# Author: Infrastructure Team
+# License: Internal Use
+#
 # Features:
 #   - Interactive menu system with colored output
 #   - Automatic ticket-based log organization
 #   - CSV registry of all operations with status tracking
 #   - Robust error handling and validation
 #   - Support for batch operations
+#
+# Usage:
+#   ./workload-identity.sh              # Run interactive menu
+#   ./workload-identity.sh --help       # Show help
+#   ./workload-identity.sh --version    # Show version
 # =============================================================================
 
 # Script safety settings
 set -euo pipefail
 IFS=$'\n\t'
+
+# Metadata
+readonly G_VERSION="2.0.0"
+readonly G_SCRIPT_NAME="Workload Identity Manager"
+readonly G_SCRIPT_DESC="Configure GCP Workload Identity between GCP SA and Kubernetes SA"
 
 # Trap errors and cleanup
 trap 'handle_error $? $LINENO' ERR
@@ -479,6 +494,100 @@ list_workload_identities() {
 }
 
 # =============================================================================
+# Help and Version Functions
+# =============================================================================
+
+show_help() {
+    cat << 'HELP_TEXT'
+
+  ╔════════════════════════════════════════════════════════════════╗
+  ║        WORKLOAD IDENTITY MANAGER - HELP                       ║
+  ╚════════════════════════════════════════════════════════════════╝
+
+  DESCRIPCIÓN:
+    Herramienta interactiva para configurar GCP Workload Identity
+    entre Service Accounts de GCP y Kubernetes.
+
+  USO:
+    ./workload-identity.sh              # Ejecutar menú interactivo
+    ./workload-identity.sh --help       # Mostrar esta ayuda
+    ./workload-identity.sh --version    # Mostrar versión
+
+  OPCIONES DEL MENÚ:
+    1) Configurar Workload Identity
+       - Crea y configura binding entre IAM SA y KSA
+       - Registra la operación en CSV
+       - Organiza logs por ticket
+
+    2) Verificar Workload Identity
+       - Valida IAM SA existe
+       - Valida KSA existe
+       - Verifica anotación y binding
+
+    3) Eliminar Workload Identity
+       - Muestra configuraciones activas
+       - Permite seleccionar nivel de eliminación
+       - Actualiza estado en registro
+
+    4) Listar Workload Identities
+       - Muestra proyectos del registro
+       - Muestra clusters disponibles
+       - Lista KSAs con Workload Identity
+
+    5) Ver Registro de Operaciones
+       - Muestra últimas operaciones
+       - Indica estado (activo/eliminado)
+
+  REQUISITOS:
+    - gcloud CLI autenticado
+    - kubectl configurado
+    - Permisos IAM para crear service accounts
+    - Acceso a clusters GKE
+
+  ARCHIVOS:
+    workload-identity-registry.csv    Registro de operaciones
+    logs/                             Logs locales
+    Tickets/[TICKET]/logs/            Logs organizados por ticket
+
+  EJEMPLOS:
+    $ ./workload-identity.sh
+    > Seleccionar opción 1 para configurar
+
+  DOCUMENTACIÓN:
+    README.md                         Documentación completa
+
+HELP_TEXT
+}
+
+show_version() {
+    cat << 'VERSION_TEXT'
+
+  ╔════════════════════════════════════════════════════════════════╗
+  ║        WORKLOAD IDENTITY MANAGER                              ║
+  ╚════════════════════════════════════════════════════════════════╝
+
+  Nombre:          Workload Identity Manager
+  Versión:         VERSION
+  Proyecto:        GCP Infrastructure Management
+  Descripción:     Configure GCP Workload Identity for GKE
+
+  Autor:           Infrastructure Team
+  Licencia:        Internal Use
+  Repositorio:     IaC-Programming-Samples
+
+  Características:
+    ✓ Interfaz interactiva
+    ✓ Organización por tickets
+    ✓ Registro CSV de operaciones
+    ✓ Validación robusta
+    ✓ Logs estructurados
+
+VERSION_TEXT
+    # Reemplazar VERSION con el valor real
+    sed "s/VERSION/$G_VERSION/" <<< "$VERSION_TEXT"
+}
+
+# =============================================================================
 # Menu Functions
 # =============================================================================
 
@@ -655,12 +764,15 @@ operation_setup() {
     echo -e "${LGREEN}========================================${NC}"
     
     echo ""
-    echo -ne "${YELLOW}¿Desea continuar con la configuración? (Y/N): ${NC}"
-    read confirm
     
-    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+    # --- Confirmation before creating resources ---
+    local confirm_msg="Se crearán/configurarán los siguientes recursos en Workload Identity:"
+    [[ "$iam_sa_exists" == "false" ]] && confirm_msg+=$'\n  • IAM Service Account (nueva)'
+    confirm_msg+=$'\n  • Namespace Kubernetes\n  • Kubernetes Service Account\n  • IAM Binding'
+    
+    if ! ask_confirmation "$confirm_msg" "crear"; then
         print_warning "Operación cancelada"
-        exit 0
+        return 0
     fi
     
     echo ""
@@ -903,6 +1015,48 @@ operation_verify() {
 }
 
 # =============================================================================
+# Safety Functions
+# =============================================================================
+
+# Function: ask_confirmation
+# Description: Pedir confirmación con doble verificación para operaciones críticas
+# Parameters: $1=mensaje, $2=acción (ej: "eliminar")
+# Returns: 0=confirmado, 1=cancelado
+ask_confirmation() {
+    local message="$1"
+    local action="${2:-continuar}"
+    
+    echo -e "\n${YELLOW}⚠ Confirmación Requerida${NC}"
+    echo -e "${GRAY}─────────────────────────────────────${NC}"
+    echo -e "  ${message}"
+    echo -e "${GRAY}─────────────────────────────────────${NC}"
+    echo ""
+    
+    # Primera pregunta
+    echo -ne "¿Está seguro que desea ${action}? ${LCYAN}(si/no)${NC}: "
+    local response1
+    read response1
+    
+    if [[ "$response1" != "si" ]]; then
+        echo -e "${LGREEN}✓ Operación cancelada${NC}"
+        return 1
+    fi
+    
+    # Segunda confirmación (doble verificación)
+    echo -e "\n${RED}⚠ Esta acción no se puede deshacer${NC}"
+    echo -ne "Escriba '${action}' para confirmar: "
+    local response2
+    read response2
+    
+    if [[ "$response2" != "$action" ]]; then
+        echo -e "${LGREEN}✓ Operación cancelada${NC}"
+        return 1
+    fi
+    
+    return 0
+}
+
+# =============================================================================
 # Operation: Cleanup Workload Identity
 # =============================================================================
 
@@ -1124,6 +1278,18 @@ operation_cleanup() {
     
     echo ""
     
+    # --- Confirmation before destructive operation ---
+    local confirm_message="Se eliminarán los siguientes recursos:"
+    [[ "$cleanup_option" == "1" ]] && confirm_message+=$'\n  • IAM Binding'
+    [[ "$cleanup_option" == "2" ]] && confirm_message+=$'\n  • IAM Binding\n  • Kubernetes Service Account'
+    [[ "$cleanup_option" == "3" ]] && confirm_message+=$'\n  • IAM Binding\n  • Kubernetes Service Account\n  • GCP IAM Service Account'
+    
+    confirm_message+=$'\n\nProyecto: '"$project_id"$'\nCluster: '"$selected_cluster"$'\nNamespace: '"$namespace"$'\nKSA: '"$ksa_name"
+    
+    if ! ask_confirmation "$confirm_message" "eliminar"; then
+        return 0
+    fi
+    
     # --- Execute Cleanup ---
     print_header "Ejecutando Limpieza"
     echo ""
@@ -1187,10 +1353,18 @@ operation_cleanup() {
     local current_cluster=$(echo "$current_context" | grep -oP 'gke_[^_]+_[^_]+_\K[^_]+')
     
     if update_registry_status "$project_id" "$current_cluster" "$namespace" "$ksa_name" "$status_text"; then
-        echo -e "${GRAY}Registro actualizado con estado: ${status_text}${NC}"
+        echo -e "${GRAY}Registro actualizado: ${status_text}${NC}"
     fi
     
-    print_header "Limpieza Completada"
+    print_header "✓ Limpieza Completada Exitosamente"
+    echo ""
+    echo -e "${LGREEN}Recurso eliminado:${NC}"
+    echo -e "  • Proyecto: ${LCYAN}${project_id}${NC}"
+    echo -e "  • Cluster: ${LCYAN}${selected_cluster}${NC}"
+    echo -e "  • Namespace: ${LCYAN}${namespace}${NC}"
+    echo -e "  • KSA: ${LCYAN}${ksa_name}${NC}"
+    echo -e "  • Estado: ${LGREEN}${status_text}${NC}"
+    
     log "Cleanup completed for $ksa_name in $namespace - Status: $status_text"
     
     echo ""
@@ -1511,10 +1685,35 @@ main() {
 # Entry Point
 # =============================================================================
 
+# Handle command line arguments
+main_entry() {
+    local arg="${1:-}"
+    
+    case "$arg" in
+        --help|-h)
+            show_help
+            exit 0
+            ;;
+        --version|-v)
+            show_version
+            exit 0
+            ;;
+        "")
+            # No arguments - run interactive menu
+            ;;
+        *)
+            echo -e "${RED}✗ Argumento no reconocido: $arg${NC}"
+            echo -e "Use: ./workload-identity.sh --help para más información"
+            exit 1
+            ;;
+    esac
+}
+
 # Check dependencies
 for cmd in gcloud kubectl; do
     if ! command -v $cmd &>/dev/null; then
-        echo -e "${RED}Error: $cmd no está instalado${NC}"
+        echo -e "${RED}✗ Error: $cmd no está instalado${NC}"
+        echo -e "${GRAY}Instale las herramientas necesarias e intente nuevamente${NC}"
         exit 1
     fi
 done
@@ -1522,4 +1721,8 @@ done
 # Initialize control file
 init_control_file
 
+# Process arguments
+main_entry "$@"
+
+# Run main menu
 main "$@"
