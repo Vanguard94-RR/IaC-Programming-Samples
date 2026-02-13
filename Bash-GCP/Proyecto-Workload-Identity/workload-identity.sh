@@ -489,7 +489,7 @@ list_workload_identities() {
     done
     
     if [[ "$found" == "false" ]]; then
-        echo -e "  ${GRAY}No se encontraron KSAs con Workload Identity configurado${NC}"
+        echo -e "  ${GRAY}No KSAs found with Workload Identity configured${NC}"
     fi
 }
 
@@ -509,52 +509,52 @@ show_help() {
     entre Service Accounts de GCP y Kubernetes.
 
   USO:
-    ./workload-identity.sh              # Ejecutar menú interactivo
-    ./workload-identity.sh --help       # Mostrar esta ayuda
-    ./workload-identity.sh --version    # Mostrar versión
+    ./workload-identity.sh              # Run interactive menu
+    ./workload-identity.sh --help       # Show this help
+    ./workload-identity.sh --version    # Show version
 
-  OPCIONES DEL MENÚ:
+  MENU OPTIONS:
     1) Configure Workload Identity
-       - Crea y configura binding entre IAM SA y KSA
-       - Registra la operación en CSV
-       - Organiza logs por ticket
+       - Creates and configures binding between IAM SA and KSA
+       - Records operation in CSV
+       - Organizes logs by ticket
 
     2) Verify Workload Identity
-       - Valida IAM SA existe
-       - Valida KSA existe
-       - Verifica anotación y binding
+       - Validates IAM SA exists
+       - Validates KSA exists
+       - Verifies annotation and binding
 
     3) Delete Workload Identity
-       - Muestra configuraciones activas
-       - Permite seleccionar nivel de eliminación
-       - Actualiza estado en registro
+       - Shows active configurations
+       - Allows selecting deletion level
+       - Updates status in registry
 
     4) List Workload Identities
-       - Muestra proyectos del registro
-       - Muestra clusters disponibles
-       - Lista KSAs con Workload Identity
+       - Shows projects from registry
+       - Shows available clusters
+       - Lists KSAs with Workload Identity
 
-    5) View Registry de Operaciones
-       - Muestra últimas operaciones
-       - Indica estado (activo/eliminado)
+    5) View Operations Registry
+       - Shows latest operations
+       - Indicates status (active/deleted)
 
-  REQUISITOS:
-    - gcloud CLI autenticado
-    - kubectl configurado
-    - Permisos IAM para crear service accounts
-    - Acceso a clusters GKE
+  REQUIREMENTS:
+    - gcloud CLI authenticated
+    - kubectl configured
+    - IAM permissions to create service accounts
+    - Access to GKE clusters
 
-  ARCHIVOS:
-    workload-identity-registry.csv    Registro de operaciones
-    logs/                             Logs locales
-    Tickets/[TICKET]/logs/            Logs organizados por ticket
+  FILES:
+    workload-identity-registry.csv    Operations registry
+    logs/                             Local logs
+    Tickets/[TICKET]/logs/            Logs organized by ticket
 
-  EJEMPLOS:
+  EXAMPLES:
     $ ./workload-identity.sh
-    > Seleccionar opción 1 para configurar
+    > Select option 1 to configure
 
-  DOCUMENTACIÓN:
-    README.md                         Documentación completa
+  DOCUMENTATION:
+    README.md                         Complete documentation
 
 HELP_TEXT
 }
@@ -567,19 +567,19 @@ show_version() {
   ╚════════════════════════════════════════════════════════════════╝
 
   Nombre:          Workload Identity Manager
-  Versión:         VERSION
+  Version:         VERSION
   Project:        GCP Infrastructure Management
-  Descripción:     Configure GCP Workload Identity for GKE
+  Description:     Configure GCP Workload Identity for GKE
 
   Autor:           Infrastructure Team
   Licencia:        Internal Use
   Repositorio:     IaC-Programming-Samples
 
-  Características:
-    ✓ Interfaz interactiva
-    ✓ Organización por tickets
+  Features:
+    ✓ Interactive interface
+    ✓ Organization by tickets
     ✓ Registro CSV de operaciones
-    ✓ Validación robusta
+    ✓ Robust validation
     ✓ Logs estructurados
 
 VERSION_TEXT
@@ -597,13 +597,13 @@ show_main_menu() {
     echo -e "${LGREEN}║${NC}   ${WHITE}Workload Identity Manager${NC}            ${LGREEN}║${NC}"
     echo -e "${LGREEN}╠════════════════════════════════════════╣${NC}"
     echo -e "${LGREEN}║${NC}                                        ${LGREEN}║${NC}"
-    echo -e "${LGREEN}║${NC}  ${LCYAN}1)${NC} Configure Workload Identity       ${LGREEN}║${NC}"
-    echo -e "${LGREEN}║${NC}  ${LCYAN}2)${NC} Verify Configuration            ${LGREEN}║${NC}"
-    echo -e "${LGREEN}║${NC}  ${LCYAN}3)${NC} Delete Workload Identity         ${LGREEN}║${NC}"
-    echo -e "${LGREEN}║${NC}  ${LCYAN}4)${NC} List Bindings in Namespace       ${LGREEN}║${NC}"
-    echo -e "${LGREEN}║${NC}  ${LCYAN}5)${NC} View Registry de Operaciones        ${LGREEN}║${NC}"
+    echo -e "${LGREEN}║${NC}  ${LCYAN}1)${NC} Configure Workload Identity        ${LGREEN}║${NC}"
+    echo -e "${LGREEN}║${NC}  ${LCYAN}2)${NC} Verify Configuration               ${LGREEN}║${NC}"
+    echo -e "${LGREEN}║${NC}  ${LCYAN}3)${NC} Delete Workload Identity           ${LGREEN}║${NC}"
+    echo -e "${LGREEN}║${NC}  ${LCYAN}4)${NC} List Bindings in Namespace         ${LGREEN}║${NC}"
+    echo -e "${LGREEN}║${NC}  ${LCYAN}5)${NC} View Operations Registry       ${LGREEN}║${NC}"
     echo -e "${LGREEN}║${NC}                                        ${LGREEN}║${NC}"
-    echo -e "${LGREEN}║${NC}  ${LCYAN}0)${NC} Salir                               ${LGREEN}║${NC}"
+    echo -e "${LGREEN}║${NC}  ${LCYAN}0)${NC} Salir                              ${LGREEN}║${NC}"
     echo -e "${LGREEN}║${NC}                                        ${LGREEN}║${NC}"
     echo -e "${LGREEN}╚════════════════════════════════════════╝${NC}"
     echo ""
@@ -620,7 +620,7 @@ operation_setup() {
     echo ""
     
     # --- Step 0: Ticket/CTask (Optional) ---
-    echo -e "${GRAY}  (Optional) Asociar a un ticket para organizar los logs${NC}"
+    echo -e "${GRAY}  (Optional) Associate with ticket for organizing logs${NC}"
     prompt_input "Ticket or CTask number (optional, press Enter to skip)" "TICKET_ID" ""
     
     # Setup log directory based on ticket
@@ -639,7 +639,7 @@ operation_setup() {
     prompt_input "Enter Project ID" "project_id" "$current_project"
     
     if [[ -z "$project_id" ]]; then
-        print_error "Project ID es requerido"
+        print_error "Project ID is required"
         exit 1
     fi
     
@@ -659,9 +659,9 @@ operation_setup() {
     
     # Verify IAM SA exists (just check, don't create yet)
     echo ""
-    echo -ne "${GRAY}Verificando cuenta IAM...${NC}"
+    echo -ne "${GRAY}Verifying IAM account...${NC}"
     if verify_iam_sa "$iam_sa_email" "$project_id"; then
-        echo -e "\r${LGREEN}✓ Cuenta IAM verificada${NC}     "
+        echo -e "\r${LGREEN}✓ IAM account verified${NC}     "
         log "IAM SA verified: $iam_sa_email"
     else
         echo -e "\r${YELLOW}⚠ IAM Account does not exist (will be created)${NC}     "
@@ -710,7 +710,7 @@ operation_setup() {
     if [[ ${#cluster_options[@]} -eq 1 ]]; then
         selected_cluster="${cluster_names[0]}"
         selected_location="${cluster_locations[0]}"
-        print_info "Cluster único encontrado" "$selected_cluster ($selected_location)"
+        print_info "Single cluster found" "$selected_cluster ($selected_location)"
     else
         prompt_selection "Select GKE cluster:" cluster_options selected_option
         
@@ -770,7 +770,7 @@ operation_setup() {
     [[ "$iam_sa_exists" == "false" ]] && confirm_msg+=$'\n  • IAM Service Account (new)'
     confirm_msg+=$'\n  • Kubernetes namespace\n  • Kubernetes Service Account\n  • IAM Binding'
     
-    if ! ask_confirmation "$confirm_msg" "crear"; then
+    if ! ask_confirmation "$confirm_msg" "create"; then
         print_warning "Operation cancelled"
         return 0
     fi
@@ -778,7 +778,7 @@ operation_setup() {
     echo ""
     
     # --- Step 7: Execute Configuration ---
-    print_header "Ejecutando Configuration"
+    print_header "Executing Configuration"
     echo ""
     
     local step=1
@@ -787,52 +787,52 @@ operation_setup() {
     # Create IAM SA if needed
     if [[ "$iam_sa_exists" == "false" ]]; then
         total_steps=5
-        echo -ne "${WHITE}[${step}/${total_steps}]${NC} Creando cuenta IAM..."
+        echo -ne "${WHITE}[${step}/${total_steps}]${NC} Creating IAM account..."
         if create_iam_sa "$iam_sa_name" "$project_id" >/dev/null 2>&1; then
-            echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Creando cuenta IAM... ${LGREEN}✓${NC}"
+            echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Creating IAM account... ${LGREEN}✓${NC}"
             log "IAM SA created: $iam_sa_email"
         else
-            echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Creando cuenta IAM... ${RED}✗${NC}"
-            print_error "Error al crear cuenta IAM"
+            echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Creating IAM account... ${RED}✗${NC}"
+            print_error "Error creating IAM account"
             exit 1
         fi
         ((step++))
     fi
     
     # Create namespace
-    echo -ne "${WHITE}[${step}/${total_steps}]${NC} Creando namespace..."
+    echo -ne "${WHITE}[${step}/${total_steps}]${NC} Creating namespace..."
     if create_namespace "$namespace" >/dev/null 2>&1; then
-        echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Creando namespace... ${LGREEN}✓${NC}"
+        echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Creating namespace... ${LGREEN}✓${NC}"
     else
-        echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Creando namespace... ${YELLOW}(existing)${NC}"
+        echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Creating namespace... ${YELLOW}(existing)${NC}"
     fi
     ((step++))
     
     # Create KSA
-    echo -ne "${WHITE}[${step}/${total_steps}]${NC} Creando Kubernetes SA..."
+    echo -ne "${WHITE}[${step}/${total_steps}]${NC} Creating Kubernetes SA..."
     if create_ksa "$ksa_name" "$namespace" >/dev/null 2>&1; then
-        echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Creando Kubernetes SA... ${LGREEN}✓${NC}"
+        echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Creating Kubernetes SA... ${LGREEN}✓${NC}"
     else
-        echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Creando Kubernetes SA... ${YELLOW}(existing)${NC}"
+        echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Creating Kubernetes SA... ${YELLOW}(existing)${NC}"
     fi
     ((step++))
     
     # Add IAM binding
-    echo -ne "${WHITE}[${step}/${total_steps}]${NC} Agregando IAM binding..."
+    echo -ne "${WHITE}[${step}/${total_steps}]${NC} Adding IAM binding..."
     if add_iam_binding "$iam_sa_email" "$project_id" "$ksa_name" "$namespace" >/dev/null 2>&1; then
-        echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Agregando IAM binding... ${LGREEN}✓${NC}"
+        echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Adding IAM binding... ${LGREEN}✓${NC}"
     else
-        echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Agregando IAM binding... ${RED}✗${NC}"
+        echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Adding IAM binding... ${RED}✗${NC}"
         print_error "Error al agregar IAM binding"
     fi
     ((step++))
     
     # Annotate KSA
-    echo -ne "${WHITE}[${step}/${total_steps}]${NC} Anotando Kubernetes SA..."
+    echo -ne "${WHITE}[${step}/${total_steps}]${NC} Annotating Kubernetes SA..."
     if annotate_ksa "$ksa_name" "$namespace" "$iam_sa_email" >/dev/null 2>&1; then
-        echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Anotando Kubernetes SA... ${LGREEN}✓${NC}"
+        echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Annotating Kubernetes SA... ${LGREEN}✓${NC}"
     else
-        echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Anotando Kubernetes SA... ${RED}✗${NC}"
+        echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Annotating Kubernetes SA... ${RED}✗${NC}"
         print_error "Error al anotar KSA"
     fi
     
@@ -854,8 +854,8 @@ operation_setup() {
     echo -e "${LGREEN}========================================${NC}"
     
     echo ""
-    echo -e "${GRAY}Log guardado en: $G_LOG_FILE${NC}"
-    echo -e "${GRAY}Registro agregado a: $G_CONTROL_FILE${NC}"
+    echo -e "${GRAY}Log saved to: $G_LOG_FILE${NC}"
+    echo -e "${GRAY}Record added to: $G_CONTROL_FILE${NC}"
     log "Session completed successfully"
     log "Registered in control file: $G_CONTROL_FILE"
     
@@ -882,7 +882,7 @@ operation_verify() {
     prompt_input "Enter Project ID" "project_id" "$current_project"
     
     if [[ -z "$project_id" ]]; then
-        print_error "Project ID es requerido"
+        print_error "Project ID is required"
         return 1
     fi
     
@@ -948,7 +948,7 @@ operation_verify() {
     echo ""
     
     # --- Verify ---
-    print_header "Resultado de Verificación"
+    print_header "Verification Results"
     
     local ksa_exists=false
     local iam_sa_exists=false
@@ -961,7 +961,7 @@ operation_verify() {
         print_info "IAM SA" "$iam_sa_email"
         iam_sa_exists=true
     else
-        echo -e "\r${RED}✗ IAM SA no encontrado${NC}          "
+        echo -e "\r${RED}✗ IAM SA not found${NC}          "
     fi
     
     # Check KSA exists
@@ -970,7 +970,7 @@ operation_verify() {
         echo -e "\r${LGREEN}✓ KSA existe${NC}                    "
         ksa_exists=true
     else
-        echo -e "\r${RED}✗ KSA no encontrado${NC}             "
+        echo -e "\r${RED}✗ KSA not found${NC}             "
     fi
     
     # Check annotation (only if KSA exists)
@@ -979,7 +979,7 @@ operation_verify() {
         echo -ne "Verifying annotation..."
         if [[ -n "$annotation" ]]; then
             echo -e "\r${LGREEN}✓ Annotation configured${NC}         "
-            print_info "Anotación" "$annotation"
+            print_info "Annotation" "$annotation"
         else
             echo -e "\r${YELLOW}⚠ No Workload Identity annotation${NC}"
         fi
@@ -990,9 +990,9 @@ operation_verify() {
         echo -ne "Verificando IAM binding..."
         local member="serviceAccount:${project_id}.svc.id.goog[${namespace}/${ksa_name}]"
         if gcloud iam service-accounts get-iam-policy "$iam_sa_email" --project "$project_id" 2>/dev/null | grep -q "$member"; then
-            echo -e "\r${LGREEN}✓ IAM binding configurado${NC}       "
+            echo -e "\r${LGREEN}✓ IAM binding configured${NC}       "
         else
-            echo -e "\r${YELLOW}⚠ IAM binding no encontrado${NC}     "
+            echo -e "\r${YELLOW}⚠ IAM binding not found${NC}     "
         fi
     fi
     
@@ -1007,7 +1007,7 @@ operation_verify() {
         echo -e "  WI Annotation:        $([ -n "$annotation" ] && echo "${LGREEN}Configured${NC}" || echo "${YELLOW}Not configured${NC}")"
     fi
     echo ""
-    print_header "Verificación Completada"
+    print_header "Verification Completed"
     
     echo ""
     echo -ne "${YELLOW}Press Enter to continue...${NC}"
@@ -1019,8 +1019,8 @@ operation_verify() {
 # =============================================================================
 
 # Function: ask_confirmation
-# Description: Pedir confirmación con doble verificación para operaciones críticas
-# Parameters: $1=mensaje, $2=acción (ej: "eliminar")
+# Description: Request double confirmation for critical operations
+# Parameters: $1=message, $2=action (e.g.: "delete")
 # Returns: 0=confirmado, 1=cancelado
 ask_confirmation() {
     local message="$1"
@@ -1033,18 +1033,18 @@ ask_confirmation() {
     echo ""
     
     # Primera pregunta
-    echo -ne "Are you sure you want to ${action}? ${LCYAN}(si/no)${NC}: "
+    echo -ne "Are you sure you want to ${action}? ${LCYAN}(yes/no)${NC}: "
     local response1
     read response1
     
-    if [[ "$response1" != "si" ]]; then
+    if [[ "$response1" != " "yes"" ]]; then
         echo -e "${LGREEN}✓ Operation cancelled${NC}"
         return 1
     fi
     
-    # Segunda confirmación (doble verificación)
+    # Second confirmation (double verification)
     echo -e "\n${RED}⚠ This action cannot be undone${NC}"
-    echo -ne "Escriba '${action}' para confirmar: "
+    echo -ne "Type '' to confirm: "
     local response2
     read response2
     
@@ -1279,14 +1279,14 @@ operation_cleanup() {
     echo ""
     
     # --- Confirmation before destructive operation ---
-    local confirm_message="Se eliminarán los siguientes recursos:"
+    local confirm_message="The following resources will be deleted:"
     [[ "$cleanup_option" == "1" ]] && confirm_message+=$'\n  • IAM Binding'
     [[ "$cleanup_option" == "2" ]] && confirm_message+=$'\n  • IAM Binding\n  • Kubernetes Service Account'
     [[ "$cleanup_option" == "3" ]] && confirm_message+=$'\n  • IAM Binding\n  • Kubernetes Service Account\n  • GCP IAM Service Account'
     
     confirm_message+=$'\n\nProject: '"$project_id"$'\nCluster: '"$selected_cluster"$'\nNamespace: '"$namespace"$'\nKSA: '"$ksa_name"
     
-    if ! ask_confirmation "$confirm_message" "eliminar"; then
+    if ! ask_confirmation "$confirm_message" "delete"; then
         return 0
     fi
     
@@ -1391,7 +1391,7 @@ operation_list() {
         local registry_projects=$(tail -n +2 "$G_CONTROL_FILE" | awk -F',' '$9 == "activo" {print $3}' | sort -u | grep -v '^$')
         
         if [[ -n "$registry_projects" ]]; then
-            echo -e "${WHITE}Proyectos en el registro:${NC}"
+            echo -e "${WHITE}Active projects in registry:${NC}"
             echo ""
             
             declare -a project_options
@@ -1403,7 +1403,7 @@ operation_list() {
                 ((idx++))
             done <<< "$registry_projects"
             
-            echo -e "  ${LCYAN}${idx})${NC} ${YELLOW}Ingresar otro proyecto manualmente${NC}"
+            echo -e "  ${LCYAN}${idx})${NC} ${YELLOW}Enter another project manually${NC}"
             echo ""
             
             local max_opt=${#project_options[@]}
@@ -1418,7 +1418,7 @@ operation_list() {
                     prompt_input "Enter Project ID" "project_id" "$current_project"
                 else
                     project_id="${project_options[$((selection-1))]}"
-                    echo -e "${LGREEN}✓ Proyecto seleccionado:${NC} ${WHITE}$project_id${NC}"
+                    echo -e "${LGREEN}✓ Selected project:${NC} ${WHITE}$project_id${NC}"
                 fi
             else
                 echo -e "${RED}Invalid option${NC}"
@@ -1445,7 +1445,7 @@ operation_list() {
         local registry_clusters=$(tail -n +2 "$G_CONTROL_FILE" | awk -F',' -v proj="$project_id" '$3 == proj && $9 == "activo" {print $4 "," $5}' | sort -u | grep -v '^,$')
         
         if [[ -n "$registry_clusters" ]]; then
-            echo -e "${WHITE}Clusters en el registro para ${LCYAN}$project_id${NC}:${NC}"
+            echo -e "${WHITE}Clusters in registry for ${LCYAN}$project_id${NC}:${NC}"
             echo ""
             
             declare -a reg_cluster_names
@@ -1513,7 +1513,7 @@ operation_list() {
                 else
                     selected_cluster="${reg_cluster_names[$((selection-1))]}"
                     selected_location="${reg_cluster_locations[$((selection-1))]}"
-                    echo -e "${LGREEN}✓ Cluster seleccionado:${NC} ${WHITE}$selected_cluster${NC}"
+                    echo -e "${LGREEN}✓ Selected cluster:${NC} ${WHITE}$selected_cluster${NC}"
                 fi
             else
                 echo -e "${RED}Invalid option${NC}"
@@ -1586,7 +1586,7 @@ operation_list() {
     prompt_input "Enter namespace (o 'all' para todos)" "namespace" "apps"
     
     echo ""
-    print_header "Workload Identities Configurados"
+    print_header "Configured Workload Identities"
     echo ""
     
     if [[ "$namespace" == "all" ]]; then
@@ -1610,11 +1610,11 @@ operation_list() {
 
 operation_view_registry() {
     clear
-    print_header "Registro de Operaciones"
+    print_header "Operations Registry"
     echo ""
     
     if [[ ! -f "$G_CONTROL_FILE" ]]; then
-        print_warning "No hay registros disponibles"
+        print_warning "No records available"
         echo ""
         echo -ne "${YELLOW}Press Enter to continue...${NC}"
         read
@@ -1623,9 +1623,9 @@ operation_view_registry() {
     
     # Count records
     local total=$(($(wc -l < "$G_CONTROL_FILE") - 1))
-    local activos=$(tail -n +2 "$G_CONTROL_FILE" | awk -F',' '$9 == "activo"' | wc -l)
-    local eliminados=$((total - activos))
-    echo -e "${WHITE}Total de registros:${NC} ${LCYAN}${total}${NC} (${LGREEN}${activos} activos${NC}, ${RED}${eliminados} eliminados${NC})"
+    local active=$(tail -n +2 "$G_CONTROL_FILE" | awk -F',' '$9 == "activo"' | wc -l)
+    local deleted=$((total - active))
+    echo -e "${WHITE}Total records:${NC} ${LCYAN}${total}${NC} (${LGREEN}${active} active${NC}, ${RED}${deleted} deleted${NC})"
     echo ""
     
     # Show last 20 records
@@ -1670,7 +1670,7 @@ main() {
             5) operation_view_registry ;;
             0) 
                 clear
-                echo -e "${LGREEN}¡Hasta luego!${NC}"
+                echo -e "${LGREEN}Goodbye!${NC}"
                 exit 0
                 ;;
             *)
