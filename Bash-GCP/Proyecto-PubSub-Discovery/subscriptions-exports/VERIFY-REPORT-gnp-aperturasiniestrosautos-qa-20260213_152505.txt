@@ -1,0 +1,30 @@
+========================================
+PubSub Subscriptions Verification Report
+========================================
+
+Proyecto Destino: gnp-aperturasiniestrosautos-qa
+Timestamp: vie 13 feb 2026 15:25:07 CST
+Archivo Fuente: subscriptions-gnp-apesiniestrosautos-uat-20260213_152313.json
+
+Resumen:
+--------
+Suscripciones en archivo fuente: 27
+Suscripciones que YA existen: 22
+Suscripciones que FALTAN: 5
+
+Archivos Generados:
+-------------------
+1. ./subscriptions-exports/subscriptions-gnp-apesiniestrosautos-uat-20260213_152313-EXIST-gnp-aperturasiniestrosautos-qa-20260213_152505.json
+   Suscripciones que ya existen en el proyecto destino
+
+2. ./subscriptions-exports/subscriptions-gnp-apesiniestrosautos-uat-20260213_152313-MISSING-gnp-aperturasiniestrosautos-qa-20260213_152505.json
+   Suscripciones que necesitan ser replicadas
+
+Próximo Paso:
+--------------
+Si hay suscripciones que faltan (5), ejecuta:
+
+  ./SubscriptionsReplicate.sh     --source-file ./subscriptions-exports/subscriptions-gnp-apesiniestrosautos-uat-20260213_152313-MISSING-gnp-aperturasiniestrosautos-qa-20260213_152505.json     --target-project gnp-aperturasiniestrosautos-qa
+
+Esto replicará SOLO las suscripciones faltantes.
+

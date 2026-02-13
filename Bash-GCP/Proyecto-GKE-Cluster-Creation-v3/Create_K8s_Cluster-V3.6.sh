@@ -1394,14 +1394,16 @@ fi
 
 # 4. Resumen Final
 echo -e "${LGREEN}========================================${NC}"
-echo -e "${LGREEN}     CREACION COMPLETADA${NC}"
+echo -e "${LGREEN} Creación Completada${NC}"
 echo -e "${LGREEN}========================================${NC}"
 echo -e "${WHITE}Proyecto:${NC} ${LCYAN}$project_id${NC}"
+echo -e "${WHITE}Región:${NC} ${LCYAN}$region${NC}"
 echo -e "${WHITE}Clúster:${NC} ${LCYAN}$cluster_name${NC}"
 echo -e "${WHITE}Flota:${NC} ${LCYAN}$fleet_id${NC}"
 echo -e "${WHITE}VPC:${NC} ${LCYAN}$VPC_NAME${NC}"
 echo -e "${WHITE}Cloud Router:${NC} ${LCYAN}$project_id-router${NC}"
 echo -e "${WHITE}Cloud NAT:${NC} ${LCYAN}$project_id-nat${NC}"
+echo -e "${LGREEN}========================================${NC}"
 
 # Mostrar cuentas de servicio si fueron creadas
 if [[ -n "$k8s_sa_name" ]] && [[ -n "$iam_sa_name" ]]; then
@@ -1413,7 +1415,3 @@ if [[ -n "$k8s_sa_name" ]] && [[ -n "$iam_sa_name" ]]; then
     echo -e "${WHITE}IAM SA:${NC} ${LCYAN}${iam_sa_name}@${project_id}.iam.gserviceaccount.com${NC}"
     echo -e "${LGREEN}========================================${NC}"
 fi
-
-echo -e "${LGREEN}========================================${NC}"
-echo -e " Cluster listo en región $region"
-echo -e "${LGREEN}========================================${NC}"
