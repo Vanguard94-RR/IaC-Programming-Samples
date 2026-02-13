@@ -1,0 +1,103 @@
+{
+  "project_id": "gnp-apesiniestrosautos-uat",
+  "discovery_timestamp": "2026-02-13T19:55:18Z",
+  "discovery_type": "selective",
+  "topics_count": 31,
+  "subscriptions_count": 0,
+  "topics": [
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/gcr"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/aperturaSiniestroOrquestador"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/resource-notes-operations-v1alpha1"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/notificacionMContactoServicios"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/notificacionMContactoPersona"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/ejemploTopic"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/resource-notes-occurrences-v1alpha1"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/notificacionServiciosCobertura"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/notificacionVehiculo"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/notificacionOut"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/servAjusteTopic"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/notificacionMContacto"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/notificacionMContactoSiniestro"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/notificacionSiniestro"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/resource-notes-notes-v1alpha1"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/notificacionPersonaPoliza"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/notificacionPersonaSiniestro"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/notificacionServiciosOrquestador"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/notificacionAjuste20"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/notificacionServicioActualizado"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/aperturaSiniestroTrazabilidad"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/notificacionServicioCancelado"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/container-analysis-occurrences-v1beta1"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/container-analysis-notes-v1beta1"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/cambioStatusSCOut"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/notificacionVehiculoSiniestro"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/notificacionServicioAjuste"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/servicio-supervision-obra"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/gcp-apertura-siniestros.alsa.alertamientos.apertura-alertamiento"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/container-analysis-notes-v1"
+    },
+    {
+      "name": "projects/gnp-apesiniestrosautos-uat/topics/container-analysis-occurrences-v1"
+    }
+  ],
+  "subscriptions": []
+}

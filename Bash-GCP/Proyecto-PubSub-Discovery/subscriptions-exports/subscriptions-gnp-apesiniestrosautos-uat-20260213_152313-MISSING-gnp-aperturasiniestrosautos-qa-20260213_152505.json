@@ -1,0 +1,69 @@
+[
+  {
+    "ackDeadlineSeconds": 10,
+    "expirationPolicy": {
+      "ttl": "2678400s"
+    },
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/ajuste20TrazabilidadSubscriptor",
+    "pushConfig": {},
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/notificacionAjuste20"
+  },
+  {
+    "ackDeadlineSeconds": 300,
+    "expirationPolicy": {},
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/gcf-obtenerCharolaPendienteSa-servAjusteTopic",
+    "pushConfig": {
+      "attributes": {
+        "x-goog-version": "v1"
+      },
+      "pushEndpoint": "https://580b1a78c7438286edb55646762ab2e3-dot-edec60d6691163d50-tp.appspot.com/_ah/push-handlers/pubsub/projects/gnp-apesiniestrosautos-uat/topics/servAjusteTopic?pubsub_trigger=true"
+    },
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/servAjusteTopic"
+  },
+  {
+    "ackDeadlineSeconds": 300,
+    "expirationPolicy": {},
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/gcf-obtenerCharolaEvolucion-aperturaSiniestroOrquestador",
+    "pushConfig": {
+      "attributes": {
+        "x-goog-version": "v1"
+      },
+      "pushEndpoint": "https://90c9f9231430bc87ec7c121c075dd49c-dot-edec60d6691163d50-tp.appspot.com/_ah/push-handlers/pubsub/projects/gnp-apesiniestrosautos-uat/topics/aperturaSiniestroOrquestador?pubsub_trigger=true"
+    },
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/aperturaSiniestroOrquestador"
+  },
+  {
+    "ackDeadlineSeconds": 300,
+    "expirationPolicy": {},
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/gcf-obtenerCharolaSiniestro-notificacionSiniestro",
+    "pushConfig": {
+      "attributes": {
+        "x-goog-version": "v1"
+      },
+      "pushEndpoint": "https://b9d3cbee133db0fdbe1b5e684e4f966e-dot-edec60d6691163d50-tp.appspot.com/_ah/push-handlers/pubsub/projects/gnp-apesiniestrosautos-uat/topics/notificacionSiniestro?pubsub_trigger=true"
+    },
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/notificacionSiniestro"
+  },
+  {
+    "ackDeadlineSeconds": 300,
+    "expirationPolicy": {},
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/gcf-obtenerCharolaVehiculo-notificacionVehiculo",
+    "pushConfig": {
+      "attributes": {
+        "x-goog-version": "v1"
+      },
+      "pushEndpoint": "https://49eed6de1ef2ceea6e013ac909b8e4f2-dot-edec60d6691163d50-tp.appspot.com/_ah/push-handlers/pubsub/projects/gnp-apesiniestrosautos-uat/topics/notificacionVehiculo?pubsub_trigger=true"
+    },
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/notificacionVehiculo"
+  }
+]

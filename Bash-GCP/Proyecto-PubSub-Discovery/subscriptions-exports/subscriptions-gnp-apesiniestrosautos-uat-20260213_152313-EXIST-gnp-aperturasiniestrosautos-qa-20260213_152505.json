@@ -1,0 +1,239 @@
+[
+  {
+    "ackDeadlineSeconds": 10,
+    "expirationPolicy": {
+      "ttl": "2678400s"
+    },
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/serviciosCoberturaSubscriptor",
+    "pushConfig": {},
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/notificacionServiciosCobertura"
+  },
+  {
+    "ackDeadlineSeconds": 10,
+    "expirationPolicy": {
+      "ttl": "2678400s"
+    },
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/mContactoSiniestroSubscriptor",
+    "pushConfig": {},
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/notificacionMContactoSiniestro"
+  },
+  {
+    "ackDeadlineSeconds": 10,
+    "expirationPolicy": {
+      "ttl": "2678400s"
+    },
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/servAjusteOrquestadorSubscriptor",
+    "pushConfig": {},
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/servAjusteTopic"
+  },
+  {
+    "ackDeadlineSeconds": 10,
+    "expirationPolicy": {
+      "ttl": "2678400s"
+    },
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/aperturaSiniestroOrquestadorSub",
+    "pushConfig": {},
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/aperturaSiniestroOrquestador"
+  },
+  {
+    "ackDeadlineSeconds": 10,
+    "expirationPolicy": {
+      "ttl": "2678400s"
+    },
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/personaSiniestroSubscriptor",
+    "pushConfig": {},
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/notificacionPersonaSiniestro"
+  },
+  {
+    "ackDeadlineSeconds": 10,
+    "expirationPolicy": {
+      "ttl": "2678400s"
+    },
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/serviciosCoberturaOrquestadorSubscriptor",
+    "pushConfig": {},
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/notificacionServiciosOrquestador"
+  },
+  {
+    "ackDeadlineSeconds": 10,
+    "expirationPolicy": {
+      "ttl": "2678400s"
+    },
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/mContactoServiciosSubscriptor",
+    "pushConfig": {},
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/notificacionMContactoServicios"
+  },
+  {
+    "ackDeadlineSeconds": 10,
+    "expirationPolicy": {
+      "ttl": "2678400s"
+    },
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/aperturaSiniestroInformaSub",
+    "pushConfig": {},
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/aperturaSiniestroOrquestador"
+  },
+  {
+    "ackDeadlineSeconds": 10,
+    "expirationPolicy": {
+      "ttl": "2678400s"
+    },
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/aperturaSiniestroOrquestadorServiSub",
+    "pushConfig": {},
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/aperturaSiniestroOrquestador"
+  },
+  {
+    "ackDeadlineSeconds": 10,
+    "expirationPolicy": {
+      "ttl": "2678400s"
+    },
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/mcontactoPersonaSubscriber",
+    "pushConfig": {},
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/notificacionMContactoPersona"
+  },
+  {
+    "ackDeadlineSeconds": 10,
+    "expirationPolicy": {
+      "ttl": "2678400s"
+    },
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/servicioActualizadoInformaSubscriptor",
+    "pushConfig": {},
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/notificacionServicioActualizado"
+  },
+  {
+    "ackDeadlineSeconds": 10,
+    "expirationPolicy": {
+      "ttl": "2678400s"
+    },
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/apsinTrazabilidadSub",
+    "pushConfig": {},
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/aperturaSiniestroTrazabilidad"
+  },
+  {
+    "ackDeadlineSeconds": 10,
+    "expirationPolicy": {
+      "ttl": "2678400s"
+    },
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/aperturaSiniestroASASub",
+    "pushConfig": {},
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/aperturaSiniestroOrquestador"
+  },
+  {
+    "ackDeadlineSeconds": 10,
+    "expirationPolicy": {
+      "ttl": "2678400s"
+    },
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/cancelacionScInformaSubscriptor",
+    "pushConfig": {},
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/notificacionServicioCancelado"
+  },
+  {
+    "ackDeadlineSeconds": 300,
+    "expirationPolicy": {
+      "ttl": "2678400s"
+    },
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/cambioStatusSC_AM",
+    "pushConfig": {},
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/cambioStatusSCOut"
+  },
+  {
+    "ackDeadlineSeconds": 600,
+    "expirationPolicy": {},
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/gcf-obtenerCharolaObservaciones-notificacionServicioActualizado",
+    "pushConfig": {
+      "attributes": {
+        "x-goog-version": "v1"
+      },
+      "pushEndpoint": "https://f47493966824cb994963567da3bc3ae6-dot-edec60d6691163d50-tp.appspot.com/_ah/push-handlers/pubsub/projects/gnp-apesiniestrosautos-uat/topics/notificacionServicioActualizado?pubsub_trigger=true"
+    },
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/notificacionServicioActualizado"
+  },
+  {
+    "ackDeadlineSeconds": 10,
+    "expirationPolicy": {
+      "ttl": "2678400s"
+    },
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/vehiculoSiniestroServCoberturaSubs",
+    "pushConfig": {},
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/notificacionVehiculoSiniestro"
+  },
+  {
+    "ackDeadlineSeconds": 10,
+    "expirationPolicy": {
+      "ttl": "2678400s"
+    },
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/vehiculoSiniestroSubscriptor",
+    "pushConfig": {},
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/notificacionVehiculoSiniestro"
+  },
+  {
+    "ackDeadlineSeconds": 10,
+    "expirationPolicy": {},
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/servicioAjuste.asa",
+    "pushConfig": {},
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/notificacionServicioAjuste"
+  },
+  {
+    "ackDeadlineSeconds": 10,
+    "expirationPolicy": {},
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/servicio-supervision-obra.orquestador-suscriptor",
+    "pushConfig": {},
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/servicio-supervision-obra"
+  },
+  {
+    "ackDeadlineSeconds": 10,
+    "expirationPolicy": {},
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/servicio-supervision-obra.autoasignacion-suscriptor",
+    "pushConfig": {},
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/servicio-supervision-obra"
+  },
+  {
+    "ackDeadlineSeconds": 300,
+    "expirationPolicy": {},
+    "messageRetentionDuration": "604800s",
+    "name": "projects/gnp-apesiniestrosautos-uat/subscriptions/gcp-apertura-siniestros.alsa.alertamientos.apertura-alertamiento.marcador.enlace",
+    "pushConfig": {},
+    "state": "ACTIVE",
+    "topic": "projects/gnp-apesiniestrosautos-uat/topics/gcp-apertura-siniestros.alsa.alertamientos.apertura-alertamiento"
+  }
+]

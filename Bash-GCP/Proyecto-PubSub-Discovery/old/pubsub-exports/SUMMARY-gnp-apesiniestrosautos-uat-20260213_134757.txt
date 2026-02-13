@@ -1,0 +1,76 @@
+========================================
+PubSub Discovery Summary (Selective)
+========================================
+
+Proyecto: gnp-apesiniestrosautos-uat
+Timestamp: vie 13 feb 2026 13:55:18 CST
+Directorio: ./pubsub-exports
+Tipo Discovery: Selectivo (por tema)
+
+Resumen:
+--------
+Total de Temas: 31
+Total de Suscripciones: 0
+Temas seleccionados: 31
+
+Temas Descubiertos:
+-------------------
+  • gcr
+  • aperturaSiniestroOrquestador
+  • resource-notes-operations-v1alpha1
+  • notificacionMContactoServicios
+  • notificacionMContactoPersona
+  • ejemploTopic
+  • resource-notes-occurrences-v1alpha1
+  • notificacionServiciosCobertura
+  • notificacionVehiculo
+  • notificacionOut
+  • servAjusteTopic
+  • notificacionMContacto
+  • notificacionMContactoSiniestro
+  • notificacionSiniestro
+  • resource-notes-notes-v1alpha1
+  • notificacionPersonaPoliza
+  • notificacionPersonaSiniestro
+  • notificacionServiciosOrquestador
+  • notificacionAjuste20
+  • notificacionServicioActualizado
+  • aperturaSiniestroTrazabilidad
+  • notificacionServicioCancelado
+  • container-analysis-occurrences-v1beta1
+  • container-analysis-notes-v1beta1
+  • cambioStatusSCOut
+  • notificacionVehiculoSiniestro
+  • notificacionServicioAjuste
+  • servicio-supervision-obra
+  • gcp-apertura-siniestros.alsa.alertamientos.apertura-alertamiento
+  • container-analysis-notes-v1
+  • container-analysis-occurrences-v1
+
+Archivos Generados:
+-------------------
+1. ./pubsub-exports/topics-gnp-apesiniestrosautos-uat-20260213_134757.json
+   - Listado de los temas descubiertos en formato JSON
+
+2. ./pubsub-exports/subscriptions-gnp-apesiniestrosautos-uat-20260213_134757.json
+   - Listado de las suscripciones en formato JSON
+
+3. ./pubsub-exports/pubsub-detailed-gnp-apesiniestrosautos-uat-20260213_134757.json
+   - Información detallada de temas y suscripciones
+
+Para replicar estos recursos en otro proyecto, usa:
+- PubSubReplicateInteractive.sh (replicación selectiva)
+- PubSubReplicate.sh (replicación automática)
+
+Comandos útiles:
+----------------
+# Ver todos los temas descubiertos
+jq '.[] | .name' ./pubsub-exports/topics-gnp-apesiniestrosautos-uat-20260213_134757.json
+
+# Ver todas las suscripciones
+jq '.[] | .name' ./pubsub-exports/subscriptions-gnp-apesiniestrosautos-uat-20260213_134757.json
+
+# Contar recursos
+echo "Temas: 31"
+echo "Suscripciones: 0"
+

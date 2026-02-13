@@ -1,0 +1,32 @@
+========================================
+PubSub Subscriptions Discovery Report
+========================================
+
+Proyecto: gnp-apesiniestrosautos-uat
+Timestamp: vie 13 feb 2026 15:23:16 CST
+Tipo: Discovery de Suscripciones
+
+Resumen:
+--------
+Total de suscripciones descubiertas: 27
+
+Archivo de Exportación:
+./subscriptions-exports/subscriptions-gnp-apesiniestrosautos-uat-20260213_152313.json
+
+Estructura de datos:
+- name: Nombre completo de la suscripción
+- topic: Tema al que está suscrita
+- ackDeadlineSeconds: Tiempo límite de reconocimiento
+- messageRetentionDuration: Duración de retención de mensajes
+- pushConfig: Configuración de push (si la hay)
+- deadLetterPolicy: Política de dead letter
+- filter: Filtro de mensajes
+- labels: Etiquetas
+
+Pasos Siguientes:
+1. Verificar suscripciones existentes en proyecto destino:
+   ./SubscriptionsVerify.sh -p TARGET_PROJECT -s ./subscriptions-exports/subscriptions-gnp-apesiniestrosautos-uat-20260213_152313.json
+
+2. Replicar suscripciones faltantes:
+   ./SubscriptionsReplicate.sh -s ./subscriptions-exports/subscriptions-gnp-apesiniestrosautos-uat-20260213_152313.json -t TARGET_PROJECT
+
