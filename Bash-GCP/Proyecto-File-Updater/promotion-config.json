@@ -1,0 +1,19 @@
+{
+  "gitlab_url": "https://gitlab.com",
+  "ticket": "CTASK0351249",
+  "promotions": [
+    {
+      "source": {
+        "project": "gitgnp/gcp/gnp-intermediarios/gke-gnp-consulta-segmentacion-info-polizas-intermediarios",
+        "branch": "feature-deploy"
+      },
+      "destination": {
+        "project": "gitgnp/gcp/gke-config-files",
+        "branch": "master"
+      },
+      "source_path": "configYml-gke-gnp-segmentacion-polizas-intermediarios/configYmlUAT/Deployment-gke-gnp-segmentacion-polizas-intermediarios.yaml",
+      "dest_path": "harness-manifests/gnp-portalintermediarios/uat/gke-gnp-consulta-segmentacion-info-polizas-intermediarios/deployment.yaml"
+    }
+  ],
+  "user": "JMCM"
+}

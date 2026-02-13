@@ -1,0 +1,17 @@
+{
+  "scan_date": "2025-12-02T22:44:07.304388",
+  "scan_path": "/tmp/secret_scan_0543bji4",
+  "total_findings": 1,
+  "files_with_findings": 1,
+  "results": {
+    "raw": [
+      {
+        "line": 23,
+        "type": "CUSTOM_PATTERNS",
+        "pattern": "(?i)crm[_-]?key\\s*[:=]\\s*[\"\\']?([a-zA-Z0-9]{32,})[...",
+        "content_preview": "CRM_KEY = l7xx47335731a26d4c93bf3f4288f644553d",
+        "severity": "CRITICAL"
+      }
+    ]
+  }
+}

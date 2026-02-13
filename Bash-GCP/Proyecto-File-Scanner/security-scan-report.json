@@ -1,0 +1,14 @@
+{
+  "scan_date": "2025-12-02T23:25:45.223983",
+  "total": 1,
+  "results": {
+    "qa/gke-gnp-soycliente-backend/soyClienteConexion.json": [
+      {
+        "line": 5,
+        "type": "PRIVATE_KEYS",
+        "content": "\"private_key\": \"-----BEGIN PRIVATE KEY-----\\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCr/DL",
+        "severity": "CRITICAL"
+      }
+    ]
+  }
+}
