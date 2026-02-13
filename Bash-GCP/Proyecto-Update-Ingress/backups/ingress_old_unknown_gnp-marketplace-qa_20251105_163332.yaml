@@ -1,0 +1,47 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    ingress.kubernetes.io/backends: '{"k8s-be-32053--cc655d8a59ba0ca2":"HEALTHY","k8s1-cc655d8a-default-marketplace-configuracion-ap-809-9da60bbf":"HEALTHY","k8s1-cc655d8a-default-marketplace-documentos-app-8093-3b2f15a3":"HEALTHY","k8s1-cc655d8a-default-marketplace-suscripcion-app-8091-13e70dc3":"UNHEALTHY"}'
+    ingress.kubernetes.io/forwarding-rule: k8s2-fr-m09j8hk0-default-marketpalce-ingress-mqe7nz0y
+    ingress.kubernetes.io/target-proxy: k8s2-tp-m09j8hk0-default-marketpalce-ingress-mqe7nz0y
+    ingress.kubernetes.io/url-map: k8s2-um-m09j8hk0-default-marketpalce-ingress-mqe7nz0y
+    kubernetes.io/ingress.global-static-ip-name: marketpalce-ingress-ip
+    networking.gke.io/v1.FrontendConfig: http-redirect-config
+  creationTimestamp: "2021-08-27T21:46:47Z"
+  finalizers:
+  - networking.gke.io/ingress-finalizer-V2
+  generation: 9
+  name: marketpalce-ingress
+  namespace: default
+  resourceVersion: "1762309566259279005"
+  uid: 8fcc079f-efe2-4770-9397-4e4c3af3c64d
+spec:
+  rules:
+  - http:
+      paths:
+      - backend:
+          service:
+            name: marketplace-suscripcion-app
+            port:
+              number: 8091
+        path: /api/marketplace/suscripcion/*
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: marketplace-configuracion-app
+            port:
+              number: 8092
+        path: /api/marketplace/configuracion/*
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: marketplace-documentos-app
+            port:
+              number: 8093
+        path: /api/marketplace/documentos/*
+        pathType: ImplementationSpecific
+status:
+  loadBalancer:
+    ingress:
+    - ip: 34.117.141.53

@@ -1,0 +1,33 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: marketpalce-ingress-ip
+    networking.gke.io/v1.FrontendConfig: http-redirect-config
+  name: marketpalce-ingress
+  namespace: default
+spec:
+  rules:
+    - http:
+        paths:
+          - backend:
+              service:
+                name: marketplace-suscripcion-app
+                port:
+                  number: 8091
+            path: /api/marketplace/suscripcion/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: marketplace-configuracion-app
+                port:
+                  number: 8092
+            path: /api/marketplace/configuracion/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: marketplace-documentos-app
+                port:
+                  number: 8093
+            path: /api/marketplace/documentos/*
+            pathType: ImplementationSpecific

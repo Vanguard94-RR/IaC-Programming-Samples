@@ -1,0 +1,177 @@
+[2025-10-26 23:09:03] [INFO] Script iniciado
+[2025-10-26 23:09:09] [INFO] Usando proyecto: gnp-vidaoperacionbase-qa
+[2025-10-26 23:09:12] [INFO] Obteniendo servicios de 'gnp-vidaoperacionbase-qa'...
+[2025-10-26 23:09:15] [INFO] Servicios disponibles:
+[2025-10-26 23:19:13] [INFO] Iniciando App Engine Version Manager
+[2025-10-26 23:19:23] [ERROR] Proyecto '
+gnp-calculopagoudis-qa' no existe
+[2025-10-26 23:19:23] [ERROR] Proyecto '
+gnp-calculopagoudis-qa' no existe
+[2025-10-26 23:21:26] [INFO] Iniciando App Engine Version Manager
+[2025-10-26 23:21:34] [ERROR] Proyecto '
+gnp-calculopagoudis-qa' no existe
+[2025-10-26 23:21:34] [ERROR] Proyecto '
+gnp-calculopagoudis-qa' no existe
+[2025-10-26 23:25:37] [INFO] Iniciando App Engine Version Manager
+[2025-10-26 23:25:45] [ERROR] Proyecto '
+gnp-calculopagoudis-qa' no existe
+[2025-10-26 23:25:45] [ERROR] Proyecto '
+gnp-calculopagoudis-qa' no existe
+[2025-10-26 23:26:48] [INFO] Iniciando App Engine Version Manager
+[2025-10-26 23:26:56] [ERROR] Proyecto '
+gnp-calculopagoudis-qa' no existe
+[2025-10-26 23:26:56] [ERROR] Proyecto '
+gnp-calculopagoudis-qa' no existe
+[2025-10-26 23:27:45] [INFO] Iniciando App Engine Version Manager
+[2025-10-26 23:28:06] [INFO] Obteniendo servicios...
+[2025-10-26 23:28:21] [INFO] Obteniendo versiones...
+[2025-10-26 23:29:19] [INFO] Iniciando App Engine Version Manager
+[2025-10-26 23:29:40] [INFO] Obteniendo servicios...
+[2025-10-26 23:29:47] [INFO] Obteniendo versiones...
+[2025-10-26 23:30:57] [INFO] Iniciando App Engine Version Manager
+[2025-10-26 23:31:05] [INFO] Obteniendo servicios...
+[2025-10-26 23:31:15] [INFO] Obteniendo versiones...
+[2025-10-26 23:32:33] [INFO] Iniciando App Engine Version Manager
+[2025-10-26 23:32:42] [INFO] Obteniendo servicios...
+[2025-10-26 23:32:49] [INFO] Obteniendo versiones...
+[2025-10-26 23:32:51] [ERROR] No hay versiones encontradas para el servicio '[0;34mℹ[0m Obteniendo servicios...
+default'
+[2025-10-26 23:32:51] [ERROR] Verifica que el servicio existe y tiene versiones
+[2025-10-26 23:33:38] [INFO] Iniciando App Engine Version Manager
+[2025-10-26 23:33:46] [INFO] Obteniendo servicios...
+[2025-10-26 23:33:55] [INFO] Obteniendo versiones...
+[2025-10-26 23:33:59] [INFO] Encontradas 38 versiones
+[2025-10-26 23:35:13] [INFO] Iniciando App Engine Version Manager
+[2025-10-26 23:35:23] [INFO] Obteniendo servicios...
+[2025-10-26 23:36:09] [INFO] Iniciando App Engine Version Manager
+[2025-10-26 23:36:17] [INFO] Obteniendo servicios...
+[2025-10-26 23:36:26] [INFO] Obteniendo versiones...
+[2025-10-26 23:36:30] [INFO] Encontradas 38 versiones
+[2025-10-26 23:38:18] [INFO] Iniciando App Engine Version Manager
+[2025-10-26 23:38:25] [INFO] Obteniendo servicios...
+[2025-10-26 23:38:31] [INFO] Obteniendo versiones...
+[2025-10-26 23:38:35] [INFO] Encontradas 38 versiones
+[2025-10-26 23:41:04] [INFO] Iniciando App Engine Version Manager
+[2025-10-26 23:41:19] [INFO] Obteniendo servicios...
+[2025-10-26 23:41:27] [INFO] Obteniendo versiones...
+[2025-10-26 23:41:40] [INFO] Encontradas 38 versiones
+[2025-10-26 23:43:20] [INFO] Iniciando App Engine Version Manager
+[2025-10-26 23:43:28] [INFO] Obteniendo servicios...
+[2025-10-26 23:43:36] [INFO] Obteniendo versiones...
+[2025-10-26 23:43:39] [INFO] Encontradas 38 versiones
+[2025-10-26 23:45:02] [INFO] Iniciando App Engine Version Manager
+[2025-10-26 23:45:07] [ERROR] Proyecto '11:43:19 admin@Dell-4970 Proyecto-Versiones-AppEngine → ./delete-appengine-versions.sh' no existe
+[2025-10-26 23:45:07] [ERROR] Proyecto '11:43:19 admin@Dell-4970 Proyecto-Versiones-AppEngine → ./delete-appengine-versions.sh' no existe
+[2025-10-26 23:45:12] [INFO] Iniciando App Engine Version Manager
+[2025-10-26 23:45:21] [INFO] Obteniendo servicios...
+[2025-10-26 23:45:29] [INFO] Obteniendo versiones...
+[2025-10-26 23:45:33] [INFO] Encontradas 38 versiones
+[2025-10-26 23:52:59] [INFO] Iniciando App Engine Version Manager
+[2025-10-26 23:53:12] [INFO] Obteniendo servicios...
+[2025-10-26 23:53:20] [INFO] Obteniendo versiones...
+[2025-10-26 23:53:25] [INFO] Encontradas 38 versiones
+[2025-10-26 23:53:47] [INFO] No hay versiones para eliminar
+[2025-10-26 23:54:44] [INFO] Iniciando App Engine Version Manager
+[2025-10-26 23:55:00] [INFO] Obteniendo servicios...
+[2025-10-26 23:55:57] [INFO] Obteniendo versiones...
+[2025-10-26 23:56:01] [INFO] Encontradas 38 versiones
+[2025-10-26 23:57:03] [INFO] Eliminando...
+[2025-10-26 23:57:07] [SUCCESS] Eliminada: 20240530t005845
+[2025-10-26 23:57:10] [SUCCESS] Eliminada: 20240603t204329
+[2025-10-26 23:57:24] [SUCCESS] Eliminada: 20240606t022253
+[2025-10-26 23:57:29] [SUCCESS] Eliminada: 20240606t214554
+[2025-10-26 23:57:37] [SUCCESS] Eliminada: 20240608t001511
+[2025-10-26 23:57:41] [SUCCESS] Eliminada: 20240610t222448
+[2025-10-26 23:57:45] [SUCCESS] Eliminada: 20240613t011537
+[2025-10-26 23:57:49] [SUCCESS] Eliminada: 20240613t235036
+[2025-10-26 23:57:52] [SUCCESS] Eliminada: 20240614t184257
+[2025-10-26 23:57:55] [SUCCESS] Eliminada: 20240618t003657
+[2025-10-26 23:57:59] [SUCCESS] Eliminada: 20240619t005907
+[2025-10-26 23:58:02] [SUCCESS] Eliminada: 20240619t234307
+[2025-10-26 23:58:06] [SUCCESS] Eliminada: 20240620t182439
+[2025-10-26 23:58:09] [SUCCESS] Eliminada: 20240627t005039
+[2025-10-26 23:58:12] [SUCCESS] Eliminada: 20240627t184742
+[2025-10-26 23:58:16] [SUCCESS] Eliminada: 20240702t232747
+[2025-10-26 23:58:20] [SUCCESS] Eliminada: 20240704t210401
+[2025-10-26 23:58:24] [SUCCESS] Eliminada: 20240729t204827
+[2025-10-26 23:58:28] [SUCCESS] Eliminada: 20240805t231053
+[2025-10-26 23:58:43] [SUCCESS] Eliminada: 20241016t151356
+[2025-10-26 23:58:48] [SUCCESS] Eliminada: 20241028t203934
+[2025-10-26 23:58:52] [SUCCESS] Eliminada: 20241031t004937
+[2025-10-26 23:58:57] [SUCCESS] Eliminada: 20241101t000420
+[2025-10-26 23:59:02] [SUCCESS] Eliminada: 20241113t190726
+[2025-10-26 23:59:06] [SUCCESS] Eliminada: 20241115t201024
+[2025-10-26 23:59:12] [SUCCESS] Eliminada: 20241120t200512
+[2025-10-26 23:59:16] [SUCCESS] Eliminada: 20250129t233849
+[2025-10-26 23:59:16] [SUCCESS] Completado: [0;32m✓[0m Eliminada: 20240530t005845
+[0;32m✓[0m Eliminada: 20240603t204329
+[0;32m✓[0m Eliminada: 20240606t022253
+[0;32m✓[0m Eliminada: 20240606t214554
+[0;32m✓[0m Eliminada: 20240608t001511
+[0;32m✓[0m Eliminada: 20240610t222448
+[0;32m✓[0m Eliminada: 20240613t011537
+[0;32m✓[0m Eliminada: 20240613t235036
+[0;32m✓[0m Eliminada: 20240614t184257
+[0;32m✓[0m Eliminada: 20240618t003657
+[0;32m✓[0m Eliminada: 20240619t005907
+[0;32m✓[0m Eliminada: 20240619t234307
+[0;32m✓[0m Eliminada: 20240620t182439
+[0;32m✓[0m Eliminada: 20240627t005039
+[0;32m✓[0m Eliminada: 20240627t184742
+[0;32m✓[0m Eliminada: 20240702t232747
+[0;32m✓[0m Eliminada: 20240704t210401
+[0;32m✓[0m Eliminada: 20240729t204827
+[0;32m✓[0m Eliminada: 20240805t231053
+[0;32m✓[0m Eliminada: 20241016t151356
+[0;32m✓[0m Eliminada: 20241028t203934
+[0;32m✓[0m Eliminada: 20241031t004937
+[0;32m✓[0m Eliminada: 20241101t000420
+[0;32m✓[0m Eliminada: 20241113t190726
+[0;32m✓[0m Eliminada: 20241115t201024
+[0;32m✓[0m Eliminada: 20241120t200512
+[0;32m✓[0m Eliminada: 20250129t233849
+27 versiones eliminadas
+[2025-10-26 23:59:16] [INFO] Script terminó exitosamente
+[2025-10-26 23:59:30] [INFO] Iniciando App Engine Version Manager
+[2025-10-26 23:59:45] [INFO] Obteniendo servicios...
+[2025-10-26 23:59:52] [INFO] Obteniendo versiones...
+[2025-10-26 23:59:56] [INFO] Encontradas 33 versiones
+[2025-10-27 00:00:10] [INFO] Eliminando...
+[2025-10-27 00:01:50] [SUCCESS] Completado: 
+22 versiones eliminadas
+[2025-10-27 00:01:50] [INFO] Script terminó exitosamente
+[2025-10-27 00:05:35] [INFO] Iniciando App Engine Version Manager
+[2025-10-27 00:05:49] [ERROR] Proyecto 'CTASK0337324' no existe
+[2025-10-27 00:05:49] [ERROR] Proyecto 'CTASK0337324' no existe
+[2025-10-27 00:05:52] [INFO] Iniciando App Engine Version Manager
+[2025-10-27 00:06:02] [INFO] Obteniendo servicios...
+[2025-10-27 00:13:34] [INFO] Creando directorio del ticket...
+[2025-10-27 00:13:34] [INFO] Iniciando App Engine Version Manager
+[2025-10-27 00:13:48] [INFO] Obteniendo servicios...
+[2025-10-27 00:14:19] [INFO] Obteniendo versiones...
+[2025-10-27 00:14:25] [INFO] Encontradas 139 versiones
+[2025-10-27 00:15:13] [INFO] Eliminando...
+[2025-10-27 00:16:12] [SUCCESS] Completado: 
+8 versiones eliminadas
+[2025-10-27 00:16:12] [INFO] Script terminó exitosamente
+[2025-11-25 18:31:56] [INFO] Iniciando App Engine Version Manager
+[2025-11-25 18:32:14] [INFO] Obteniendo servicios...
+[2025-11-25 18:32:17] [INFO] Obteniendo versiones...
+[2025-11-25 18:32:21] [INFO] Encontradas 210 versiones
+[2025-11-25 18:43:34] [INFO] Eliminando...
+[2025-11-25 18:55:18] [SUCCESS] Completado: 
+204 versiones eliminadas
+[2025-11-25 18:55:18] [INFO] Script terminó exitosamente
+[2026-01-08 22:56:14] [INFO] Creando directorio del ticket...
+[2026-01-08 22:56:14] [INFO] Iniciando App Engine Version Manager
+[2026-01-08 22:56:46] [ERROR] Proyecto 'gnp-reembolsosgmm-qa' no existe
+[2026-01-08 22:56:46] [ERROR] Proyecto 'gnp-reembolsosgmm-qa' no existe
+[2026-02-12 12:15:47] [INFO] Creando directorio del ticket...
+[2026-02-12 12:15:47] [INFO] Iniciando App Engine Version Manager
+[2026-02-12 12:16:07] [INFO] Obteniendo servicios...
+[2026-02-12 12:16:10] [INFO] Obteniendo versiones...
+[2026-02-12 12:16:16] [INFO] Encontradas 210 versiones
+[2026-02-12 12:16:54] [INFO] Eliminando...
+[2026-02-12 12:29:35] [SUCCESS] Completado: 
+189 versiones eliminadas
+[2026-02-12 12:29:35] [INFO] Script terminó exitosamente

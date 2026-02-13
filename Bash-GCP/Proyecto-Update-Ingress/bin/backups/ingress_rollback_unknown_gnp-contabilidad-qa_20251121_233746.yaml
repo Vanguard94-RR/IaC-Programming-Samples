@@ -1,0 +1,54 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: gke-gnp-contabilidad-qa-ingress
+    networking.gke.io/v1.FrontendConfig: http-redirect-config
+  name: gke-gnp-contabilidad-qa-ingress
+  namespace: default
+spec:
+  rules:
+    - http:
+        paths:
+          - backend:
+              service:
+                name: conciliador-consultas
+                port:
+                  number: 8080
+            path: /conciliador-consultas/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: conciliador-ingestion
+                port:
+                  number: 8080
+            path: /conciliador-ingestion/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: conciliador-movimientos
+                port:
+                  number: 8080
+            path: /conciliador-movimientos/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: conciliador-cifrascontrol
+                port:
+                  number: 8080
+            path: /conciliador-cifrascontrol/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: convertidor-parametros
+                port:
+                  number: 8080
+            path: /convertidor-parametros/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: convertidor-ingestion
+                port:
+                  number: 8080
+            path: /convertidor-ingestion/*
+            pathType: ImplementationSpecific

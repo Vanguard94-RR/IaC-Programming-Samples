@@ -1,0 +1,124 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: stela-ingress-qa
+  namespace: gke-stela
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: stela-ingress
+    networking.gke.io/v1.FrontendConfig: http-redirect-config
+spec:
+  rules:
+  - http:
+      paths:
+      - backend:
+          service:
+            name: gke-gnp-bff-tesoreria-ivr
+            port:
+              number: 8080
+        path: /tesoreria/bff-ivr/*
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: gke-gnp-cobranzas
+            port:
+              number: 8080
+        path: /tesoreria/cobranza/*
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: gke-gnp-bff-tesoreria-soycliente
+            port:
+              number: 8080
+        path: /tesoreria/soy-cliente/*
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: gke-gnp-cuentas-bancarias
+            port:
+              number: 8080
+        path: /tesoreria/cuentas-bancarias
+        pathType: Exact
+      - backend:
+          service:
+            name: gke-gnp-cuentas-bancarias
+            port:
+              number: 8080
+        path: /tesoreria/cuentas-bancarias/*
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: gke-gnp-cuentas-bancarias-trazabilidad
+            port:
+              number: 8080
+        path: /tesoreria/cuentas-bancarias-trazabilidad/*
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: gke-gnp-cuentas-cobrar-cifras-control
+            port:
+              number: 8080
+        path: /tesoreria/cuentas-cobrar/cifras-control/*
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: gke-gnp-bff-tesoreria-empleados
+            port:
+              number: 8080
+        path: /tesoreria/cuentas-cobrar/bff/*
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: gke-gnp-cuentas-cobrar
+            port:
+              number: 8080
+        path: /tesoreria/cuentas-cobrar/*
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: gke-gnp-cuentas-cobrar-dispatcher
+            port:
+              number: 8080
+        path: /tesoreria/cuentas-cobrar/dispatcher/*
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: gke-gnp-cuentas-cobrar-trazabilidad-lectura
+            port:
+              number: 8080
+        path: /tesoreria/cuentas-cobrar/trazabilidad-lectura/*
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: gke-gnp-administracion
+            port:
+              number: 8080
+        path: /tesoreria/administracion/*
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: gke-gnp-referencias-bancarias
+            port:
+              number: 8080
+        path: /tesoreria/referencias-bancarias/*
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: gke-gnp-bau-cuentasbancarias
+            port:
+              number: 8080
+        path: /tesoreria/solicitudes/*
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: gke-gnp-webhooks-serviciosfinancieros
+            port:
+              number: 8080
+        path: /tesoreria/webhooks/*
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: gke-gnp-seguridad-stela
+            port:
+              number: 8080
+        path: /tesoreria/usuarios/*
+        pathType: ImplementationSpecific                

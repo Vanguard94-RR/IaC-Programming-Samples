@@ -1,0 +1,8 @@
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  name: http-redirect-config
+  namespace: gnp-bec
+spec:
+  redirectToHttps:
+    enabled: true

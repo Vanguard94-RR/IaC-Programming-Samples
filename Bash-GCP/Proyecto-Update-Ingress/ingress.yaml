@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  #annotations:
+  #  kubernetes.io/ingress.global-static-ip-name: ingress-sie-impresordigital
+  #  networking.gke.io/v1.FrontendConfig: http-redirect-config
+  name: ingress-sie-impresordigital
+  namespace: impressie
+spec:
+  rules:
+    - http:
+        paths:
+          - backend:
+              service:
+                name: gke-gnp-segmentacion-polizas-empleados-svc
+                port:
+                  number: 8080
+            path: /segmentacion/empleados/*
+            pathType: ImplementationSpecific
