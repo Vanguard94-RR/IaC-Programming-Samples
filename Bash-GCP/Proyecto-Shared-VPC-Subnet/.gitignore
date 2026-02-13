@@ -1,0 +1,51 @@
+# .gitignore para Proyecto Shared VPC Subnet
+
+# Logs
+logs/*.log
+*.log
+
+# Archivos de configuración con datos sensibles
+configs/*.conf
+configs/*-prod.*
+configs/*-production.*
+
+# No ignorar ejemplos
+!configs/*.example
+
+# Backups
+*.backup
+*.bak
+*~
+
+# Temporales
+temp/
+tmp/
+*.tmp
+
+# Outputs
+output/
+*.out
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Credenciales
+*.json
+!example*.json
+*.key
+*.pem
+*.cer
+*.crt
+service-account*.json
+
+# Cache
+__pycache__/
+*.pyc

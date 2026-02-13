@@ -1,0 +1,1250 @@
+# Workflow de emisión daños.
+
+
+main:
+    params: [event]
+    steps:
+    - init:
+        assign:
+        - SuscripcionEstrategicaenOperacion: {"id_estacion": "15", "id_area": "13", "id_rol":"2"}
+        - SusEstResponsabilidadCivil: {"id_estacion": "16", "id_area": "12", "id_rol":"2"}
+        - SusEstIncendioMultirriesgo: {"id_estacion": "18", "id_area": "11", "id_rol":"2"}
+        - SusEstTecnicosyDiversos: {"id_estacion": "19", "id_area": "10", "id_rol":"2"}
+        - SusEstTransportesBuquesAviacion: {"id_estacion": "34", "id_area": "9", "id_rol":"2"}
+        - ReaseguroInternacional: {"id_estacion": "20", "id_area": "8", "id_rol":"27"}
+        - ReaseguroAutomatico: {"id_estacion": "22", "id_area": "7", "id_rol":"27"}
+        - Validacionsupervisor: {"id_estacion": "23", "id_area": "21", "id_rol":"5"}
+        - Traducciones: {"id_estacion": "24", "id_area": "21", "id_rol":"5"}
+        - DocumentacionPendiente: {"id_estacion": "25", "id_area": "21", "id_rol":"5"}
+        - Incidencia: {"id_estacion": "26", "id_area": "21", "id_rol":"5"}
+        - Docto492yCumplimiento: {"id_estacion": "27", "id_area": "21", "id_rol":"5"}
+        - MesaDeControlEmision: {"id_estacion": "21", "id_area": "21", "id_rol":"5"}
+        - Emisor: {"id_estacion": "28", "id_area": "21", "id_rol":"4"}
+        - AreaTecnicaIndividual: {"id_estacion": "29", "id_area": "17", "id_rol":"25"}
+        - AreaTecnicaEmpresarial: {"id_estacion": "30", "id_area": "18", "id_rol":"25"}
+        - Normatividad: {"id_estacion": "31", "id_area": "19", "id_rol":"26"}
+        - listDistribucion:
+            - "8"
+            - "9"
+            - "10"
+            - "11"
+            - "12"
+            - "13"
+            - "14"
+            - "15"
+    - mesa_de_control:
+        call: mesa_de_control_sw
+        args:
+            nombreCharola: "Mesa de Control Emision"
+            ordenTrabajo: ${json.decode(base64.decode(event.data.message.data))}
+            id_area_responsable: "21"
+            id_rol: "5"
+            id_estacion: "21"
+            areasResponsables:
+                - "21"
+                - "5"
+                - "4"	
+                - "20" 
+                - "2"
+        result: resultadoMesa
+    - argsList:
+        call: sys.log
+        args: 
+            data: "Resultado mesa_de_control: ${resultadoMesa}"
+            severity: "NOTICE" # Optional
+    - emisor:
+        call: charola_sw
+        args:
+            nombreCharola: "Emisor"
+            id_area_responsable: "21"
+            id_estacion: "28"
+            id_rol: "4"
+            estatus: "1"
+            areasResponsables:
+                - "15"
+                - "22"	
+                - "14"
+                - "12"
+                - "11"
+                - "10"
+                - "13"
+                - "9"
+                - "17"
+                - "18"	
+                - "19"
+                - "8"	
+                - "7"	
+                - "9"
+                - "6"
+                - "5"
+                - "4"	
+                - "20" 
+                - "2" 
+            ordenTrabajo: ${resultadoMesa}
+        result: ordenTrabajo
+    - emisor_evaluacion:
+        switch:
+            - condition: ${ordenTrabajo.estatus in ["2"]} #Activacion
+              steps:
+                - argsAct:
+                    call: sys.log
+                    args:
+                        data: "FLUJO DE emisor_evaluacion: ${ordenTrabajo.id}"
+                        severity: "NOTICE"
+                - llamar_activacion:
+                    call: charola_activacion
+                    args:
+                        id_area_responsable: "21"
+                        id_estacion: "21"
+                        id_rol: "4"
+                        estatus: "2"                        
+                        ordenTrabajo: ${resultadoMesa}
+                    result: resultadoActivacion
+                - evaluar_resultado_activacion:
+                     next: mesa_de_control      #MesadeControlEmision 
+            - condition: ${ordenTrabajo.areaResponsable in ["15", "22", "14"]} #Distribucion suscripcion
+              steps:
+                - argsMap:
+                    call: sys.log
+                    args:
+                        data: ${ordenTrabajo}
+                        severity: "NOTICE"
+                - llamar_distribucion_suscripcion:
+                    call: distribucion_charola
+                    args:
+                        ordenTrabajo: ${resultadoMesa}
+                        nombreCharola: "Distribución Suscripción"
+                    result: ruteo_suscripcion
+                - evaluar_resultado_distribucion:
+                    steps:
+                     - variables_distribucion:
+                        assign:
+                            - ordenTrabajo: ${ruteo_suscripcion}
+                     - imprime_resultado_ruteo:
+                        call: sys.log
+                        args:
+                            data: "imprime_resultado_ruteo: ${ruteo_suscripcion}"
+                            severity: "NOTICE"
+                     - evaluar_ruteo:
+                        switch:
+                            - condition: ${ruteo_suscripcion.areaResponsable in  ["21"]}
+                              next: mesa_de_control
+                            - condition: ${ruteo_suscripcion.areaResponsable in  ["15","22","14","12","11","10","13","9","7"]}
+                              next: emisor_evaluacion
+            - condition: ${ordenTrabajo.areaResponsable in ["21"]} #MesaDeControlEmision
+              steps: 
+                - variables_mce:
+                    assign: 
+                        - ot:
+                            ordenTrabajo: ${ordenTrabajo}
+                            ordenTrabajo.idUsuarioResponsable: ""
+                - asignar_charola_mce:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables:
+                            - "21"
+                            - "15"
+                            - "22"	
+                            - "14"
+                            - "12"
+                            - "11"
+                            - "10"
+                            - "13"
+                            - "9"
+                            - "17"
+                            - "18"	
+                            - "19"
+                            - "8"	
+                            - "7"	
+                            - "9"
+                            - "6"
+                            - "5"
+                            - "4"	
+                            - "20" 
+                            - "2" 
+                        nombreCharola: "MesaDeControlEmision"
+                        id_area_responsable: ${MesaDeControlEmision.id_area}
+                        id_rol: ${MesaDeControlEmision.id_rol}
+                        id_estacion: ${MesaDeControlEmision.id_estacion}
+                    result: ordenTrabajo
+                - evaluar_resultado_mce:
+                    switch:
+                      - condition: ${ordenTrabajo.usuarioEmisor != null}
+                        next: emisor
+                      - condition: ${ordenTrabajo.areaResponsable in ["2","5","6","20", "21"]}
+                        next: emisor_evaluacion         
+            - condition: ${ordenTrabajo.areaResponsable in ["17"]} #AreaTecnicaIndividual
+              steps: 
+                - variables_ati:
+                    assign: 
+                        - ot:
+                            ordenTrabajo: ${ordenTrabajo}
+                            ordenTrabajo.idUsuarioResponsable: ""
+                - asignar_charola_ati:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables:
+                            - "21"
+                        nombreCharola: "Area Tecnica Individual"
+                        id_area_responsable: ${AreaTecnicaIndividual.id_area}
+                        id_rol: ${AreaTecnicaIndividual.id_rol}
+                        id_estacion: ${AreaTecnicaIndividual.id_estacion}
+                    result: ordenTrabajo
+                - evaluar_resultado_ati:
+                    switch:
+                      - condition: ${ordenTrabajo.areaResponsable in  ["21"]}
+                        next: mesa_de_control
+            - condition: ${ordenTrabajo.areaResponsable in ["18"]} #AreaTecnicaEmpresarial
+              steps: 
+                - variables_ate:
+                    assign: 
+                        - ot:
+                            ordenTrabajo: ${ordenTrabajo}
+                            ordenTrabajo.idUsuarioResponsable: ""
+                - asignar_charola_ate:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables:
+                            - "21"
+                        nombreCharola: "Area Tecnica Empresarial"
+                        id_area_responsable: ${AreaTecnicaEmpresarial.id_area}
+                        id_rol: ${AreaTecnicaEmpresarial.id_rol}
+                        id_estacion: ${AreaTecnicaEmpresarial.id_estacion}
+                    result: ordenTrabajo
+                - evaluar_resultado_ate:
+                    switch:
+                      - condition: ${ordenTrabajo.areaResponsable in  ["21"]}
+                        next: mesa_de_control
+            - condition: ${ordenTrabajo.areaResponsable in ["19"]} #Normatividad
+              steps: 
+                - variables_no:
+                    assign: 
+                        - ot:
+                            ordenTrabajo: ${ordenTrabajo}
+                            ordenTrabajo.idUsuarioResponsable: ""
+                - asignar_charola_no:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables:
+                            - "21"
+                        nombreCharola: "Normatividad"
+                        id_area_responsable: ${Normatividad.id_area}
+                        id_rol: ${Normatividad.id_rol}
+                        id_estacion: ${Normatividad.id_estacion}
+                    result: ordenTrabajo
+                - evaluar_resultado_no:
+                    switch:
+                      - condition: ${ordenTrabajo.areaResponsable in  ["21"]}
+                        next: mesa_de_control
+            - condition: ${ordenTrabajo.areaResponsable in ["13"]} #SuscripcionEstrategicaenOperacion
+              steps: 
+                - variables_seo:
+                    assign: 
+                        - ot:
+                            ordenTrabajo: ${ordenTrabajo}
+                            ordenTrabajo.idUsuarioResponsable: ""
+                - asignar_charola_seo:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables:
+                            - "21"	
+                            - "15" 	
+                            - "22"	
+                            - "14"	
+                            - "12"	
+                            - "11"	
+                            - "10"	
+                            - "13"	
+                            - "9"	
+                            - "7"
+                        nombreCharola: "SuscripcionEstrategicaenOperacion"
+                        id_area_responsable: ${SuscripcionEstrategicaenOperacion.id_area}
+                        id_rol: ${SuscripcionEstrategicaenOperacion.id_rol}
+                        id_estacion: ${SuscripcionEstrategicaenOperacion.id_estacion}
+                    result: ordenTrabajo
+                - evaluar_resultado_seo:
+                    switch:
+                      - condition: ${ordenTrabajo.areaResponsable in  ["21"]}
+                        next: mesa_de_control    
+                      - condition: ${ordenTrabajo.areaResponsable in ["15","22","14","12","11", "10", "13", "9", "7"]}
+                        next: emisor_evaluacion 
+            - condition: ${ordenTrabajo.areaResponsable in ["12"]} #SusEstResponsabilidadCivil
+              steps: 
+                - variables_serc:
+                    assign: 
+                        - ot:
+                            ordenTrabajo: ${ordenTrabajo}
+                            ordenTrabajo.idUsuarioResponsable: ""
+                - asignar_charola_serc:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables:
+                                - "21"	
+                                - "15" 	
+                                - "22"	
+                                - "14"	
+                                - "12"	
+                                - "11"	
+                                - "10"	
+                                - "13"	
+                                - "9"	
+                                - "7"
+                        nombreCharola: "SusEstResponsabilidadCivil"
+                        id_area_responsable: ${SusEstResponsabilidadCivil.id_area}
+                        id_rol: ${SusEstResponsabilidadCivil.id_rol}
+                        id_estacion: ${SusEstResponsabilidadCivil.id_estacion}
+                    result: ordenTrabajo
+                - evaluar_resultado_serc:
+                    switch:
+                      - condition: ${ordenTrabajo.areaResponsable in  ["21"]}
+                        next: mesa_de_control
+                      - condition: ${ordenTrabajo.areaResponsable in ["15","22","14","12","11", "10", "13", "9", "7"]}
+                        next: emisor_evaluacion 
+            - condition: ${ordenTrabajo.areaResponsable in ["11"]} #SusEstIncendioMultirriesgo
+              steps: 
+                - variables_semr:
+                    assign: 
+                        - ot:
+                            ordenTrabajo: ${ordenTrabajo}
+                            ordenTrabajo.idUsuarioResponsable: ""
+                - asignar_charola_semr:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables:
+                            - "21"	
+                            - "15" 	
+                            - "22"	
+                            - "14"	
+                            - "12"	
+                            - "11"	
+                            - "10"	
+                            - "13"	
+                            - "9"	
+                            - "7"
+                        nombreCharola: "SusEstIncendioMultirriesgo"
+                        id_area_responsable: ${SusEstIncendioMultirriesgo.id_area}
+                        id_rol: ${SusEstIncendioMultirriesgo.id_rol}
+                        id_estacion: ${SusEstIncendioMultirriesgo.id_estacion}
+                    result: ordenTrabajo
+                - evaluar_resultado_semr:
+                    switch:
+                      - condition: ${ordenTrabajo.areaResponsable in  ["21"]}
+                        next: mesa_de_control
+                      - condition: ${ordenTrabajo.areaResponsable in ["15","22","14","12","11", "10", "13", "9", "7"]}
+                        next: emisor_evaluacion 
+            - condition: ${ordenTrabajo.areaResponsable in ["10"]} #SusEstTecnicosyDiversos
+              steps: 
+                - variables_setd:
+                    assign: 
+                        - ot:
+                            ordenTrabajo: ${ordenTrabajo}
+                            ordenTrabajo.idUsuarioResponsable: ""
+                - asignar_charola_setd:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables:
+                            - "21"	
+                            - "15" 	
+                            - "22"	
+                            - "14"	
+                            - "12"	
+                            - "11"	
+                            - "10"	
+                            - "13"	
+                            - "9"	
+                            - "7"
+                        nombreCharola: "SusEstTecnicosyDiversos"
+                        id_area_responsable: ${SusEstTecnicosyDiversos.id_area}
+                        id_rol: ${SusEstTecnicosyDiversos.id_rol}
+                        id_estacion: ${SusEstTecnicosyDiversos.id_estacion}
+                    result: ordenTrabajo
+                - evaluar_resultado_setd:
+                    switch:
+                      - condition: ${ordenTrabajo.areaResponsable in  ["21"]}
+                        next: mesa_de_control
+                      - condition: ${ordenTrabajo.areaResponsable in ["15","22","14","12","11", "10", "13", "9", "7"]}
+                        next: emisor_evaluacion 
+            - condition: ${ordenTrabajo.areaResponsable in ["9"]} #SusEstTransportesBuquesAviacion
+              steps: 
+                - variables_setba:
+                    assign: 
+                        - ot:
+                            ordenTrabajo: ${ordenTrabajo}
+                            ordenTrabajo.idUsuarioResponsable: ""
+                - asignar_charolas_setba:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables:
+                            - "21"	
+                            - "15" 	
+                            - "22"	
+                            - "14"	
+                            - "12"	
+                            - "11"	
+                            - "10"	
+                            - "13"	
+                            - "9"	
+                            - "7"
+                        nombreCharola: "SusEstTransportesBuquesAviacion"
+                        id_area_responsable: ${SusEstTransportesBuquesAviacion.id_area}
+                        id_rol: ${SusEstTransportesBuquesAviacion.id_rol}
+                        id_estacion: ${SusEstTransportesBuquesAviacion.id_estacion}
+                    result: ordenTrabajo
+                - evaluar_resultados_setba:
+                    switch:
+                      - condition: ${ordenTrabajo.areaResponsable in  ["21"]}
+                        next: mesa_de_control
+                      - condition: ${ordenTrabajo.areaResponsable in ["15","22","14","12","11", "10", "13", "9", "7"]}
+                        next: emisor_evaluacion 
+            - condition: ${ordenTrabajo.areaResponsable in ["8"]} #ReaseguroInternacional
+              steps: 
+                - variables_ri:
+                    assign: 
+                        - ot:
+                            ordenTrabajo: ${ordenTrabajo}
+                            ordenTrabajo.idUsuarioResponsable: ""
+                - asignar_charolas_ri:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables:
+                            - "21"
+                            - "15"
+                            - "22"
+                            - "14"
+                        nombreCharola: "ReaseguroInternacional"
+                        id_area_responsable: ${ReaseguroInternacional.id_area}
+                        id_rol: ${ReaseguroInternacional.id_rol}
+                        id_estacion: ${ReaseguroInternacional.id_estacion}
+                    result: ordenTrabajo
+                - evaluar_resultados_ri:
+                    switch:
+                      - condition: ${ordenTrabajo.areaResponsable in  ["21"]}
+                        next: mesa_de_control
+                      - condition: ${ordenTrabajo.areaResponsable in  ["15","22","14"]}
+                        next: emisor_evaluacion
+            - condition: ${ordenTrabajo.areaResponsable in ["7"]} #ReaseguroAutomatico
+              steps: 
+                - variables_ra:
+                    assign: 
+                        - ot:
+                            ordenTrabajo: ${ordenTrabajo}
+                            ordenTrabajo.idUsuarioResponsable: ""
+                - asignar_charola_ra:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables:
+                            - "21"
+                            - "15"
+                            - "22"
+                            - "14"
+                        nombreCharola: "ReaseguroAutomatico"
+                        id_area_responsable: ${ReaseguroAutomatico.id_area}
+                        id_rol: ${ReaseguroAutomatico.id_rol}
+                        id_estacion: ${ReaseguroAutomatico.id_estacion}
+                    result: ordenTrabajo
+                - evaluar_resultado_ra:
+                    switch:
+                      - condition: ${ordenTrabajo.areaResponsable in  ["21"]}
+                        next: mesa_de_control
+                      - condition: ${ordenTrabajo.areaResponsable in  ["15","22","14"]}
+                        next: emisor_evaluacion
+            - condition: ${ordenTrabajo.areaResponsable in ["6"]} #validación supervisor
+              steps: 
+                - variables_vs:
+                    assign: 
+                        - ot:
+                            ordenTrabajo: ${ordenTrabajo}
+                            ordenTrabajo.idUsuarioResponsable: ""
+                - asignar_charola_vs:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables:
+                            - "21"
+                            - "15"
+                            - "22"	
+                            - "14"
+                            - "12"
+                            - "11"
+                            - "10"
+                            - "13"
+                            - "9"
+                            - "17"
+                            - "18"	
+                            - "19"
+                            - "8"	
+                            - "7"	
+                            - "9"
+                            - "6"
+                            - "5"
+                            - "4"	
+                            - "20" 
+                            - "2"
+                        nombreCharola: "Validación supervisor"
+                        id_area_responsable: ${Validacionsupervisor.id_area}
+                        id_rol: ${Validacionsupervisor.id_rol}
+                        id_estacion: ${Validacionsupervisor.id_estacion}
+                    result: ordenTrabajo
+                - evaluar_resultado_vs:
+                    switch:
+                      - condition: ${ordenTrabajo.areaResponsable in ["2","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19", "20", "22"]}
+                        next: emisor_evaluacion
+                      - condition: ${ordenTrabajo.areaResponsable in  ["21"]}
+                        next: mesa_de_control
+            - condition: ${ordenTrabajo.areaResponsable in ["5"]} #Traducciones
+              steps: 
+                - variables_tr:
+                    assign: 
+                        - ot:
+                            ordenTrabajo: ${ordenTrabajo}
+                            ordenTrabajo.idUsuarioResponsable: ""
+                - asignar_charola_tr:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables:
+                            - "21"
+                            - "15"
+                            - "22"	
+                            - "14"
+                            - "12"
+                            - "11"
+                            - "10"
+                            - "13"
+                            - "9"
+                            - "17"
+                            - "18"	
+                            - "19"
+                            - "8"	
+                            - "7"	
+                            - "9"
+                            - "6"
+                            - "5"
+                            - "4"	
+                            - "20" 
+                            - "2" 
+                        nombreCharola: "Traducciones"
+                        id_area_responsable: ${Traducciones.id_area}
+                        id_rol: ${Traducciones.id_rol}
+                        id_estacion: ${Traducciones.id_estacion}
+                    result: ordenTrabajo
+                - evaluar_resultado_tr:
+                    switch:
+                      - condition: ${ordenTrabajo.areaResponsable in ["2","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19", "20", "22"]}
+                        next: emisor_evaluacion
+                      - condition: ${ordenTrabajo.areaResponsable in  ["21"]}
+                        next: mesa_de_control
+            - condition: ${ordenTrabajo.areaResponsable in ["4"]} #DocumentacionPendiente
+              steps: 
+                - variables_dp:
+                    assign: 
+                        - ot:
+                            ordenTrabajo: ${ordenTrabajo}
+                            ordenTrabajo.idUsuarioResponsable: ""
+                - asignar_charola_dp:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables:
+                            - "21"
+                            - "15"
+                            - "22"	
+                            - "14"
+                            - "12"
+                            - "11"
+                            - "10"
+                            - "13"
+                            - "9"
+                            - "17"
+                            - "18"	
+                            - "19"
+                            - "8"	
+                            - "7"	
+                            - "9"
+                            - "6"
+                            - "5"
+                            - "4"	
+                            - "20" 
+                            - "2" 
+                        nombreCharola: "Documentación Pendiente"
+                        id_area_responsable: ${DocumentacionPendiente.id_area}
+                        id_rol: ${DocumentacionPendiente.id_rol}
+                        id_estacion: ${DocumentacionPendiente.id_estacion}
+                    result: ordenTrabajo
+                - evaluar_resultado_dp:
+                    switch:
+                      - condition: ${ordenTrabajo.areaResponsable in ["2","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19", "20", "22"]}
+                        next: emisor_evaluacion
+                      - condition: ${ordenTrabajo.areaResponsable in  ["21"]}
+                        next: mesa_de_control
+            - condition: ${ordenTrabajo.areaResponsable in ["20"]} #Incidencia
+              steps: 
+                - variables_in:
+                    assign: 
+                        - ot:
+                            ordenTrabajo: ${ordenTrabajo}
+                            ordenTrabajo.idUsuarioResponsable: ""
+                - asignar_charola_in:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables:
+                            - "21"
+                            - "15"
+                            - "22"	
+                            - "14"
+                            - "12"
+                            - "11"
+                            - "10"
+                            - "13"
+                            - "9"
+                            - "17"
+                            - "18"	
+                            - "19"
+                            - "8"	
+                            - "7"	
+                            - "9"
+                            - "6"
+                            - "5"
+                            - "4"	
+                            - "20" 
+                            - "2" 
+                        nombreCharola: "Incidencia"
+                        id_area_responsable: ${Incidencia.id_area}
+                        id_rol: ${Incidencia.id_rol}
+                        id_estacion: ${Incidencia.id_estacion}
+                    result: ordenTrabajo
+                - evaluar_resultado_in:
+                    switch:
+                      - condition: ${ordenTrabajo.areaResponsable in ["2","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19", "20", "22"]}
+                        next: emisor_evaluacion
+                      - condition: ${ordenTrabajo.areaResponsable in  ["21"]}
+                        next: mesa_de_control
+            - condition: ${ordenTrabajo.areaResponsable in ["2"]} #Docto492yCumplimiento
+              steps: 
+                - variables_dc:
+                    assign: 
+                        - ot:
+                            ordenTrabajo: ${ordenTrabajo}
+                            ordenTrabajo.idUsuarioResponsable: ""
+                - asignar_charola_dc:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables:
+                            - "21"
+                            - "15"
+                            - "22"	
+                            - "14"
+                            - "12"
+                            - "11"
+                            - "10"
+                            - "13"
+                            - "9"
+                            - "17"
+                            - "18"	
+                            - "19"
+                            - "8"	
+                            - "7"	
+                            - "9"
+                            - "6"
+                            - "5"
+                            - "4"	
+                            - "20" 
+                            - "2" 
+                        nombreCharola: "Docto 492 y Cumplimiento"
+                        id_area_responsable: ${Docto492yCumplimiento.id_area}
+                        id_rol: ${Docto492yCumplimiento.id_rol}
+                        id_estacion: ${Docto492yCumplimiento.id_estacion}
+                    result: ordenTrabajo
+                - evaluar_resultado_dc:
+                    switch:
+                      - condition: ${ordenTrabajo.areaResponsable in  ["2","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19", "20", "22"]}
+                        next: emisor_evaluacion
+                      - condition: ${ordenTrabajo.areaResponsable in  ["21"]}
+                        next: mesa_de_control
+            - condition: ${ordenTrabajo.isEmitida == true}
+              return:  "Orden de Trabajo Emitida"
+            - condition: ${ordenTrabajo.isRechazada == true}
+              return:  "Orden de Trabajo Rechazada"
+              #Suscripcion Empresarial, Especializada, Gobierno, Operacion
+    - outputMessage:
+        return: '${ordenTrabajo}'
+
+mesa_de_control_sw:
+    params: [ordenTrabajo, nombreCharola, areasResponsables,  id_area_responsable, id_rol, id_estacion]
+    steps: 
+        - argsMap:
+            call: sys.log
+            args:
+                data: "FLUJO DE mesa_de_control_sw: ${ordenTrabajo.id}, ${ordenTrabajo}"
+                severity: "NOTICE" # Optional      
+        - mesaControlEmision-create_callback:
+            call: events.create_callback_endpoint
+            args:
+                http_callback_method: "POST"
+            result: callback_details
+        - mesaControlEmision-asignacion:
+        #asignar OrdenTrabajo a areaResponsable = "emision"
+        #Crear un callback para reanudar el flujo
+            assign:
+                - respuesta: 
+                    callback:
+                    ordenTrabajo:
+                    areasResponsables:
+                    idWF:
+                - respuesta: ${ordenTrabajo}
+                - respuesta.ordenTrabajo.areaResponsable: "emision"
+                - respuesta.ordenTrabajo.idAreaResponsable: ${id_area_responsable}
+                - respuesta.ordenTrabajo.idRol: ${id_rol}                
+                - respuesta.ordenTrabajo.usuario: ""
+                - respuesta.ordenTrabajo.idEstacion: ${id_estacion}
+                - respuesta.areasResponsables: ${areasResponsables}
+                - respuesta.callback: ${callback_details}
+                - respuesta.idWF: ${sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID")}
+                - base64Msg: '${base64.encode(json.encode(respuesta))}'
+        - argsMap2:
+            call: sys.log
+            args:
+                data: ${respuesta}
+                severity: "NOTICE" # Optional  
+        - mesaControlEmision-escribirResponsable:
+            #escrbir en la ot mediante una publicacion el usuarioResponsable
+            call: googleapis.pubsub.v1.projects.topics.publish
+            args:
+                topic: ${sys.get_env("TOPIC_UPDATE")} 
+                body:
+                    messages: 
+                        - data: '${base64Msg}'
+            result: publishResult
+        - await_callback:
+            try:
+                steps:
+                    - esperar:
+                        call: events.await_callback
+                        args:
+                            callback: ${callback_details}
+                            timeout: 600 #${int(text.replace_all(sys.get_env("TIEMPO_ESPERA_MESA_CONTROL")," ",""))}
+                        result: callback_request
+                    - respuesta_recibida:
+                        assign:
+                            - ordenTrabajo.usuarioEmisor: ${callback_request.http_request.body.usuarioEmisor}
+            except:
+                as: e
+                steps:
+                    - lanzar_error:
+                        raise: ${e}
+        - outputMessage:
+            return: '${ordenTrabajo}'    
+
+charola_sw:
+    params: [ordenTrabajo, nombreCharola, areasResponsables,  id_area_responsable, id_rol, id_estacion, estatus]
+    steps:       
+        - charola-create_callback:
+            call: events.create_callback_endpoint
+            args:
+                http_callback_method: "POST"
+            result: callback_details
+        - argsList:
+            call: sys.log
+            args: 
+                data: "FLUJO DE charola_sw: ${ordenTrabajo.id}, ${ordenTrabajo}"
+                severity: "NOTICE" # Optional
+        - charola-asignacion:
+        #asignar OrdenTrabajo a areaResponsable = "emision"
+        #Crear un callback para reanudar el flujo
+            assign:
+                - respuesta: 
+                    callback:
+                    ordenTrabajo:
+                    areasResponsables:
+                - respuesta: ${ordenTrabajo}
+                - respuesta.ordenTrabajo.areaResponsable: ${nombreCharola}
+                - respuesta.ordenTrabajo.idAreaResponsable: ${id_area_responsable}
+                - respuesta.ordenTrabajo.idRol: ${id_rol}
+                - respuesta.ordenTrabajo.idEstacion: ${id_estacion}
+                - respuesta.ordenTrabajo.estatus: ${estatus}
+                - respuesta.callback: ${callback_details}
+                - respuesta.areasResponsables: ${areasResponsables}
+                - respuesta.idWF: ${sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID")}
+                - base64Msg: '${base64.encode(json.encode(respuesta))}'
+        - imprime_responsable:
+            call: sys.log
+            args: 
+                data: ${respuesta}
+                severity: "NOTICE" # Optional
+        - charola-escribirResponsable:
+            #escrbir en la ot mediante una publicacion el usuarioResponsable
+            call: googleapis.pubsub.v1.projects.topics.publish
+            args:
+                topic: ${sys.get_env("TOPIC_UPDATE")} 
+                body:
+                    messages: 
+                        - data: '${base64Msg}'
+            result: publishResult
+        - charola_await_callback:
+            try:
+                steps:
+                    - esperar:
+                        call: events.await_callback
+                        args:
+                            callback: ${callback_details}
+                            timeout: 600 #${int(text.replace_all(sys.get_env("TIEMPO_ESPERA_EMISOR")," ",""))}
+                        result: callback_request
+                    - respuesta_recibida:
+                        assign:
+                            - ordenTrabajo: ${callback_request.http_request.body}
+            except:
+                as: e
+                steps:
+                    - log_reintento:
+                        call: sys.log
+                        args:
+                            data: "ERROR en await_callback. Reintentando publicación al TOPIC_CANCELACION."
+                            severity: "ERROR"
+                    - reintentar_publicacion:
+                        call: googleapis.pubsub.v1.projects.topics.publish
+                        args:
+                            topic: ${sys.get_env("TOPIC_CANCELACION")}
+                            body:
+                                messages:
+                                    - data: '${base64Msg}'
+                        result: publishRetryResult
+                    - lanzar_error:
+                        raise: ${e}
+        - charola_outputMessage:
+            return: '${ordenTrabajo}'
+
+distribucion_charola:
+  params: [ordenTrabajo, nombreCharola]
+  steps:
+    - init:
+       assign:
+        - AgentesNorte: {"id_estacion": "3", "id_area": "15", "id_rol":"2"}
+        - AgentesCDMX: {"id_estacion": "4", "id_area": "15", "id_rol":"2"}
+        - AgentesSuresteyOccidente: {"id_estacion": "5", "id_area": "15", "id_rol":"2"}
+        - DespachosNoreste: {"id_estacion": "6", "id_area": "15", "id_rol":"2"}
+        - DespachosNoroeste: {"id_estacion": "7", "id_area": "15", "id_rol":"2"}
+        - DespachosSuresteyBajio: {"id_estacion": "8", "id_area": "15", "id_rol":"2"}
+        - DespachosCDMX: {"id_estacion": "9", "id_area": "15", "id_rol":"2"}
+        - DespachosOccidente: {"id_estacion": "10", "id_area": "15", "id_rol":"2"}
+        - CorredoresCDMX: {"id_estacion": "11", "id_area": "22", "id_rol":"2"}
+        - CorredoresMatriz: {"id_estacion": "12", "id_area": "22", "id_rol":"2"}
+        - CorredoresHombresClaves: {"id_estacion": "13", "id_area": "22", "id_rol":"2"}
+        - GobiernoyGrandesRiesgos: {"id_estacion": "14", "id_area": "14", "id_rol":"2"}
+        - SinRegional: {"id_estacion": "33", "id_area": "23", "id_rol":"2"}
+        - ar:
+            - "21"	
+            - "15" 	
+            - "22"	
+            - "14"	
+            - "12"	
+            - "11"	
+            - "10"	
+            - "13"	
+            - "9"	
+            - "7"
+    - charola-create_callback:
+            call: events.create_callback_endpoint
+            args:
+                http_callback_method: "POST"
+            result: callback_details
+    - imprime_responsable:
+            call: sys.log
+            args: 
+                data: "FLUJO de distribucion_charola: ${ordenTrabajo.id}"
+                severity: "NOTICE"
+    - charola-asignacion:
+        #asignar OrdenTrabajo a areaResponsable = "emision"
+        #Crear un callback para reanudar el flujo
+            assign:
+                - respuesta: 
+                    callback:
+                    ordenTrabajo:
+                    areasResponsables:
+                - respuesta: ${ordenTrabajo}
+                - respuesta.callback: ${callback_details}
+                - respuesta.idWF: ${sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID")}
+                - base64Msg: '${base64.encode(json.encode(respuesta))}'
+    - charola-distribucion-suscripcion:
+        #escrbir en la ot mediante una publicacion el usuarioResponsable
+        call: googleapis.pubsub.v1.projects.topics.publish
+        args:
+            topic: ${sys.get_env("TOPIC_DISTRIBUCION")} 
+            body:
+                messages: 
+                    - data: '${base64Msg}'
+        result: publishResult
+    - charola_await_callback:
+            try:
+                steps:
+                    - esperar:
+                        call: events.await_callback
+                        args:
+                            callback: ${callback_details}
+                            timeout: 3600
+                        result: callback_request
+                    - respuesta_recibida:
+                        assign:
+                            - ruteo_suscripcion: ${callback_request.http_request.body}
+            except:
+                as: e
+                steps:
+                    - lanzar_error:
+                        raise: ${e}
+    - imprime_ruteo:
+            call: sys.log
+            args: 
+                data: ${ruteo_suscripcion}
+                severity: "NOTICE"
+    - evaluar_ruteo_distribucion:
+        switch:
+            - condition: ${ruteo_suscripcion == "AgentesNorte"}
+              steps: 
+                - variables_an:
+                    assign: 
+                        - ot: ${ordenTrabajo}
+                        - ot.idUsuarioResponsable: ""
+                - asignar_charola_an:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables: ${ar}
+                        nombreCharola: "Agentes Norte"
+                        id_area_responsable: ${AgentesNorte.id_area}
+                        id_rol: ${AgentesNorte.id_rol}
+                        id_estacion: ${AgentesNorte.id_estacion}
+                    result: respuesta_ruteo
+            - condition: ${ruteo_suscripcion == "AgentesCDMX"}
+              steps: 
+                - variables_ac:
+                    assign: 
+                        - ot: ${ordenTrabajo}
+                        - ot.idUsuarioResponsable: ""
+                - asignar_charola_ac:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables: ${ar}
+                        nombreCharola: "Agentes CDMX"
+                        id_area_responsable: ${AgentesCDMX.id_area}
+                        id_rol: ${AgentesCDMX.id_rol}
+                        id_estacion: ${AgentesCDMX.id_estacion}
+                    result: respuesta_ruteo
+            - condition: ${ruteo_suscripcion == "AgentesSuresteyOccidente"}
+              steps: 
+                - variables_asu:
+                    assign: 
+                        - ot: ${ordenTrabajo}
+                        - ot.idUsuarioResponsable: ""
+                - asignar_charola_asu:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables: ${ar}
+                        nombreCharola: "Agentes Sureste y Occidente"
+                        id_area_responsable: ${AgentesSuresteyOccidente.id_area}
+                        id_rol: ${AgentesSuresteyOccidente.id_rol}
+                        id_estacion: ${AgentesSuresteyOccidente.id_estacion}
+                        
+                    result: respuesta_ruteo 
+            - condition: ${ruteo_suscripcion == "DespachosNoreste"}
+              steps: 
+                - variables_dne:
+                    assign: 
+                        - ot: ${ordenTrabajo}
+                        - ot.idUsuarioResponsable: ""
+                - asignar_charola_dne:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables: ${ar}
+                        nombreCharola: "Despachos Noreste"
+                        id_area_responsable: ${DespachosNoreste.id_area}
+                        id_rol: ${DespachosNoreste.id_rol}
+                        id_estacion: ${DespachosNoreste.id_estacion}
+                    result: respuesta_ruteo
+            - condition: ${ruteo_suscripcion == "DespachosNoroeste"}
+              steps: 
+                - variables_dn:
+                    assign: 
+                        - ot: ${ordenTrabajo}
+                        - ot.idUsuarioResponsable: ""
+                - asignar_charola_dn:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables: ${ar}
+                        nombreCharola: "Despachos Noreste"
+                        id_area_responsable: ${DespachosNoroeste.id_area}
+                        id_rol: ${DespachosNoroeste.id_rol}
+                        id_estacion: ${DespachosNoroeste.id_estacion}
+                    result: respuesta_ruteo    
+            - condition: ${ruteo_suscripcion == "DespachosSuresteyBajio"}
+              steps: 
+                - variables_dsb:
+                    assign: 
+                        - ot: ${ordenTrabajo}
+                        - ot.idUsuarioResponsable: ""
+                - asignar_charola_dsb:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables: ${ar}
+                        nombreCharola: "Despachos Sureste y Bajio"
+                        id_area_responsable: ${DespachosSuresteyBajio.id_area}
+                        id_rol: ${DespachosSuresteyBajio.id_rol}
+                        id_estacion: ${DespachosSuresteyBajio.id_estacion}
+                    result: respuesta_ruteo           
+            - condition: ${ruteo_suscripcion == "DespachosCDMX"}
+              steps: 
+                - variables_dcdx:
+                    assign: 
+                        - ot: ${ordenTrabajo}
+                        - ot.idUsuarioResponsable: ""
+                - asignar_charola_dcdx:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables: ${ar}
+                        nombreCharola: "Despachos CDMX"
+                        id_area_responsable: ${DespachosCDMX.id_area}
+                        id_rol: ${DespachosCDMX.id_rol}
+                        id_estacion: ${DespachosCDMX.id_estacion}
+                    result: respuesta_ruteo 
+            - condition: ${ruteo_suscripcion == "DespachosOccidente"}
+              steps: 
+                - variables_dox:
+                    assign: 
+                        - ot: ${ordenTrabajo}
+                        - ot.idUsuarioResponsable: ""
+                - asignar_charola_dox:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables: ${ar}
+                        nombreCharola: "Despachos Occidente"
+                        id_area_responsable: ${DespachosOccidente.id_area}
+                        id_rol: ${DespachosOccidente.id_rol}
+                        id_estacion: ${DespachosOccidente.id_estacion}
+                    result: respuesta_ruteo 
+            - condition: ${ruteo_suscripcion == "CorredoresCDMX"}
+              steps: 
+                - variables_ccdmx:
+                    assign: 
+                        - ot: ${ordenTrabajo}
+                        - ot.idUsuarioResponsable: ""
+                - asignar_charola_ccdmx:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables: ${ar}
+                        nombreCharola: CorredoresCDMX"
+                        id_area_responsable: ${CorredoresCDMX.id_area}
+                        id_rol: ${CorredoresCDMX.id_rol}
+                        id_estacion: ${CorredoresCDMX.id_estacion}
+                    result: respuesta_ruteo   
+            - condition: ${ruteo_suscripcion == "CorredoresMatriz"}
+              steps: 
+                - variables_cm:
+                    assign: 
+                        - ot: ${ordenTrabajo}
+                        - ot.idUsuarioResponsable: ""
+                - asignar_charola_cm:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables: ${ar}
+                        nombreCharola: "Corredores Matriz"
+                        id_area_responsable: ${CorredoresMatriz.id_area}
+                        id_rol: ${CorredoresMatriz.id_rol}
+                        id_estacion: ${CorredoresMatriz.id_estacion}
+                    result: respuesta_ruteo   
+            - condition: ${ruteo_suscripcion == "CorredoresHombresClaves"}
+              steps: 
+                - variables_chc:
+                    assign: 
+                        - ot: ${ordenTrabajo}
+                        - ot.idUsuarioResponsable: ""
+                - asignar_charola_chc:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables: ${ar}
+                        nombreCharola: "CorredoresHombresClaves"
+                        id_area_responsable: ${CorredoresHombresClaves.id_area}
+                        id_rol: ${CorredoresHombresClaves.id_rol}
+                        id_estacion: ${CorredoresHombresClaves.id_estacion}
+                    result: respuesta_ruteo       
+            - condition: ${ruteo_suscripcion == "GobiernoyGrandesRiesgos"}
+              steps: 
+                - variables_gyg:
+                    assign: 
+                        - ot: ${ordenTrabajo}
+                        - ot.idUsuarioResponsable: ""
+                - asignar_charola_gyg:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables: ${ar}
+                        nombreCharola: "GobiernoyGrandesRiesgos"
+                        id_area_responsable: ${GobiernoyGrandesRiesgos.id_area}
+                        id_rol: ${GobiernoyGrandesRiesgos.id_rol}
+                        id_estacion: ${GobiernoyGrandesRiesgos.id_estacion}
+                    result: respuesta_ruteo
+            - condition: ${ruteo_suscripcion == "SinRegional"}
+              steps: 
+                - variables_sr:
+                    assign: 
+                        - ot: ${ordenTrabajo}
+                        - ot.idUsuarioResponsable: ""
+                - asignar_charola_sr:
+                    call: charola_asignacion
+                    args:
+                        ordenTrabajo: ${ot}
+                        areasResponsables: ${ar}
+                        nombreCharola: "SinRegional"
+                        id_area_responsable: ${SinRegional.id_area}
+                        id_rol: ${SinRegional.id_rol}
+                        id_estacion: ${SinRegional.id_estacion}
+                    result: respuesta_ruteo         
+    - ruteo_outputMessage:
+        return: '${respuesta_ruteo}'
+charola_asignacion:
+    params: [nombreCharola, ordenTrabajo, id_area_responsable, id_rol, id_estacion, areasResponsables]
+    steps:
+        - variables_gyg:
+            assign: 
+            - ot: ${ordenTrabajo}
+            - ot.usuarioEmisor: ""
+        - mesa_de_control:
+            call: charola_sw
+            args:
+                nombreCharola: ${nombreCharola}
+                ordenTrabajo: ${ot}
+                id_area_responsable: ${id_area_responsable} 
+                id_rol: ${id_rol}
+                id_estacion: ${id_estacion}
+                estatus: "1"
+                areasResponsables: ${areasResponsables}
+            result: resultadoMesa
+        - asignacion_ot:
+            assign:
+                - ot.ordenTrabajo: ${resultadoMesa}
+        - argsList:
+            call: sys.log
+            args: 
+                data: "FLUJO DE imprime_resultado_ruteo: ${ot}"
+                severity: "NOTICE" # Optional
+        - usuario-responsable:
+            call: charola_sw
+            args:
+                nombreCharola: ${nombreCharola}
+                ordenTrabajo:  ${ot}
+                id_area_responsable: ${id_area_responsable} 
+                id_rol: ${id_rol}
+                id_estacion: ${id_estacion}
+                estatus: "1"
+                areasResponsables: ${areasResponsables}
+            result: ordenTrabajo
+        - evaluar_asignacion:
+            switch:
+                - condition: ${ordenTrabajo.estatus in ["2"]} #Activacion
+                  steps:
+                    - asignacion:
+                        assign:
+                            - ot:
+                                ordenTrabajo: ${ordenTrabajo}
+                    - argsAct:
+                        call: sys.log
+                        args:
+                            data: ${ot}
+                            severity: "NOTICE"
+                    - llamar_activacion:
+                        call: charola_activacion
+                        args:
+                            id_area_responsable: ${id_area_responsable}
+                            id_estacion: ${id_estacion}
+                            id_rol: ${id_rol}
+                            estatus: "2"                        
+                            ordenTrabajo: ${ot}
+                        result: resultadoActivacion
+                    - evaluar_resultado_activacion:
+                        next: mesa_de_control      #retornar a mesa de control 
+        - charola_outputMessage:
+            return: '${ordenTrabajo}'
+
+charola_activacion:
+    params: [ordenTrabajo, id_area_responsable, id_rol, id_estacion, estatus]
+    steps:       
+        - charola-create_callback:
+            call: events.create_callback_endpoint
+            args:
+                http_callback_method: "POST"
+            result: callback_details
+        - argsList:
+            call: sys.log
+            args: 
+                data: "FLUJO DE: ${ordenTrabajo.id}"
+                severity: "NOTICE" # Optional
+        - charola-asignacion:
+        #asignar OrdenTrabajo a areaResponsable = "emision"
+        #Crear un callback para reanudar el flujo
+            assign:
+                - respuesta: 
+                    callback:
+                    ordenTrabajo:
+                    areasResponsables:
+                - respuesta: ${ordenTrabajo}
+                - respuesta.ordenTrabajo.areaResponsable: "Activación"
+                - respuesta.ordenTrabajo.idAreaResponsable: ${id_area_responsable}
+                - respuesta.ordenTrabajo.idRol: ${id_rol}
+                - respuesta.ordenTrabajo.idEstacion: ${id_estacion}
+                - respuesta.ordenTrabajo.estatus: ${estatus}
+                - respuesta.callback: ${callback_details}
+                - respuesta.idWF: ${sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID")}
+                - base64Msg: '${base64.encode(json.encode(respuesta))}'
+        - imprime_responsable:
+            call: sys.log
+            args: 
+                data: ${respuesta}
+                severity: "NOTICE" # Optional
+        - charola-escribirResponsable:
+            #escrbir en la ot mediante una publicacion el usuarioResponsable
+            call: googleapis.pubsub.v1.projects.topics.publish
+            args:
+                topic: ${sys.get_env("TOPIC_UPDATE")} 
+                body:
+                    messages: 
+                        - data: '${base64Msg}'
+            result: publishResult
+        - charola_await_callback:
+            try:
+                steps:
+                    - esperar:
+                        call: events.await_callback
+                        args:
+                            callback: ${callback_details}
+                            timeout: 600 #${int(text.replace_all(sys.get_env("TIEMPO_ESPERA_EMISOR")," ",""))}
+                        result: callback_request
+                    - respuesta_recibida:
+                        assign:
+                            - ordenTrabajo: ${callback_request.http_request.body}
+            except:
+                as: e
+                steps:
+                    - lanzar_error:
+                        raise: ${e}
+        - charola_outputMessage:
+            return: '${ordenTrabajo}'

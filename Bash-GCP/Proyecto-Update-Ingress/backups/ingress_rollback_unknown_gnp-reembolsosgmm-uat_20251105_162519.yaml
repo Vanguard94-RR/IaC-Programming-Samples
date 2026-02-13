@@ -1,0 +1,76 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    ingress.kubernetes.io/redirect-url-map: k8s2-rm-skza2q5i-default-estrategia-ingress-49b55j5m
+    kubernetes.io/ingress.global-static-ip-name: ip-estrategia
+    networking.gke.io/v1beta1.FrontendConfig: http-redirect-config
+  name: estrategia-ingress
+  namespace: default
+spec:
+  rules:
+    - http:
+        paths:
+          - backend:
+              service:
+                name: estrategia-comunes-service
+                port:
+                  number: 8080
+            path: /msv-comun/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: estrategia-indemnizaciones-service
+                port:
+                  number: 8080
+            path: /msv-indemnizacion/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: estrategia-ps-service
+                port:
+                  number: 8080
+            path: /msv-programacion-servicio/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: estrategia-reembolsos-service
+                port:
+                  number: 8080
+            path: /msv-reembolso/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: estrategia-rh-service
+                port:
+                  number: 8080
+            path: /msv-reporte-hospitalario/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: estrategia-seguimiento-service
+                port:
+                  number: 8080
+            path: /msv-seguimiento/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: formatosdigitales-servicios
+                port:
+                  number: 8080
+            path: /msv-formatosdigitales/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: motor-reglas-service
+                port:
+                  number: 8080
+            path: /msv-motor-reglas/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: amis-gmm-service
+                port:
+                  number: 8080
+            path: /gmm/amis/*
+            pathType: ImplementationSpecific

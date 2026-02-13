@@ -1,0 +1,49 @@
+# Archivo de Configuración de Subnet
+# Copiar este archivo y modificar los valores según sea necesario
+
+# === CONFIGURACIÓN OBLIGATORIA ===
+
+# Proyecto Host que contiene la Shared VPC
+export HOST_PROJECT="gnp-shared-vpc-host"
+
+# Nombre de la VPC compartida
+export VPC_NETWORK="gnp-vpc-shared"
+
+# Nombre de la subnet a crear
+export SUBNET_NAME="subnet-app-production"
+
+# Región de GCP donde se creará la subnet
+export REGION="us-central1"
+
+# Rango IP principal (CIDR notation)
+export IP_CIDR_RANGE="10.10.0.0/24"
+
+# === CONFIGURACIÓN OPCIONAL ===
+
+# Habilitar Private Google Access (true/false)
+export ENABLE_PRIVATE_GOOGLE_ACCESS="true"
+
+# Habilitar Flow Logs (true/false)
+export ENABLE_FLOW_LOGS="false"
+
+# === RANGOS SECUNDARIOS (OPCIONAL - Para GKE) ===
+
+# Si necesitas rangos secundarios para GKE, descomentar y configurar:
+
+# Nombre del rango secundario para Pods
+# export POD_SECONDARY_RANGE_NAME="pods"
+
+# Rango IP para Pods (CIDR notation)
+# export POD_SECONDARY_RANGE="10.20.0.0/16"
+
+# Nombre del rango secundario para Services
+# export SERVICE_SECONDARY_RANGE_NAME="services"
+
+# Rango IP para Services (CIDR notation)
+# export SERVICE_SECONDARY_RANGE="10.21.0.0/20"
+
+# === NOTAS ===
+# 1. Los rangos IP no deben superponerse con subnets existentes
+# 2. Para GKE, se recomienda usar rangos /16 para Pods y /20 para Services
+# 3. El Private Google Access permite acceso a APIs de Google sin IP pública
+# 4. Flow Logs pueden generar costos adicionales

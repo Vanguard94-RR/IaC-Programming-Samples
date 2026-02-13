@@ -1,0 +1,70 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    ingress.kubernetes.io/backends: '{"k8s-be-30544--33b6dcc03e525b29":"HEALTHY","k8s-be-30886--33b6dcc03e525b29":"HEALTHY","k8s-be-31194--33b6dcc03e525b29":"HEALTHY","k8s-be-31488--33b6dcc03e525b29":"HEALTHY","k8s-be-31808--33b6dcc03e525b29":"HEALTHY","k8s-be-32048--33b6dcc03e525b29":"HEALTHY","k8s-be-32525--33b6dcc03e525b29":"HEALTHY"}'
+    ingress.kubernetes.io/forwarding-rule: k8s2-fr-tfxh8stb-default-gke-gnp-contabilidad-qa-ingre-ur6nmcy1
+    ingress.kubernetes.io/target-proxy: k8s2-tp-tfxh8stb-default-gke-gnp-contabilidad-qa-ingre-ur6nmcy1
+    ingress.kubernetes.io/url-map: k8s2-um-tfxh8stb-default-gke-gnp-contabilidad-qa-ingre-ur6nmcy1
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"networking.k8s.io/v1","kind":"Ingress","metadata":{"annotations":{"kubernetes.io/ingress.global-static-ip-name":"gke-gnp-contabilidad-qa-ingress","networking.gke.io/v1.FrontendConfig":"http-redirect-config"},"name":"gke-gnp-contabilidad-qa-ingress","namespace":"default"},"spec":{"rules":[{"http":{"paths":[{"backend":{"service":{"name":"conciliador-consultas","port":{"number":8080}}},"path":"/conciliador-consultas/*","pathType":"ImplementationSpecific"},{"backend":{"service":{"name":"conciliador-ingestion","port":{"number":8080}}},"path":"/conciliador-ingestion/*","pathType":"ImplementationSpecific"},{"backend":{"service":{"name":"conciliador-movimientos","port":{"number":8080}}},"path":"/conciliador-movimientos/*","pathType":"ImplementationSpecific"},{"backend":{"service":{"name":"conciliador-cifrascontrol","port":{"number":8080}}},"path":"/conciliador-cifrascontrol/*","pathType":"ImplementationSpecific"},{"backend":{"service":{"name":"convertidor-parametros","port":{"number":8080}}},"path":"/convertidor-parametros/*","pathType":"ImplementationSpecific"},{"backend":{"service":{"name":"convertidor-ingestion","port":{"number":8080}}},"path":"/convertidor-ingestion/*","pathType":"ImplementationSpecific"}]}}]}}
+    kubernetes.io/ingress.global-static-ip-name: gke-gnp-contabilidad-qa-ingress
+    networking.gke.io/v1.FrontendConfig: http-redirect-config
+  creationTimestamp: "2025-09-04T19:52:34Z"
+  finalizers:
+  - networking.gke.io/ingress-finalizer-V2
+  generation: 1
+  name: gke-gnp-contabilidad-qa-ingress
+  namespace: default
+  resourceVersion: "1762431966970079000"
+  uid: a13bcb04-edef-472d-a57b-6affb4f1e747
+spec:
+  rules:
+  - http:
+      paths:
+      - backend:
+          service:
+            name: conciliador-consultas
+            port:
+              number: 8080
+        path: /conciliador-consultas/*
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: conciliador-ingestion
+            port:
+              number: 8080
+        path: /conciliador-ingestion/*
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: conciliador-movimientos
+            port:
+              number: 8080
+        path: /conciliador-movimientos/*
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: conciliador-cifrascontrol
+            port:
+              number: 8080
+        path: /conciliador-cifrascontrol/*
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: convertidor-parametros
+            port:
+              number: 8080
+        path: /convertidor-parametros/*
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: convertidor-ingestion
+            port:
+              number: 8080
+        path: /convertidor-ingestion/*
+        pathType: ImplementationSpecific
+status:
+  loadBalancer:
+    ingress:
+    - ip: 34.160.30.23

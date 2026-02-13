@@ -1,0 +1,11 @@
+usar este comandos
+
+
+gcloud compute networks subnets create gnp-ods-pro \
+  --project=gnp-red-data-central \
+  --network=gnp-datalake-qa \
+  --region=us-central1 \
+  --range=10.96.229.0/24 \
+  --secondary-range=pods=10.88.224.0/21 \
+  --secondary-range=services=10.88.224.0/21 \
+  --enable-private-ip-google-access
