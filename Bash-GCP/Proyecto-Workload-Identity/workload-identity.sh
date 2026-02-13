@@ -230,7 +230,7 @@ print_warning() {
 prompt_input() {
     local prompt_text="$1"
     local variable_name="$2"
-    local default_value="$3"
+    local default_value="${3:-}"
     
     if [[ -n "$default_value" ]]; then
         echo -ne "${YELLOW}${prompt_text} [${default_value}]: ${NC}"
