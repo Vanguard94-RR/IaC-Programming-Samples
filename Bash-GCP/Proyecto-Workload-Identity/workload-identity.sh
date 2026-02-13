@@ -563,7 +563,7 @@ show_version() {
     cat << 'VERSION_TEXT'
 
   ╔════════════════════════════════════════════════════════════════╗
-  ║        WORKLOAD IDENTITY MANAGER                              ║
+  ║        WORKLOAD IDENTITY MANAGER                               ║
   ╚════════════════════════════════════════════════════════════════╝
 
   Nombre:          Workload Identity Manager
@@ -601,9 +601,9 @@ show_main_menu() {
     echo -e "${LGREEN}║${NC}  ${LCYAN}2)${NC} Verify Configuration               ${LGREEN}║${NC}"
     echo -e "${LGREEN}║${NC}  ${LCYAN}3)${NC} Delete Workload Identity           ${LGREEN}║${NC}"
     echo -e "${LGREEN}║${NC}  ${LCYAN}4)${NC} List Bindings in Namespace         ${LGREEN}║${NC}"
-    echo -e "${LGREEN}║${NC}  ${LCYAN}5)${NC} View Operations Registry       ${LGREEN}║${NC}"
+    echo -e "${LGREEN}║${NC}  ${LCYAN}5)${NC} View Operations Registry           ${LGREEN}║${NC}"
     echo -e "${LGREEN}║${NC}                                        ${LGREEN}║${NC}"
-    echo -e "${LGREEN}║${NC}  ${LCYAN}0)${NC} Salir                              ${LGREEN}║${NC}"
+    echo -e "${LGREEN}║${NC}  ${LCYAN}0)${NC} Exit                               ${LGREEN}║${NC}"
     echo -e "${LGREEN}║${NC}                                        ${LGREEN}║${NC}"
     echo -e "${LGREEN}╚════════════════════════════════════════╝${NC}"
     echo ""
@@ -1024,7 +1024,7 @@ operation_verify() {
 # Returns: 0=confirmado, 1=cancelado
 ask_confirmation() {
     local message="$1"
-    local action="${2:-continuar}"
+    local action="${2:-continue}"
     
     echo -e "\n${YELLOW}⚠ Confirmation Required${NC}"
     echo -e "${GRAY}─────────────────────────────────────${NC}"
@@ -1032,23 +1032,31 @@ ask_confirmation() {
     echo -e "${GRAY}─────────────────────────────────────${NC}"
     echo ""
     
-    # Primera pregunta
-    echo -ne "Are you sure you want to ${action}? ${LCYAN}(yes/no)${NC}: "
+    # First question - accept Y/y/N/n or yes/no
+    echo -ne "Are you sure you want to ${action}? ${LCYAN}(Y/N)${NC}: "
     local response1
     read response1
     
-    if [[ "$response1" != " "yes"" ]]; then
+    # Convert to lowercase for comparison
+    response1=$(echo "$response1" | tr '[:upper:]' '[:lower:]')
+    
+    # Accept: yes, y, or empty (default yes for critical operations)
+    if [[ ! "$response1" =~ ^(yes|y)$ ]]; then
         echo -e "${LGREEN}✓ Operation cancelled${NC}"
         return 1
     fi
     
     # Second confirmation (double verification)
     echo -e "\n${RED}⚠ This action cannot be undone${NC}"
-    echo -ne "Type '' to confirm: "
+    echo -ne "Type '${action}' to confirm: "
     local response2
     read response2
     
-    if [[ "$response2" != "$action" ]]; then
+    # Convert to lowercase
+    response2=$(echo "$response2" | tr '[:upper:]' '[:lower:]')
+    local action_lower=$(echo "$action" | tr '[:upper:]' '[:lower:]')
+    
+    if [[ "$response2" != "$action_lower" ]]; then
         echo -e "${LGREEN}✓ Operation cancelled${NC}"
         return 1
     fi
