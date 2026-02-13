@@ -1,4 +1,0 @@
-project,gcp_sa,ksa,namespace,target_namespace
-gnp-app-qa,sa-backend,ka-backend,apps,
-gnp-app-qa,sa-frontend,ka-frontend,default,apps
-gnp-reveca-qa,sa-api,ka-api,services,

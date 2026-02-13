@@ -1,128 +1,112 @@
 # Workload Identity Manager
 
-Configure GCP Workload Identity between GCP Service Accounts and Kubernetes Service Accounts.
+Script interactivo para configurar GCP Workload Identity entre Service Accounts de GCP y Kubernetes.
 
 ## Quick Start
 
 ```bash
-# Install/verify dependencies
-make install
-
-# Setup workload identity
-make setup PROJECT=gnp-app-qa GCP_SA=sa-backend KSA=ka-backend NAMESPACE=apps
-
-# Verify configuration
-make verify PROJECT=gnp-app-qa GCP_SA=sa-backend KSA=ka-backend NAMESPACE=apps
+# Ejecutar el script interactivo
+./workload-identity.sh
 ```
 
-## What is Workload Identity?
+## ¿Qué es Workload Identity?
 
-Workload Identity allows Kubernetes pods to authenticate as GCP service accounts without using service account keys. This tool automates the configuration:
+Workload Identity permite que los pods de Kubernetes se autentiquen como Service Accounts de GCP sin necesidad de usar claves de cuenta de servicio. Este script automatiza la configuración:
 
-1. **Create KSA** in target namespace
-2. **Add IAM binding** between GCP SA and KSA
-3. **Annotate KSA** so pods can access GCP services
+1. **Crea el KSA** en el namespace destino (si no existe)
+2. **Crea el IAM SA** en GCP (si no existe)
+3. **Agrega el IAM binding** entre GCP SA y KSA
+4. **Anota el KSA** para que los pods puedan acceder a servicios GCP
 
-## Commands
+## Menú Principal
 
-| Command | Description |
-|---------|-------------|
-| `make install` | Verify kubectl, gcloud, python3 are installed |
-| `make setup` | Configure workload identity |
-| `make verify` | Check workload identity configuration |
-| `make cleanup` | Remove workload identity binding |
-| `make list` | Show service accounts |
-| `make batch` | Process multiple bindings from CSV |
-| `make test` | Run setup in dry-run mode |
-| `make logs` | View operation logs |
-| `make clean` | Remove logs |
-
-## Usage Examples
-
-### Basic Setup
-
-```bash
-make setup PROJECT=gnp-app-qa GCP_SA=sa-backend KSA=ka-backend NAMESPACE=apps
+```
+╔════════════════════════════════════════╗
+║     WORKLOAD IDENTITY MANAGER          ║
+╠════════════════════════════════════════╣
+║  1) Configurar Workload Identity       ║
+║  2) Verificar Workload Identity        ║
+║  3) Eliminar Workload Identity         ║
+║  4) Listar Workload Identities         ║
+║  5) Ver Registro de Operaciones        ║
+║  0) Salir                              ║
+╚════════════════════════════════════════╝
 ```
 
-### Namespace Migration
+## Opciones
 
-Move KSA from `default` to `apps` namespace:
+### 1) Configurar Workload Identity
+- Solicita Ticket/CTask para organizar logs
+- Permite seleccionar proyecto y cluster
+- Crea IAM SA si no existe
+- Crea KSA si no existe
+- Configura el binding y la anotación
+- Registra la operación en CSV
 
-```bash
-make setup PROJECT=gnp-app-qa GCP_SA=sa-backend KSA=ka-backend NAMESPACE=default TARGET_NS=apps
-```
+### 2) Verificar Workload Identity
+- Verifica si el IAM SA existe
+- Verifica si el KSA existe
+- Verifica la anotación del KSA
+- Verifica el IAM binding
 
-### Dry-Run Mode
+### 3) Eliminar Workload Identity
+- Muestra configuraciones activas del registro
+- Permite seleccionar qué eliminar:
+  - Solo binding (mantiene KSA e IAM SA)
+  - Binding + KSA (mantiene IAM SA)
+  - Todo (Binding + KSA + IAM SA)
+- Actualiza el registro con el estado
 
-Test without making changes:
+### 4) Listar Workload Identities
+- Lista proyectos del registro
+- Lista clusters del registro
+- Muestra todos los KSAs con Workload Identity en un namespace
 
-```bash
-make test PROJECT=gnp-app-qa GCP_SA=sa-backend KSA=ka-backend NAMESPACE=apps
+### 5) Ver Registro de Operaciones
+- Muestra los últimos registros del CSV
+- Incluye estado (activo/eliminado)
 
-# Or with DRY_RUN flag
-make setup PROJECT=gnp-app-qa GCP_SA=sa-backend KSA=ka-backend NAMESPACE=apps DRY_RUN=1
-```
+## Registro CSV
 
-### Batch Processing
+El script mantiene un archivo `workload-identity-registry.csv` con todas las operaciones:
 
-Process multiple bindings from CSV file:
-
-```bash
-make batch CSV_FILE=bindings.csv
-make batch CSV_FILE=bindings.csv ACTION=verify
-```
-
-CSV format:
 ```csv
-project,gcp_sa,ksa,namespace,target_namespace
-gnp-app-qa,sa-backend,ka-backend,apps,
-gnp-app-qa,sa-frontend,ka-frontend,default,apps
+Fecha,Ticket,ProjectId,Cluster,Location,Namespace,KSA,IAM_SA,Status
+2026-02-12 21:48:41,CTASK999999,gnp-app-qa,gke-cluster,us-central1,apps,ka-backend,sa-backend@gnp-app-qa.iam.gserviceaccount.com,activo
 ```
 
-## Direct CLI Usage
+Estados posibles:
+- `activo` - Configuración activa
+- `eliminado-binding` - Solo se eliminó el binding
+- `eliminado-binding-ksa` - Se eliminó binding + KSA
+- `eliminado-todo` - Se eliminó todo (binding + KSA + IAM SA)
 
-```bash
-# Setup
-python3 workload-identity.py setup -p gnp-app-qa -g sa-backend -k ka-backend -n apps
+## Logs
 
-# Setup with migration
-python3 workload-identity.py setup -p gnp-app-qa -g sa-backend -k ka-backend -n default -t apps
-
-# Verify
-python3 workload-identity.py verify -p gnp-app-qa -g sa-backend -k ka-backend -n apps
-
-# Cleanup
-python3 workload-identity.py cleanup -p gnp-app-qa -g sa-backend -k ka-backend -n apps
-
-# List
-python3 workload-identity.py list -p gnp-app-qa
-
-# Batch
-python3 workload-identity.py batch -f bindings.csv -a setup
-
-# Dry-run
-python3 workload-identity.py --dry-run setup -p gnp-app-qa -g sa-backend -k ka-backend -n apps
+Los logs se organizan por ticket:
+```
+Tickets/
+└── CTASK999999/
+    └── logs/
+        └── workload_identity_20260212_214803.log
 ```
 
-## Parameters
+## Requisitos
 
-| Parameter | Short | Description |
-|-----------|-------|-------------|
-| `--project` | `-p` | GCP Project ID |
-| `--gcp-sa` | `-g` | GCP Service Account (name or full email) |
-| `--ksa` | `-k` | Kubernetes Service Account name |
-| `--namespace` | `-n` | Kubernetes namespace |
-| `--target-namespace` | `-t` | Target namespace for migration |
-| `--dry-run` | | Show actions without executing |
-| `--no-log` | | Disable file logging |
+- `gcloud` CLI configurado y autenticado
+- `kubectl` configurado
+- Permisos para:
+  - Crear/modificar IAM Service Accounts
+  - Agregar IAM bindings
+  - Crear/modificar Kubernetes Service Accounts
+  - Conectarse a clusters GKE
 
-## Prerequisites
+## Estructura
 
-- `kubectl` configured for your GKE cluster
-- `gcloud` CLI authenticated
-- `python3` (3.8+)
-
-## References
-
-- [GCP Workload Identity](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity)
+```
+Proyecto-Workload-Identity/
+├── workload-identity.sh          # Script principal interactivo
+├── workload-identity-registry.csv # Registro de operaciones (ignorado en git)
+├── README.md                     # Este archivo
+└── .gitignore                    # Archivos ignorados
+```
