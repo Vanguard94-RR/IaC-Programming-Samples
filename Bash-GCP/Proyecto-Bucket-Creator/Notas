@@ -1,0 +1,8 @@
+Notas nombre unico 
+
+privados
+
+
+si la aplicacion es de uso externo usar bucket publico usando carpeta para el proyecto (GNP-PortalCorporativo-QA,GNP-PortalCorporativo-UAT,GNP-PortalCorporativo-PRO)
+
+storage object admin solo anivel bucket para cuentas de servicio, cuentas de grupo temporal max 15 dias, visor_bucket_gnp

@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.env.local
+promotion.log
+promotion-report.json
+*.tmp
+.DS_Store

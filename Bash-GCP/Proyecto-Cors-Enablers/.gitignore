@@ -1,0 +1,26 @@
+# Environment
+.env
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+temp/
+.tmp/
+
+# GCP
+.gcloud/
+
+# Credentials (should never be committed)
+*-key.json
+*-credentials.json
