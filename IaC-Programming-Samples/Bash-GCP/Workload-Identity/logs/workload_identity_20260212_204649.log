@@ -1,0 +1,7 @@
+[2026-02-12 20:46:49] ========================================
+[2026-02-12 20:46:49]  Workload Identity Manager
+[2026-02-12 20:46:49] ========================================
+[2026-02-12 20:46:49] Session started
+[2026-02-12 20:47:01] Input - Ingrese el Project ID: gnp-contabilidad-qa
+[2026-02-12 20:47:12] Input - Ingrese el nombre de la cuenta de servicio IAM (sin @...): prueba-1-jmcm
+[2026-02-12 20:47:14] ✗ No se encontró la cuenta: prueba-1-jmcm@gnp-contabilidad-qa.iam.gserviceaccount.com
