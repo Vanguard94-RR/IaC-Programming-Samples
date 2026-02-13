@@ -1,0 +1,131 @@
+# Configuración: Suscripciones STELA para ODS-UAT
+# Proyecto consumer: gnp-ods-uat
+# Proyecto source: gnp-stela-uat
+# Service Account: stela-cuentas-cobrar@gnp-ods-uat.iam.gserviceaccount.com
+
+project: gnp-ods-uat
+
+# Service account que necesita permisos sobre los topics
+service_account: stela-cuentas-cobrar@gnp-ods-uat.iam.gserviceaccount.com
+
+resources:
+  # ===========================================================================
+  # 1. Cuenta Registrada
+  # ===========================================================================
+  - type: subscription
+    name: gnp-ods.stela.cuentas.registar.ods.recibos
+    topic: projects/gnp-stela-uat/topics/gnp-tesoreria.stela.cuentas.registrada
+    topic_project: gnp-stela-uat
+    ack_deadline: 600
+    retention_days: 7
+    grant_viewer: true
+
+  # ===========================================================================
+  # 2. Cuenta Bloqueada
+  # ===========================================================================
+  - type: subscription
+    name: gnp-ods.stela.cuentas.bloqueada.ods.recibos
+    topic: projects/gnp-stela-uat/topics/gnp-tesoreria.stela.cuentas.bloqueada
+    topic_project: gnp-stela-uat
+    ack_deadline: 600
+    retention_days: 7
+    grant_viewer: true
+
+  # ===========================================================================
+  # 3. Cuenta Desbloqueada
+  # ===========================================================================
+  - type: subscription
+    name: gnp-ods.stela.cuentas.desbloqueada.ods.recibos
+    topic: projects/gnp-stela-uat/topics/gnp-tesoreria.stela.cuentas.desbloqueada
+    topic_project: gnp-stela-uat
+    ack_deadline: 600
+    retention_days: 7
+    grant_viewer: true
+
+  # ===========================================================================
+  # 4. Cuenta Rehabilitada
+  # ===========================================================================
+  - type: subscription
+    name: gnp-ods.stela.cuentas.rehabilitada.ods.recibos
+    topic: projects/gnp-stela-uat/topics/gnp-tesoreria.stela.cuentas.rehabilitada
+    topic_project: gnp-stela-uat
+    ack_deadline: 600
+    retention_days: 7
+    grant_viewer: true
+
+  # ===========================================================================
+  # 5. Cuenta Cancelada
+  # ===========================================================================
+  - type: subscription
+    name: gnp-ods.stela.cuentas.cancelada.ods.recibos
+    topic: projects/gnp-stela-uat/topics/gnp-tesoreria.stela.cuentas.cancelada
+    topic_project: gnp-stela-uat
+    ack_deadline: 600
+    retention_days: 7
+    grant_viewer: true
+
+  # ===========================================================================
+  # 6. Cuenta Liquidada
+  # ===========================================================================
+  - type: subscription
+    name: gnp-ods.stela.cuentas.liquidada.ods.recibos
+    topic: projects/gnp-stela-uat/topics/gnp-tesoreria.stela.cuentas.liquidada
+    topic_project: gnp-stela-uat
+    ack_deadline: 600
+    retention_days: 7
+    grant_viewer: true
+
+  # ===========================================================================
+  # 7. Cuenta Devuelta
+  # ===========================================================================
+  - type: subscription
+    name: gnp-ods.stela.cuentas.devuelta.ods.recibos
+    topic: projects/gnp-stela-uat/topics/gnp-tesoreria.stela.cuentas.devuelta
+    topic_project: gnp-stela-uat
+    ack_deadline: 600
+    retention_days: 7
+    grant_viewer: true
+
+  # ===========================================================================
+  # 8. Cuenta Prorrogada
+  # ===========================================================================
+  - type: subscription
+    name: gnp-ods.stela.cuentas.prorrogada.ods.recibos
+    topic: projects/gnp-stela-uat/topics/gnp-tesoreria.stela.cuentas.prorrogada
+    topic_project: gnp-stela-uat
+    ack_deadline: 600
+    retention_days: 7
+    grant_viewer: true
+
+  # ===========================================================================
+  # 9. Cuenta Bloqueada Tránsito
+  # ===========================================================================
+  - type: subscription
+    name: gnp-ods.stela.cuentas.bloqueada-transito.trazabilidad
+    topic: projects/gnp-stela-uat/topics/gnp-tesoreria.stela.cuentas.bloqueada-transito
+    topic_project: gnp-stela-uat
+    ack_deadline: 600
+    retention_days: 7
+    grant_viewer: true
+
+  # ===========================================================================
+  # 10. Cuenta Desbloqueada Tránsito
+  # ===========================================================================
+  - type: subscription
+    name: gnp-ods.stela.cuentas.desbloqueada-transito.trazabilidad
+    topic: projects/gnp-stela-uat/topics/gnp-tesoreria.stela.cuentas.desbloqueada-transito
+    topic_project: gnp-stela-uat
+    ack_deadline: 600
+    retention_days: 7
+    grant_viewer: true
+
+  # ===========================================================================
+  # 11. Cuenta Liquidada Flujo
+  # ===========================================================================
+  - type: subscription
+    name: gnp-ods.stela.cuentas.liquidada-flujo.ods.recibos
+    topic: projects/gnp-stela-uat/topics/gnp-tesoreria.stela.cuentas.liquidada-flujo
+    topic_project: gnp-stela-uat
+    ack_deadline: 600
+    retention_days: 7
+    grant_viewer: true

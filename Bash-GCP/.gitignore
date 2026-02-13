@@ -1,0 +1,21 @@
+# Bash-GCP .gitignore
+
+# Tickets folder (local execution logs)
+Tickets/
+
+# Logs in all projects
+**/logs/
+*.log
+
+# Registry/control files (local data)
+*-registry.csv
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# System files
+.DS_Store
+Thumbs.db

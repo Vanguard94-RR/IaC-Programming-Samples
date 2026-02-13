@@ -1,0 +1,40 @@
+yes# Configuración ejemplo: Suscripciones cross-project
+# Demuestra cómo crear suscripciones que consumen topics de otros proyectos
+
+project: gnp-proyecto-consumer-uat
+
+resources:
+  # ============================================================================
+  # TOPICS LOCALES (en este proyecto)
+  # ============================================================================
+  
+  - type: topic
+    name: local.eventos.procesados
+    retention_days: 7
+  
+  # ============================================================================
+  # SUBSCRIPTIONS LOCALES (mismo proyecto)
+  # ============================================================================
+  
+  - type: subscription
+    name: local.eventos.procesados.worker
+    topic: local.eventos.procesados
+    ack_deadline: 300
+    retention_days: 7
+  
+  # ============================================================================
+  # SUBSCRIPTIONS CROSS-PROJECT
+  # Formato: projects/<project-id>/topics/<topic-name>
+  # ============================================================================
+  
+  - type: subscription
+    name: mac.estados-cuenta.consumer-remoto
+    topic: projects/gnp-calculopagoudis-uat/topics/mac.estados-cuenta.masivos.generar
+    ack_deadline: 600
+    retention_days: 7
+  
+  - type: subscription
+    name: notificaciones.email.consumer-remoto
+    topic: projects/gnp-notificaciones-pro/topics/mac.notificaciones.email
+    ack_deadline: 300
+    retention_days: 3

@@ -1,0 +1,43 @@
+# Configuración ejemplo: Múltiples recursos
+# Demuestra cómo crear varios topics y subscripciones
+
+project: gnp-calculopagoudis-uat
+
+resources:
+  # ============================================================================
+  # TOPICS
+  # ============================================================================
+  
+  - type: topic
+    name: mac.estados-cuenta.masivos.generar
+    retention_days: 7
+  
+  - type: topic
+    name: mac.notificaciones.email
+    retention_days: 3
+  
+  - type: topic
+    name: mac.eventos.auditoria
+    retention_days: 30
+  
+  # ============================================================================
+  # SUBSCRIPTIONS
+  # ============================================================================
+  
+  - type: subscription
+    name: mac.estados-cuenta.masivos.generar.consumer
+    topic: mac.estados-cuenta.masivos.generar
+    ack_deadline: 600
+    retention_days: 7
+  
+  - type: subscription
+    name: mac.notificaciones.email.worker
+    topic: mac.notificaciones.email
+    ack_deadline: 300
+    retention_days: 3
+  
+  - type: subscription
+    name: mac.eventos.auditoria.logger
+    topic: mac.eventos.auditoria
+    ack_deadline: 120
+    retention_days: 30

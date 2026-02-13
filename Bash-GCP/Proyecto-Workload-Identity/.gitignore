@@ -8,6 +8,9 @@
 logs/
 *.log
 
+# Registry file (local data)
+workload-identity-registry.csv
+
 # System files
 .DS_Store
 Thumbs.db

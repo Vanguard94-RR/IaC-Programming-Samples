@@ -1,0 +1,23 @@
+# Configuración ejemplo: Múltiples recursos
+# Demuestra cómo crear varios topics y subscripciones
+
+project: gnp-ods-qa
+
+resources:
+  # ============================================================================
+  # TOPICS
+  # ============================================================================
+  
+  - type: topic
+    name: gnp-tesoreria.stela.cuentas.liquidada-flujo
+  
+  
+  # ============================================================================
+  # SUBSCRIPTIONS
+  # ============================================================================
+  
+  - type: subscription
+    name: gnp-ods.stela.cuentas.liquidada-flujo.ods.recibos
+    topic: gnp-tesoreria.stela.cuentas.liquidada-flujo
+    ack_deadline: 600
+    expiration_policy_ttl: ""

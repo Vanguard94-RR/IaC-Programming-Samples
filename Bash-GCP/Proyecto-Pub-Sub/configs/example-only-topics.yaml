@@ -1,0 +1,26 @@
+# Ejemplo Simple: Solo Crear Topics en un Proyecto
+#
+# Uso:
+# ./create-pubsub-manager.sh
+#   - Ticket: CTASK0123456
+#   - Proyecto: gnp-stela-uat
+#   - Config: example-only-topics.yaml
+
+project: gnp-stela-uat
+
+resources:
+  # ==========================================================================
+  # TOPICS - Todos se crean en gnp-stela-uat
+  # ==========================================================================
+  
+  - type: topic
+    name: eventos.tesoreria.pagos.recibidos
+    retention_days: 7
+  
+  - type: topic
+    name: eventos.tesoreria.pagos.rechazados
+    retention_days: 7
+  
+  - type: topic
+    name: eventos.tesoreria.conciliacion.completada
+    retention_days: 14
