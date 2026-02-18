@@ -19,3 +19,10 @@ Tickets/
 # System files
 .DS_Store
 Thumbs.db
+
+# Suscriptions
+
+**/suscriptions-exports/*
+
+# PubSub Discovery subscriptions exports
+Proyecto-PubSub-Discovery/subscriptions-exports/
