@@ -40,7 +40,7 @@ endif
 ifndef PROJECT
 	$(error PROJECT es requerido)
 endif
-	@GITLAB_TOKEN=$$(cat ../PersonalGitLabToken) python3 workflow-deploy.py \
+	@GITLAB_TOKEN=$$(cat ../../../../PersonalGitLabToken) python3 workflow-deploy.py \
 		--url "$(URL)" \
 		--name "$(NAME)" \
 		--project "$(PROJECT)" \
