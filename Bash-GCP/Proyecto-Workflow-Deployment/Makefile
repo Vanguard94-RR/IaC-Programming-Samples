@@ -1,12 +1,15 @@
-.PHONY: install deploy help
+.PHONY: install deploy help interactive interactive-bash interactive-python logs clean
 
 help:
 	@echo "Workflow Deployment - Google Cloud Workflows"
 	@echo ""
 	@echo "Uso:"
 	@echo "  make deploy URL=<gitlab-url> NAME=<workflow-name> PROJECT=<gcp-project>"
+	@echo "  make interactive          # Interfaz interactiva (Python)"
+	@echo "  make interactive-python   # Interfaz interactiva (Python)"
+	@echo "  make interactive-bash     # Interfaz interactiva (Bash)"
 	@echo ""
-	@echo "Opciones:"
+	@echo "Opciones en modo CLI:"
 	@echo "  LOCATION=<region>   Región GCP (auto-detecta si workflow existe)"
 	@echo "  DRY_RUN=1           Simular sin desplegar"
 	@echo "  SKIP_VALIDATION=1   Omitir validación"
@@ -15,9 +18,7 @@ help:
 	@echo "  make deploy URL='https://gitlab.com/grupo/proyecto/-/blob/main/wf.yml' \\"
 	@echo "              NAME=mi-workflow PROJECT=gcp-project-id"
 	@echo ""
-	@echo "  make deploy URL='...' NAME=test PROJECT=proj DRY_RUN=1"
-	@echo ""
-	@echo "Nota: Si el workflow ya existe, detecta automáticamente la región."
+	@echo "  make interactive    # Modo interactivo (recomendado)"
 	@echo ""
 	@echo "Otros comandos:"
 	@echo "  make install   Instalar dependencias"
@@ -29,6 +30,14 @@ install:
 	pip3 install pyyaml requests 2>/dev/null || \
 	pip install pyyaml requests 2>/dev/null || \
 	echo "⚠ Instala manualmente: pip install pyyaml requests"
+
+interactive: interactive-python
+
+interactive-python:
+	@python3 workflow-deploy-interactive.py
+
+interactive-bash:
+	@bash workflow-deploy-interactive.sh
 
 deploy:
 ifndef URL
@@ -47,6 +56,13 @@ endif
 		$(if $(LOCATION),--location "$(LOCATION)") \
 		$(if $(DRY_RUN),--dry-run) \
 		$(if $(SKIP_VALIDATION),--skip-validation)
+
+logs:
+	@tail -f workflow.log
+
+clean:
+	@rm -f workflow.log
+	@echo "✓ Logs limpiados"
 
 logs:
 	@tail -50 workflow.log 2>/dev/null || echo "Sin logs"
