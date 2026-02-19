@@ -12,25 +12,48 @@ download_gitlab_raw() {
         echo "Usage: download_gitlab_raw <gitlab-blob-url>" >&2
         return 2
     fi
-    # Discover PRIVATE TOKEN: prefer env var, then common repo file locations
+    # Discover PRIVATE TOKEN: prefer env var, then search in parent directories for Repos/token-gitlab-jmcm
     local token=""
     if [ -n "${GITLAB_PRIVATE_TOKEN-}" ]; then
         token="$GITLAB_PRIVATE_TOKEN"
+        vprint "Using token from GITLAB_PRIVATE_TOKEN env var (hidden)"
     else
-        # Prefer a well-known absolute path if available (user-provided in workspace)
-        local abs_token_path="/home/admin/Documents/GNP/Repos/token-gitlab-jmcm"
-        local cand1
-        local cand2
-        cand1="$(pwd)/Repos/token-gitlab-jmcm"
-        cand2="$(dirname "$(dirname "${BASH_SOURCE[0]}")")/Repos/token-gitlab-jmcm"
-        if [ -f "$abs_token_path" ]; then
-            token=$(sed -n '1p' "$abs_token_path" 2>/dev/null || true)
-        fi
-        if [ -z "$token" ] && [ -f "$cand1" ]; then
-            token=$(sed -n '1p' "$cand1" 2>/dev/null || true)
-        fi
-        if [ -z "$token" ] && [ -f "$cand2" ]; then
-            token=$(sed -n '1p' "$cand2" 2>/dev/null || true)
+        # Search multiple candidate paths and ascend directory tree
+        local token_found=false
+        local search_paths=(
+            "/home/admin/Documents/GNP/PersonalGitLabToken"
+            "/home/admin/Documents/GNP/Repos/token-gitlab-jmcm"
+            "${HOME}/Documents/GNP/Repos/token-gitlab-jmcm"
+        )
+        
+        # Ascend from current directory looking for Repos folder
+        local current_dir
+        current_dir=$(pwd)
+        local max_depth=10
+        local depth=0
+        while [ "$current_dir" != "/" ] && [ "$depth" -lt "$max_depth" ]; do
+            if [ -d "$current_dir/Repos" ] && [ -f "$current_dir/Repos/token-gitlab-jmcm" ]; then
+                search_paths+=("$current_dir/Repos/token-gitlab-jmcm")
+                break
+            fi
+            current_dir=$(dirname "$current_dir")
+            depth=$((depth + 1))
+        done
+        
+        # Try each candidate path in order
+        for cand in "${search_paths[@]}"; do
+            if [ -f "$cand" ] && [ -r "$cand" ]; then
+                token=$(sed -n '1p' "$cand" 2>/dev/null || true)
+                if [ -n "$token" ]; then
+                    vprint "Token found at: $cand (content hidden)"
+                    token_found=true
+                    break
+                fi
+            fi
+        done
+        
+        if [ "$token_found" = false ]; then
+            vprint "No GitLab token found; unauthenticated access attempted (may fail for private repos)"
         fi
     fi
 
@@ -41,9 +64,11 @@ download_gitlab_raw() {
     # We need to URL-encode the path and construct: https://gitlab.com/api/v4/projects/<group%2Fproj>/repository/files/<encoded_path>/raw?ref=<ref>
     local api_url=""
     # naive parse using awk to split ref and path
-    # remove trailing slash
+    # remove trailing slash and query parameters
     local tmp
     tmp=${blob_url%/}
+    # Remove query parameters from URL first (e.g., ?ref_type=tags)
+    tmp=${tmp%%\?*}
     # extract ref (the part after /-/blob/<ref>/)
     if echo "$tmp" | grep -q "/-/blob/"; then
         local before_ref
