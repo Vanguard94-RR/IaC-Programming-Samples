@@ -1,0 +1,18 @@
+[
+  {
+    "origin": [
+      "https://app.gnp.com",
+      "https://app-qa.gnp.internal",
+      "https://reports.gnp.com"
+    ],
+    "responseHeader": [
+      "Content-Type",
+      "Content-Length",
+      "Cache-Control",
+      "ETag",
+      "X-Goog-Generation"
+    ],
+    "method": ["GET", "HEAD"],
+    "maxAgeSeconds": 1800
+  }
+]

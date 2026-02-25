@@ -175,3 +175,11 @@ default'
 [2026-02-12 12:29:35] [SUCCESS] Completado: 
 189 versiones eliminadas
 [2026-02-12 12:29:35] [INFO] Script terminó exitosamente
+[2026-02-24 15:52:52] [INFO] Creando directorio del ticket...
+[2026-02-24 15:52:53] [INFO] Iniciando App Engine Version Manager
+[2026-02-24 15:53:08] [ERROR] Proyecto 'gnp-plus-qa' no existe
+[2026-02-24 15:53:08] [ERROR] Proyecto 'gnp-plus-qa' no existe
+[2026-02-24 15:54:21] [INFO] Creando directorio del ticket...
+[2026-02-24 15:54:21] [INFO] Iniciando App Engine Version Manager
+[2026-02-24 15:54:33] [ERROR] Proyecto 'gnp-plus-qa' no existe
+[2026-02-24 15:54:33] [ERROR] Proyecto 'gnp-plus-qa' no existe

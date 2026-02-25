@@ -1,0 +1,12 @@
+[
+  {
+    "origin": [
+      "https://secure-app.gnp.com"
+    ],
+    "responseHeader": [
+      "Content-Type"
+    ],
+    "method": ["GET"],
+    "maxAgeSeconds": 600
+  }
+]
