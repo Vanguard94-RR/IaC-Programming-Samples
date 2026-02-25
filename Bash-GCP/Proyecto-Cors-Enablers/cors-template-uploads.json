@@ -1,0 +1,13 @@
+[
+  {
+    "origin": [
+      "https://upload.gnp.com"
+    ],
+    "responseHeader": [
+      "Content-Type",
+      "Location"
+    ],
+    "method": ["GET", "PUT"],
+    "maxAgeSeconds": 3600
+  }
+]

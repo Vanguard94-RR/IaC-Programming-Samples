@@ -77,7 +77,6 @@ check_dependencies() {
     done
     
     if [[ ${#missing[@]} -gt 0 ]]; then
-        print_error "Falta instalar: ${missing[*]}"
         print_info "Instala con: sudo apt-get install -y google-cloud-sdk jq"
         return 1
     fi
@@ -88,7 +87,6 @@ check_dependencies() {
 # Validar autenticación GCP
 check_gcloud_auth() {
     if ! gcloud auth list --filter=status:ACTIVE --format='value(account)' | grep -q .; then
-        print_error "No autenticado en gcloud"
         print_info "Ejecuta: gcloud auth login"
         return 1
     fi
@@ -100,7 +98,6 @@ check_project_exists() {
     local project=$1
     
     if ! gcloud projects describe "$project" &>/dev/null; then
-        print_error "Proyecto '$project' no existe"
         return 1
     fi
     return 0
@@ -111,7 +108,6 @@ check_appengine_enabled() {
     local project=$1
     
     if ! gcloud app describe --project="$project" &>/dev/null; then
-        print_error "App Engine no habilitado en '$project'"
         return 1
     fi
     return 0

@@ -20,7 +20,7 @@ get_service_versions() {
         --project="$project" \
         --service="$service" \
         --format=json \
-        --sort-by="~deployTime" \
+        --sort-by="~version.createTime" \
         --limit=1000 \
         2>/dev/null || echo "[]"
 }
@@ -45,7 +45,16 @@ get_versions_to_delete_recent() {
     local serving_version=$3
     
     echo "$versions_json" | jq --arg serving "$serving_version" --arg keep "$keep" '
-        [.[] | select(.id != $serving)] | .[$keep | tonumber:] | 
+        # Tomar las N versiones más recientes a mantener
+        (.[0:($keep | tonumber)]) as $recent_versions |
+        
+        # Eliminar versiones que NO estén en recientes Y NO sean la versión sirviendo
+        [.[] | 
+            select(
+                (.id != $serving) and 
+                (.id | IN($recent_versions[].id) | not)
+            )
+        ] |
         map({id: .id, createTime: .version.createTime})
     '
 }
