@@ -1,5 +1,5 @@
 # Environment
-.env
+config.env
 *.log
 
 # OS files
@@ -17,6 +17,9 @@ Thumbs.db
 *.tmp
 temp/
 .tmp/
+
+# CORS backups
+backups/
 
 # GCP
 .gcloud/

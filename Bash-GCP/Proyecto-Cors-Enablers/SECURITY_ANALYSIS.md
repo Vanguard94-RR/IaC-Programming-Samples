@@ -438,6 +438,6 @@ resource "google_monitoring_alert_policy" "cors_violations" {
 
 ---
 
-**Documento Preparado Por:** GitHub Copilot Agent
-**Versión:** 1.0
+**Documento Preparado Por:** GNP Cloud Infra Team
+**Versión:** 1.1
 **Fecha Revisión:** 2026-02-24

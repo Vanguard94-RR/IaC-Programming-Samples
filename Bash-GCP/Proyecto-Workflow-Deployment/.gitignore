@@ -1,0 +1,25 @@
+# Environment files
+.env.local
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Logs
+workflow.log
+*.log
+
+# Temporary files
+*.tmp
+/tmp/
+
+# OS
+.DS_Store
+*.swp
+*.swo
+*~

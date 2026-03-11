@@ -33,6 +33,18 @@ import requests
 import yaml
 
 # ============================================================================
+# Cargar variables de ambiente desde .env.local
+# ============================================================================
+env_file = Path(__file__).parent / '.env.local'
+if env_file.exists():
+    with open(env_file) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, value = line.split('=', 1)
+                os.environ[key.strip()] = value.strip().strip('"\'')
+
+# ============================================================================
 # Configuración de Logging
 # ============================================================================
 

@@ -42,18 +42,6 @@ make verify         # Confirm
 
 ---
 
-## What Gets Fixed
-
-- ✅ Replaces wildcard origins (*)
-- ✅ Restricts to GET/HEAD (no DELETE/PUT)
-- ✅ Eliminates metadata leakage
-- ✅ Enables audit logging
-- ✅ Compliance: CIS ✓ ISO27001 ✓ GDPR ✓ LGPD ✓
-
-## Recommendation
-
-**✅ APPROVE** - Minimal cost, maximum security gain
-
 ---
 
 # 👨‍💻 For Implementation (30 minutes)
@@ -102,14 +90,9 @@ Same steps with production bucket/project
 # 🔐 For Security/Compliance
 
 **For detailed threat analysis & attack vectors:**
-→ See [SECURITY_ANALYSIS.md](./SECURITY_ANALYSIS.md) (464 lines)
+→ See [SECURITY_ANALYSIS.md
 
-**Key findings:**
-
-- 5 critical vulnerabilities identified (CVSS 7.5-10.0)
-- Proposed Level 2 mitigation reduces risk 95%
-- Meets all major compliance frameworks
-- Defense-in-depth recommendations included
+](./SECURITY_ANALYSIS.md)
 
 ---
 
@@ -122,7 +105,7 @@ make enable         # Deploy with validation
 make verify         # Check current config
 make validate       # Validate security
 make disable        # Emergency disable
-make list           # Show buckets
+make list           # Show buckets in specified project
 make logs           # View operation logs
 make clean          # Reset config
 ```

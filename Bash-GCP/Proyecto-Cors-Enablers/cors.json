@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["https://gobiernonotificaciones-uat.gnp.com.mx"],
+"responseHeader": ["Content-Type", "Cache-Control"],
+"method": ["GET", "HEAD"],
+    "maxAgeSeconds": 3600
+  }
+]

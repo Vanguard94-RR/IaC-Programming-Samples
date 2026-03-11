@@ -42,15 +42,15 @@ TEMPLATE_CHOICE=${TEMPLATE_CHOICE:-1}
 
 case "$TEMPLATE_CHOICE" in
     1)
-        CONFIG="cors-template-secure-restricted.json"
+        CONFIG="templates/cors-template-secure-restricted.json"
         echo "✅ Seleccionado: RESTRICTED"
         ;;
     2)
-        CONFIG="cors-template-defense-in-depth.json"
+        CONFIG="templates/cors-template-defense-in-depth.json"
         echo "✅ Seleccionado: DEFENSE_IN_DEPTH"
         ;;
     3)
-        CONFIG="cors-template-uploads.json"
+        CONFIG="templates/cors-template-uploads.json"
         echo "✅ Seleccionado: UPLOADS"
         ;;
     4)
@@ -95,11 +95,11 @@ echo ""
     echo "BUCKET_NAME=$BUCKET_NAME"
     echo "CONFIG=$CONFIG"
     echo "# Configuración creada en: $(date)"
-} > .env
+} > config.env
 
-echo "✅ Configuración guardada en .env"
+echo "✅ Configuración guardada en config.env"
 echo ""
 
 # Mostrar archivos modificados
-echo "Contenido de .env:"
-cat .env
+echo "Contenido de config.env:"
+cat config.env

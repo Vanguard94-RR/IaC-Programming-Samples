@@ -1,121 +1,140 @@
-# Workflow Deployment
+# Workflow Deployment - Google Cloud Workflows
 
-Despliega workflows desde GitLab a **Google Cloud Workflows** directamente desde línea de comandos.
+Herramienta simple en Bash para desplegar workflows desde GitLab a Google Cloud Workflows.
+
+## Características
+
+- ✅ Interfaz interactiva paso a paso
+- ✅ Descarga automática desde GitLab (ramas o tags)
+- ✅ Validación de estructura YAML
+- ✅ Despliegue directo con `gcloud`
+- ✅ Modo dry-run para simulación
+- ✅ Token GitLab auto-cargado
+- ✅ Historial de despliegues
+
+## Requisitos
+
+- **Bash 4+**
+- **gcloud CLI** (instalado y autenticado)
+- **curl** (para descargar desde GitLab)
+- **Token GitLab** en `/home/admin/Documents/GNP/PersonalGitLabToken`
 
 ## Instalación
 
 ```bash
-make install
-```
+# Clonar o copiar el proyecto
+cd Proyecto-Workflow-Deployment
 
-Requiere:
-- Python 3.8+
-- pyyaml, requests
-- gcloud CLI
+# Hacer ejecutable el script
+chmod +x workflow-deploy-interactive.sh
+
+# Crear archivo de configuración (opcional)
+cat > .env.local << 'EOF'
+# Configuración local (no se trackea en git)
+GITLAB_TOKEN_PATH=../../../../PersonalGitLabToken
+EOF
+```
 
 ## Uso
 
-```bash
-make deploy URL='<gitlab-url>' NAME='<workflow-name>' PROJECT='<gcp-project>'
-```
-
-### Parámetros Requeridos
-
-| Parámetro | Descripción |
-|-----------|-------------|
-| `URL` | URL completa del archivo en GitLab |
-| `NAME` | Nombre del workflow en GCP |
-| `PROJECT` | Project ID de GCP |
-
-### Parámetros Opcionales
-
-| Parámetro | Descripción | Default |
-|-----------|-------------|---------|
-| `LOCATION` | Región de GCP | us-central1 |
-| `DRY_RUN=1` | Simular sin desplegar | - |
-| `SKIP_VALIDATION=1` | Omitir validación | - |
-
-## Ejemplos
-
-### Despliegue básico
+### Modo Interactivo (Recomendado)
 
 ```bash
-make deploy \
-  URL='https://gitlab.com/gitgnp/cotizadores/gke-gnp-danios-config-back-end/-/blob/celula-4/gnp-danios-wf/GoogleWF/workflow-emision-danios.yml' \
-  NAME='workflow-emision-danios' \
-  PROJECT='gnp-wf-danios-qa'
+./workflow-deploy-interactive.sh
 ```
 
-### Dry-run (simular)
+El script te guiará paso a paso:
+
+1. **Paso 1: Fuente de GitLab**
+   - Ingresar URL completa o detalles por separado
+   - URL válida: `https://gitlab.com/grupo/proyecto/-/blob/rama/ruta/archivo.yml`
+
+2. **Paso 2: Destino en Google Cloud**
+   - Nombre del workflow
+   - Project ID de GCP
+   - Región (por defecto: `us-central1`)
+
+3. **Paso 3: Opciones Adicionales**
+   - Modo normal, dry-run o skip-validation
+
+4. **Paso 4: Confirmación**
+   - Revisar configuración
+   - Confirmar despliegue
+
+### Ejemplo
 
 ```bash
-make deploy \
-  URL='https://gitlab.com/grupo/proyecto/-/blob/main/workflow.yml' \
-  NAME='mi-workflow' \
-  PROJECT='mi-proyecto' \
-  DRY_RUN=1
+./workflow-deploy-interactive.sh
+
+# Responder las preguntas interactivas
+# La herramienta se encargará del resto
 ```
 
-### Con ubicación específica
+## Configuración del Token
+
+El token GitLab se carga automáticamente desde uno de estos lugares (en orden):
+
+1. Variable de ambiente `GITLAB_TOKEN`
+2. Archivo `.env.local` en el directorio del script
+3. Archivo `/home/admin/Documents/GNP/PersonalGitLabToken`
+
+## Historial
+
+Los despliegues se registran en `deployment_history.log`:
+
+```
+2026-03-10 10:05:30 | workflow-emision-danios | gnp-wf-danios-qa
+2026-03-10 10:03:15 | workflow-test | gnp-wf-danios-qa
+```
+
+## Estructura del Proyecto
+
+```
+.
+├── workflow-deploy-interactive.sh    # Script principal
+├── .env.local                        # Variables de ambiente (no tracked)
+├── .gitignore                        # Archivos ignorados
+├── deployment_history.log            # Historial de despliegues
+├── README.md                         # Este archivo
+└── test-workflow.yaml                # Workflow de prueba
+```
+
+## Troubleshooting
+
+### Error: GITLAB_TOKEN no disponible
 
 ```bash
-make deploy \
-  URL='...' \
-  NAME='workflow' \
-  PROJECT='proyecto' \
-  LOCATION='southamerica-east1'
+# Asignar token manualmente
+export GITLAB_TOKEN=$(cat ../../../../PersonalGitLabToken)
+./workflow-deploy-interactive.sh
 ```
 
-### Sin validación
+### Error: URL de GitLab inválida
 
-```bash
-make deploy URL='...' NAME='wf' PROJECT='proj' SKIP_VALIDATION=1
-```
-
-## Uso directo con Python
-
-```bash
-export GITLAB_TOKEN=$(cat ../PersonalGitLabToken)
-
-# Con URL completa
-python3 workflow-deploy.py \
-  --url "https://gitlab.com/grupo/proyecto/-/blob/main/workflow.yml" \
-  --name mi-workflow \
-  --project gcp-project-id
-
-# Con componentes separados
-python3 workflow-deploy.py \
-  --gitlab-project grupo/proyecto \
-  --branch main \
-  --path ruta/workflow.yml \
-  --name mi-workflow \
-  --project gcp-project-id
-
-# Ver ayuda
-python3 workflow-deploy.py --help
-```
-
-## Formato de URL
-
+Verifica que la URL esté en este formato:
 ```
 https://gitlab.com/grupo/proyecto/-/blob/rama/ruta/archivo.yml
-                   └─────┬─────┘       └─┬─┘ └──────┬──────┘
-                      proyecto        rama      archivo
 ```
 
-## Requisitos GCP
+### Error: gcloud CLI no disponible
 
+Instala gcloud SDK:
 ```bash
-# Autenticarse
-gcloud auth login
-
-# Habilitar API
-gcloud services enable workflows.googleapis.com --project=PROJECT_ID
+curl https://sdk.cloud.google.com | bash
+exec -l $SHELL
+gcloud init
 ```
 
-## Logs
+### Error: El workflow debe tener un entry point 'main:'
 
-```bash
-make logs    # Ver últimos logs
-make clean   # Limpiar logs
+El archivo YAML debe contener:
+```yaml
+main:
+  steps:
+    - step1:
+        ...
 ```
+
+## Licencia
+
+GNP Infrastructure Team - 2026
