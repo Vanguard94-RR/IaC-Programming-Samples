@@ -19,6 +19,23 @@
 
 set -euo pipefail
 
+# Cargar variables de ambiente
+[ -f .env.local ] && source .env.local
+
+# Cargar token de GitLab si no está disponible
+if [ -z "${GITLAB_TOKEN:-}" ]; then
+    TOKEN_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../../../PersonalGitLabToken"
+    if [ -f "$TOKEN_FILE" ]; then
+        GITLAB_TOKEN=$(cat "$TOKEN_FILE")
+    fi
+fi
+
+# Validar que el token esté disponible
+if [ -z "${GITLAB_TOKEN:-}" ]; then
+    echo "✗ Error: GITLAB_TOKEN no disponible" >&2
+    exit 1
+fi
+
 # Color codes
 readonly RED='\033[0;31m'
 readonly GREEN='\033[0;32m'
@@ -272,29 +289,105 @@ step_4_preview() {
 # Deployment Execution
 ################################################################################
 
-build_command() {
-    local cmd="python3 workflow-deploy.py"
+parse_gitlab_url() {
+    local url="$1"
+    # Extraer: https://gitlab.com/group/project/-/blob/branch/path/to/file.yml
     
-    if [[ -n "${GITLAB_URL:-}" ]]; then
-        cmd="$cmd --url '$GITLAB_URL'"
+    if [[ ! "$url" =~ gitlab.com ]]; then
+        return 1
+    fi
+    
+    # Extraer componentes de la URL
+    local project_part="${url#*gitlab.com/}"
+    local branch_part="${project_part#*/-/blob/}"
+    local file_part="${branch_part#*/}"
+    local branch="${branch_part%/*}"
+    local project="${project_part%%/-/blob*}"
+    
+    echo "$project|$branch|$file_part"
+}
+
+download_workflow() {
+    local url="$1"
+    local output_file="$2"
+    
+    local parsed
+    parsed=$(parse_gitlab_url "$url") || {
+        print_error "URL de GitLab inválida"
+        return 1
+    }
+    
+    local project branch file_path
+    IFS='|' read -r project branch file_path <<< "$parsed"
+    
+    print_info "Descargando desde GitLab..."
+    print_info "Proyecto: $project"
+    print_info "Rama: $branch"
+    print_info "Archivo: $file_path"
+    
+    local gitlab_api_url="https://gitlab.com/api/v4/projects/$(echo "$project" | sed 's|/|%2F|g')/repository/files/$(echo "$file_path" | sed 's|/|%2F|g')/raw"
+    
+    if ! curl -s -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+        -o "$output_file" \
+        "$gitlab_api_url?ref=$branch" 2>/dev/null; then
+        print_error "No se pudo descargar el archivo"
+        return 1
+    fi
+    
+    if [ ! -s "$output_file" ]; then
+        print_error "Archivo descargado está vacío"
+        return 1
+    fi
+    
+    print_success "Archivo descargado"
+}
+
+validate_workflow() {
+    local yaml_file="$1"
+    
+    print_info "Validando estructura del workflow..."
+    
+    # Validar que sea YAML válido (búsqueda simple)
+    if ! grep -q "^main:" "$yaml_file"; then
+        print_error "El workflow debe tener un entry point 'main:'"
+        return 1
+    fi
+    
+    print_success "Validación OK"
+}
+
+deploy_workflow() {
+    local yaml_file="$1"
+    local workflow_name="$2"
+    local project_id="$3"
+    local region="${4:-us-central1}"
+    
+    print_info "Desplegando workflow..."
+    print_info "Nombre: $workflow_name"
+    print_info "Proyecto: $project_id"
+    print_info "Región: $region"
+    
+    if ! command -v gcloud &> /dev/null; then
+        print_error "gcloud CLI no disponible"
+        return 1
+    fi
+    
+    if gcloud workflows deploy "$workflow_name" \
+        --source="$yaml_file" \
+        --project="$project_id" \
+        --location="$region" \
+        --quiet 2>&1; then
+        print_success "Workflow desplegado exitosamente"
+        save_to_history "$workflow_name" "$project_id"
+        return 0
     else
-        cmd="$cmd --gitlab-project '$GITLAB_PROJECT'"
-        cmd="$cmd --branch '$GITLAB_BRANCH'"
-        cmd="$cmd --path '$GITLAB_FILE'"
+        print_error "Falló el despliegue"
+        return 1
     fi
-    
-    cmd="$cmd --name '$WORKFLOW_NAME'"
-    cmd="$cmd --project '$GCP_PROJECT'"
-    cmd="$cmd --location '$GCP_LOCATION'"
-    
-    if [[ "$DRY_RUN" == "true" ]]; then
-        cmd="$cmd --dry-run"
-    fi
-    
-    if [[ "$SKIP_VALIDATION" == "true" ]]; then
-        cmd="$cmd --skip-validation"
-    fi
-    
+}
+
+build_command() {
+    local cmd="echo 'Ejecutando despliegue...'"
     echo "$cmd"
 }
 
@@ -302,24 +395,39 @@ execute_deployment() {
     clear_screen
     print_header "Ejecutando Despliegue"
     
-    local cmd
-    cmd=$(build_command)
+    local temp_file
+    temp_file=$(mktemp /tmp/workflow-XXXXXX.yaml)
+    trap "rm -f $temp_file" RETURN
     
-    echo -e "${GRAY}Comando:${NC}"
-    echo -e "  ${cmd}\n"
-    echo -e "${GRAY}$(printf '═%.0s' {1..70})${NC}\n"
+    echo ""
     
-    cd "$SCRIPT_DIR"
+    # Descargar
+    if [[ -n "${GITLAB_URL:-}" ]]; then
+        download_workflow "$GITLAB_URL" "$temp_file" || return 1
+    else
+        # Construir URL desde componentes
+        local gitlab_url="https://gitlab.com/$GITLAB_PROJECT/-/blob/$GITLAB_BRANCH/$GITLAB_FILE"
+        download_workflow "$gitlab_url" "$temp_file" || return 1
+    fi
     
-    if eval "$cmd"; then
-        echo -e "\n${GRAY}$(printf '═%.0s' {1..70})${NC}\n"
-        print_success "Despliegue completado exitosamente"
-        save_to_history "$WORKFLOW_NAME" "$GCP_PROJECT"
+    echo ""
+    
+    # Validar
+    if [[ "$SKIP_VALIDATION" != "true" ]]; then
+        validate_workflow "$temp_file" || return 1
+        echo ""
+    fi
+    
+    # Desplegar
+    if [[ "$DRY_RUN" == "true" ]]; then
+        print_warning "DRY-RUN: Comando no ejecutado"
+        echo ""
+        echo "Comando que se ejecutaría:"
+        echo "  gcloud workflows deploy $WORKFLOW_NAME --source=$temp_file --project=$GCP_PROJECT --location=$GCP_LOCATION --quiet"
+        echo ""
         return 0
     else
-        echo -e "\n${GRAY}$(printf '═%.0s' {1..70})${NC}\n"
-        print_error "El despliegue finalizó con errores"
-        return 1
+        deploy_workflow "$temp_file" "$WORKFLOW_NAME" "$GCP_PROJECT" "$GCP_LOCATION" || return 1
     fi
 }
 

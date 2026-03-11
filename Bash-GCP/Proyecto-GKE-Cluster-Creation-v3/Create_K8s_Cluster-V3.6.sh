@@ -1,7 +1,7 @@
 #!/bin/bash
 # File name      : Create_K8s_Cluster.sh  
 # Description    : Script to create a Kubernetes Cluster in a specified project
-# Author         : Erick Alvarado
+# Author         : Juan Manuel Cortes
 # Date           : 20250918
 # Version        : v3.6.0-dynamic-ranges (Detección dinámica de rangos secundarios)
 # Usage          : ./Create_K8s_Cluster.sh
@@ -524,37 +524,37 @@ function apply_cluster_hardening() {
             fi
         fi
         
-        # Regla 2: IPs WAF permitidas (Prioridad 100)
-        echo "[HARDENING]   • Regla 2: IPs WAF (allow)" | tee -a "$hardening_log"
+        # Regla 2: Allowed IPs (Prioridad 100)
+        echo "[HARDENING]   • Regla 2: Allowed IPs (allow)" | tee -a "$hardening_log"
         if gcloud compute security-policies rules describe 100 \
             --security-policy="$security_policy_name" \
             --project="$project_id" &>/dev/null; then
-            echo -e "${YELLOW}    [!] Regla IPs WAF (100) ya existe${NC}" | tee -a "$hardening_log"
+            echo -e "${YELLOW}    [!] Regla Allowed IPs (100) ya existe${NC}" | tee -a "$hardening_log"
         else
             if gcloud compute security-policies rules create 100 \
                 --action=allow \
                 --security-policy="$security_policy_name" \
-                --description="IPs WAF" \
-                --src-ip-ranges="35.238.84.248,34.121.197.40,34.123.202.20,34.71.3.13" \
+                --description="Default rule, higher priority overrides it" \
+                --src-ip-ranges="34.123.202.20,34.71.3.13,0.0.0.0/0,189.240.94.226,200.188.18.65,189.240.88.116,200.188.18.66" \
                 --project="$project_id" 2>>"$hardening_log"; then
-                echo -e "${LGREEN}    [✓] Regla IPs WAF creada${NC}" | tee -a "$hardening_log"
+                echo -e "${LGREEN}    [✓] Regla Allowed IPs creada${NC}" | tee -a "$hardening_log"
             else
-                echo -e "${RED}    [ERROR] Falló creación de regla IPs WAF${NC}" | tee -a "$hardening_log"
+                echo -e "${RED}    [ERROR] Falló creación de regla Allowed IPs${NC}" | tee -a "$hardening_log"
                 return 1
             fi
         fi
         
-        # Regla 3: Default rule - Deny all (Prioridad 2147483647)
-        echo "[HARDENING]   • Regla 3: Default rule (deny-502)" | tee -a "$hardening_log"
+        # Regla 3: Default Deny - All Traffic (Prioridad 2147483647)
+        echo "[HARDENING]   • Regla 3: Default Deny - All Traffic (deny-403)" | tee -a "$hardening_log"
         if gcloud compute security-policies rules describe 2147483647 \
             --security-policy="$security_policy_name" \
             --project="$project_id" &>/dev/null; then
             echo -e "${YELLOW}    [!] Regla por defecto (2147483647) ya existe${NC}" | tee -a "$hardening_log"
         else
             if gcloud compute security-policies rules create 2147483647 \
-                --action=deny-502 \
+                --action=deny-403 \
                 --security-policy="$security_policy_name" \
-                --description="default rule" \
+                --description="Default Deny - All Traffic" \
                 --src-ip-ranges='*' \
                 --project="$project_id" 2>>"$hardening_log"; then
                 echo -e "${LGREEN}    [✓] Regla por defecto creada${NC}" | tee -a "$hardening_log"
@@ -565,7 +565,7 @@ function apply_cluster_hardening() {
         fi
         
     else
-        # === REGLAS PARA QA/UAT (7 reglas) ===
+        # === REGLAS PARA QA/UAT (5 reglas) ===
         echo "[HARDENING] === PASO 2/6: Aplicando reglas para ambiente QA/UAT ===" | tee -a "$hardening_log"
         
         # Regla 1: CVE-Canary (Prioridad 1)
@@ -587,103 +587,65 @@ function apply_cluster_hardening() {
             fi
         fi
         
-        # Regla 2: API Manager VMs Public IP for QA (Prioridad 90)
-        echo "[HARDENING]   • Regla 2: API Manager VMs Public IP for QA (allow)" | tee -a "$hardening_log"
+        # Regla 2: NAT IPs servicios compartidos (Prioridad 90)
+        echo "[HARDENING]   • Regla 2: NAT IPs servicios compartidos - Apigee, Nexus, etc. (allow)" | tee -a "$hardening_log"
         if gcloud compute security-policies rules describe 90 \
             --security-policy="$security_policy_name" \
             --project="$project_id" &>/dev/null; then
-            echo -e "${YELLOW}    [!] Regla API Manager (90) ya existe${NC}" | tee -a "$hardening_log"
+            echo -e "${YELLOW}    [!] Regla NAT servicios compartidos (90) ya existe${NC}" | tee -a "$hardening_log"
         else
             if gcloud compute security-policies rules create 90 \
                 --action=allow \
                 --security-policy="$security_policy_name" \
-                --description="API Manager VMs Public IP for QA" \
-                --src-ip-ranges="34.10.190.252,34.10.190.252,34.10.190.252,34.10.190.252" \
+                --description="NAT IP addressess on gnp-red-data-central for shared services (eg. Apigee, Nexus, etc.)" \
+                --src-ip-ranges="35.223.194.216,34.121.174.67,35.194.4.57,35.223.189.203,35.194.34.199,34.41.162.56,35.225.224.36,34.55.188.137,34.16.70.194,104.197.124.115" \
                 --project="$project_id" 2>>"$hardening_log"; then
-                echo -e "${LGREEN}    [✓] Regla API Manager creada${NC}" | tee -a "$hardening_log"
+                echo -e "${LGREEN}    [✓] Regla NAT servicios compartidos creada${NC}" | tee -a "$hardening_log"
             else
-                echo -e "${YELLOW}    [!] Falló creación de regla API Manager${NC}" | tee -a "$hardening_log"
+                echo -e "${YELLOW}    [!] Falló creación de regla NAT servicios compartidos${NC}" | tee -a "$hardening_log"
             fi
         fi
         
-        # Regla 3: Apigee NAT red central IPs (Prioridad 91)
-        echo "[HARDENING]   • Regla 3: Apigee NAT red central IPs (allow)" | tee -a "$hardening_log"
+        # Regla 3: F5 IPs (Prioridad 91)
+        echo "[HARDENING]   • Regla 3: F5 IPs (allow)" | tee -a "$hardening_log"
         if gcloud compute security-policies rules describe 91 \
             --security-policy="$security_policy_name" \
             --project="$project_id" &>/dev/null; then
-            echo -e "${YELLOW}    [!] Regla Apigee NAT (91) ya existe${NC}" | tee -a "$hardening_log"
+            echo -e "${YELLOW}    [!] Regla F5 (91) ya existe${NC}" | tee -a "$hardening_log"
         else
             if gcloud compute security-policies rules create 91 \
                 --action=allow \
                 --security-policy="$security_policy_name" \
-                --description="Apigee NAT red central IPs" \
-                --src-ip-ranges="35.223.194.216,34.121.174.67,35.194.4.57,35.223.189.203" \
+                --description="IP addressess related to F5" \
+                --src-ip-ranges="34.123.237.82,35.184.162.71,35.238.84.248,34.121.197.40,34.71.3.13,34.123.202.20" \
                 --project="$project_id" 2>>"$hardening_log"; then
-                echo -e "${LGREEN}    [✓] Regla Apigee NAT creada${NC}" | tee -a "$hardening_log"
+                echo -e "${LGREEN}    [✓] Regla F5 creada${NC}" | tee -a "$hardening_log"
             else
-                echo -e "${YELLOW}    [!] Falló creación de regla Apigee NAT${NC}" | tee -a "$hardening_log"
+                echo -e "${YELLOW}    [!] Falló creación de regla F5${NC}" | tee -a "$hardening_log"
             fi
         fi
         
-        # Regla 4: ZScaler IP Range (Prioridad 92)
-        echo "[HARDENING]   • Regla 4: ZScaler IP Range (allow)" | tee -a "$hardening_log"
+        # Regla 4: ZSCaler IP Range (Prioridad 92)
+        echo "[HARDENING]   • Regla 4: ZSCaler IP Range (allow)" | tee -a "$hardening_log"
         if gcloud compute security-policies rules describe 92 \
             --security-policy="$security_policy_name" \
             --project="$project_id" &>/dev/null; then
-            echo -e "${YELLOW}    [!] Regla ZScaler (92) ya existe${NC}" | tee -a "$hardening_log"
+            echo -e "${YELLOW}    [!] Regla ZSCaler (92) ya existe${NC}" | tee -a "$hardening_log"
         else
             if gcloud compute security-policies rules create 92 \
                 --action=allow \
                 --security-policy="$security_policy_name" \
-                --description="ZScaler IP Range" \
+                --description="IP segment related to ZSCaler" \
                 --src-ip-ranges="10.67.126.0/24" \
                 --project="$project_id" 2>>"$hardening_log"; then
-                echo -e "${LGREEN}    [✓] Regla ZScaler creada${NC}" | tee -a "$hardening_log"
+                echo -e "${LGREEN}    [✓] Regla ZSCaler creada${NC}" | tee -a "$hardening_log"
             else
-                echo -e "${YELLOW}    [!] Falló creación de regla ZScaler${NC}" | tee -a "$hardening_log"
+                echo -e "${YELLOW}    [!] Falló creación de regla ZSCaler${NC}" | tee -a "$hardening_log"
             fi
         fi
         
-        # Regla 5: VM Servicio de cuentas para ambientes QA (Prioridad 93)
-        echo "[HARDENING]   • Regla 5: VM Servicio de cuentas para ambientes QA (allow)" | tee -a "$hardening_log"
-        if gcloud compute security-policies rules describe 93 \
-            --security-policy="$security_policy_name" \
-            --project="$project_id" &>/dev/null; then
-            echo -e "${YELLOW}    [!] Regla VM Servicio (93) ya existe${NC}" | tee -a "$hardening_log"
-        else
-            if gcloud compute security-policies rules create 93 \
-                --action=allow \
-                --security-policy="$security_policy_name" \
-                --description="VM Servicio de cuentas para ambientes QA" \
-                --src-ip-ranges="34.172.162.222,34.59.214.51" \
-                --project="$project_id" 2>>"$hardening_log"; then
-                echo -e "${LGREEN}    [✓] Regla VM Servicio creada${NC}" | tee -a "$hardening_log"
-            else
-                echo -e "${YELLOW}    [!] Falló creación de regla VM Servicio${NC}" | tee -a "$hardening_log"
-            fi
-        fi
-        
-        # Regla 6: F5 WAF IP Addresses (Prioridad 95)
-        echo "[HARDENING]   • Regla 6: F5 WAF IP Addresses (allow)" | tee -a "$hardening_log"
-        if gcloud compute security-policies rules describe 95 \
-            --security-policy="$security_policy_name" \
-            --project="$project_id" &>/dev/null; then
-            echo -e "${YELLOW}    [!] Regla F5 WAF (95) ya existe${NC}" | tee -a "$hardening_log"
-        else
-            if gcloud compute security-policies rules create 95 \
-                --action=allow \
-                --security-policy="$security_policy_name" \
-                --description="F5 WAF IP Addresses" \
-                --src-ip-ranges="34.123.237.82,35.184.162.71,35.238.84.248,34.121.197.40,34.71.3.13,34.123.202.20,55.239.56.35" \
-                --project="$project_id" 2>>"$hardening_log"; then
-                echo -e "${LGREEN}    [✓] Regla F5 WAF creada${NC}" | tee -a "$hardening_log"
-            else
-                echo -e "${YELLOW}    [!] Falló creación de regla F5 WAF${NC}" | tee -a "$hardening_log"
-            fi
-        fi
-        
-        # Regla 7: Default rule - Deny all (Prioridad 2147483647)
-        echo "[HARDENING]   • Regla 7: Default rule (deny-403)" | tee -a "$hardening_log"
+        # Regla 5: Default rule - Deny all (Prioridad 2147483647)
+        echo "[HARDENING]   • Regla 5: Default rule - The Internet (deny-403)" | tee -a "$hardening_log"
         if gcloud compute security-policies rules describe 2147483647 \
             --security-policy="$security_policy_name" \
             --project="$project_id" &>/dev/null; then
@@ -692,7 +654,7 @@ function apply_cluster_hardening() {
             if gcloud compute security-policies rules create 2147483647 \
                 --action=deny-403 \
                 --security-policy="$security_policy_name" \
-                --description="Default rule, higher priority overrides it" \
+                --description="The Internet" \
                 --src-ip-ranges='*' \
                 --project="$project_id" 2>>"$hardening_log"; then
                 echo -e "${LGREEN}    [✓] Regla por defecto creada${NC}" | tee -a "$hardening_log"

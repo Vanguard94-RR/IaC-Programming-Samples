@@ -87,7 +87,8 @@ fi
 
 # Get current CORS configuration to backup
 echo "Backing up current CORS configuration..."
-BACKUP_FILE="cors-backup-$(date +%Y%m%d-%H%M%S).json"
+mkdir -p backups
+BACKUP_FILE="backups/cors-backup-$(date +%Y%m%d-%H%M%S).json"
 gsutil cors get "gs://$BUCKET_NAME" > "$BACKUP_FILE" 2>/dev/null || echo "[]" > "$BACKUP_FILE"
 echo "Backup saved to: $BACKUP_FILE"
 

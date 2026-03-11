@@ -1,7 +1,7 @@
 [
   {
     "origin": ["https://app.example.com", "https://www.example.com"],
-    "responseHeader": ["Content-Type", "Content-Length", "Authorization"],
+    "responseHeader": ["Content-Type", "Cache-Control"],
     "method": ["GET", "HEAD"],
     "maxAgeSeconds": 3600
   }
