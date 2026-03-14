@@ -4,21 +4,26 @@
 # Configure GCP Workload Identity between GCP SA and Kubernetes SA
 # 
 # Project: GCP Infrastructure Management
-# Version: 2.0.0
+# Version: 3.0.0
 # Author: Infrastructure Team
 # License: Internal Use
 #
 # Features:
 #   - Interactive menu system with colored output
+#   - CLI non-interactive mode (setup/verify/cleanup/list/bulk-setup)
+#   - Dry-run mode: preview all operations without executing
+#   - Bulk setup from CSV file for batch provisioning
+#   - Structured monthly audit log (logs/audit/audit_YYYY-MM.log)
 #   - Automatic ticket-based log organization
 #   - CSV registry of all operations with status tracking
 #   - Robust error handling and validation
-#   - Support for batch operations
 #
 # Usage:
 #   ./workload-identity.sh              # Run interactive menu
 #   ./workload-identity.sh --help       # Show help
 #   ./workload-identity.sh --version    # Show version
+#   ./workload-identity.sh setup --project P --ksa K [--dry-run]
+#   ./workload-identity.sh bulk-setup --file configs.csv
 # =============================================================================
 
 # Script safety settings
@@ -26,7 +31,7 @@ set -euo pipefail
 IFS=$'\n\t'
 
 # Metadata
-readonly G_VERSION="2.0.0"
+readonly G_VERSION="3.0.0"
 readonly G_SCRIPT_NAME="Workload Identity Manager"
 readonly G_SCRIPT_DESC="Configure GCP Workload Identity between GCP SA and Kubernetes SA"
 
@@ -75,6 +80,19 @@ readonly G_IAM_ROLE="${WI_IAM_ROLE:-roles/iam.workloadIdentityUser}"
 readonly G_DEFAULT_NS="${WI_DEFAULT_NAMESPACE:-apps}"
 readonly G_ANNOTATION_KEY="${WI_ANNOTATION_KEY:-iam.gke.io/gcp-service-account}"
 readonly G_REGISTRY_FILE="${WI_REGISTRY_FILE:-$G_SCRIPT_DIR/workload-identity-registry.csv}"
+G_DRY_RUN="${WI_DRY_RUN:-0}"   # 1 = preview commands only, 0 = execute normally
+
+# CLI mode prefill variables (empty = interactive, non-empty = auto-fill)
+G_CLI_MODE=0
+G_CLI_PROJECT=""
+G_CLI_CLUSTER=""
+G_CLI_NAMESPACE=""
+G_CLI_KSA=""
+G_CLI_IAM_SA=""
+G_CLI_TICKET=""
+G_CLI_CLEANUP_LEVEL=""
+G_CLI_OPERATION=""
+G_CLI_BULK_FILE=""
 
 # Cleanup on exit
 trap 'cleanup' EXIT
@@ -155,6 +173,44 @@ update_registry_status() {
     
     mv "$temp_file" "$G_CONTROL_FILE"
     chmod 600 "$G_CONTROL_FILE"
+}
+
+# =============================================================================
+# Function: audit_log
+# Description: Append one structured line to the monthly audit log file
+# Parameters:
+#   $1 = operation  (setup|verify|cleanup|list|bulk-setup)
+#   $2 = project
+#   $3 = cluster
+#   $4 = namespace
+#   $5 = ksa
+#   $6 = result     (SUCCESS|FAILED|DRY-RUN|PARTIAL)
+#   $7 = detail     (optional, error message or extra info)
+# =============================================================================
+audit_log() {
+    local operation="$1"
+    local project="${2:--}"
+    local cluster="${3:--}"
+    local namespace="${4:--}"
+    local ksa="${5:--}"
+    local result="${6:-SUCCESS}"
+    local detail="${7:-}"
+
+    local audit_dir="$G_SCRIPT_DIR/logs/audit"
+    mkdir -p "$audit_dir" 2>/dev/null || true
+
+    local audit_file="$audit_dir/audit_$(date '+%Y-%m').log"
+    local timestamp
+    timestamp=$(date '+%Y-%m-%dT%H:%M:%S')
+    local user
+    user=$(gcloud config get-value account 2>/dev/null || echo "unknown")
+    local dry_tag=""
+    [[ "$G_DRY_RUN" == "1" ]] && dry_tag=" [DRY-RUN]"
+
+    printf '%s | user=%s | op=%s%s | project=%s | cluster=%s | ns=%s | ksa=%s | result=%s%s\n' \
+        "$timestamp" "$user" "$operation" "$dry_tag" \
+        "$project" "$cluster" "$namespace" "$ksa" \
+        "$result" "${detail:+ | detail=$detail}" >> "$audit_file"
 }
 
 # --- Setup log directory (called after ticket input) ---
@@ -275,6 +331,23 @@ prompt_input() {
     local variable_name="$2"
     local default_value="${3:-}"
     
+    # CLI mode: use pre-filled globals rather than prompting
+    if [[ "$G_CLI_MODE" == "1" ]]; then
+        local cli_val=""
+        case "$variable_name" in
+            project_id|TICKET_ID) [[ "$variable_name" == "project_id" ]] && cli_val="$G_CLI_PROJECT" || cli_val="$G_CLI_TICKET" ;;
+            namespace)   cli_val="$G_CLI_NAMESPACE" ;;
+            ksa_name)    cli_val="$G_CLI_KSA" ;;
+            iam_sa_name) cli_val="$G_CLI_IAM_SA" ;;
+        esac
+        # Use CLI value, then default, then leave empty
+        local resolved="${cli_val:-${default_value:-}}"
+        eval "$variable_name='$resolved'"
+        echo -e "${GRAY}  (CLI) ${prompt_text}: ${resolved:-<empty>}${NC}" >&2
+        log "CLI Input - ${prompt_text}: ${resolved}"
+        return 0
+    fi
+    
     if [[ -n "$default_value" ]]; then
         echo -ne "${YELLOW}${prompt_text} [${default_value}]: ${NC}"
     else
@@ -298,6 +371,14 @@ prompt_selection() {
     
     local -n options="$options_var"
     local count=${#options[@]}
+    
+    # CLI mode: auto-select first option when no GUI interaction available
+    if [[ "$G_CLI_MODE" == "1" ]]; then
+        eval "$result_var='${options[0]}'"
+        echo -e "${GRAY}  (CLI) ${prompt_text}: ${options[0]}${NC}" >&2
+        log "CLI Selection - ${prompt_text}: ${options[0]}"
+        return 0
+    fi
     
     echo -e "${WHITE}${prompt_text}${NC}"
     echo ""
@@ -387,6 +468,21 @@ retry_gcloud_command() {
 }
 
 # =============================================================================
+# Function: exec_cmd
+# Description: Execute a command, or print it in dry-run mode instead
+# Parameters: $@ = command and all arguments
+# Returns: 0=success (real or dry-run), non-zero=error
+# =============================================================================
+exec_cmd() {
+    if [[ "$G_DRY_RUN" == "1" ]]; then
+        echo -e "  ${YELLOW}[DRY-RUN]${NC} ${GRAY}$*${NC}" >&2
+        log "DRY-RUN: $*"
+        return 0
+    fi
+    "$@"
+}
+
+# =============================================================================
 # Function: select_cluster_from_project
 # Description: Interactive cluster selection from GCP project
 # Parameters: 
@@ -398,6 +494,21 @@ retry_gcloud_command() {
 select_cluster_from_project() {
     local project_id="$1"
     local prompt_msg="${2:-Select GKE cluster:}"
+    
+    # CLI mode: if --cluster was provided, resolve its location and use it directly
+    if [[ "$G_CLI_MODE" == "1" ]] && [[ -n "$G_CLI_CLUSTER" ]]; then
+        local cluster_location
+        cluster_location=$(gcloud container clusters list --project "$project_id" \
+            --filter="name=$G_CLI_CLUSTER" --format="value(location)" 2>/dev/null)
+        if [[ -z "$cluster_location" ]]; then
+            print_error "Cluster '$G_CLI_CLUSTER' no encontrado en proyecto $project_id"
+            return 1
+        fi
+        SELECTED_CLUSTER="$G_CLI_CLUSTER"
+        SELECTED_LOCATION="$cluster_location"
+        echo -e "${GRAY}  (CLI) Cluster: $SELECTED_CLUSTER ($SELECTED_LOCATION)${NC}" >&2
+        return 0
+    fi
     
     # List clusters from project
     local clusters_raw=$(list_gke_clusters "$project_id")
@@ -525,27 +636,16 @@ connect_to_cluster() {
     # Determine if regional or zonal
     if [[ "$location" =~ ^[a-z]+-[a-z]+[0-9]+$ ]]; then
         # Regional (e.g., us-central1)
-        if [[ -n "$G_LOG_FILE" ]]; then
-            gcloud container clusters get-credentials "$cluster_name" \
-                --region "$location" \
-                --project "$project_id" 2>&1 | tee -a "$G_LOG_FILE"
-        else
-            gcloud container clusters get-credentials "$cluster_name" \
-                --region "$location" \
-                --project "$project_id" &>/dev/null
-        fi
+        exec_cmd gcloud container clusters get-credentials "$cluster_name" \
+            --region "$location" \
+            --project "$project_id" &>/dev/null
     else
         # Zonal (e.g., us-central1-a)
-        if [[ -n "$G_LOG_FILE" ]]; then
-            gcloud container clusters get-credentials "$cluster_name" \
-                --zone "$location" \
-                --project "$project_id" 2>&1 | tee -a "$G_LOG_FILE"
-        else
-            gcloud container clusters get-credentials "$cluster_name" \
-                --zone "$location" \
-                --project "$project_id" &>/dev/null
-        fi
+        exec_cmd gcloud container clusters get-credentials "$cluster_name" \
+            --zone "$location" \
+            --project "$project_id" &>/dev/null
     fi
+    log "Connected to cluster: $cluster_name"
 }
 
 verify_iam_sa() {
@@ -570,9 +670,9 @@ create_iam_sa() {
     
     log "Creating IAM Service Account: $sa_name"
     
-    gcloud iam service-accounts create "$sa_name" \
+    exec_cmd gcloud iam service-accounts create "$sa_name" \
         --project "$project_id" \
-        --display-name "$display_name" 2>&1 | tee -a "$G_LOG_FILE"
+        --display-name "$display_name"
     
     log "✓ IAM SA created: $sa_name@${project_id}.iam.gserviceaccount.com"
 }
@@ -585,7 +685,7 @@ create_namespace() {
         return 0
     fi
     
-    kubectl create namespace "$namespace" 2>&1 | tee -a "$G_LOG_FILE"
+    exec_cmd kubectl create namespace "$namespace"
 }
 
 create_ksa() {
@@ -599,7 +699,7 @@ create_ksa() {
     
     log "Creating Kubernetes Service Account: $ksa_name in $namespace"
     
-    kubectl create serviceaccount "$ksa_name" -n "$namespace" 2>&1 | tee -a "$G_LOG_FILE"
+    exec_cmd kubectl create serviceaccount "$ksa_name" -n "$namespace"
     
     log "✓ KSA created: $ksa_name in $namespace"
 }
@@ -612,10 +712,10 @@ add_iam_binding() {
     
     local member="serviceAccount:${project_id}.svc.id.goog[${namespace}/${ksa_name}]"
     
-    gcloud iam service-accounts add-iam-policy-binding "$iam_sa_email" \
+    exec_cmd gcloud iam service-accounts add-iam-policy-binding "$iam_sa_email" \
         --project "$project_id" \
         --role "$G_IAM_ROLE" \
-        --member "$member" 2>&1 | tee -a "$G_LOG_FILE"
+        --member "$member"
 }
 
 annotate_ksa() {
@@ -623,10 +723,10 @@ annotate_ksa() {
     local namespace="$2"
     local iam_sa_email="$3"
     
-    kubectl annotate serviceaccount "$ksa_name" \
+    exec_cmd kubectl annotate serviceaccount "$ksa_name" \
         --namespace "$namespace" \
-        "${G_ANNOTATION_KEY}=\"${iam_sa_email}\"" \
-        --overwrite 2>&1 | tee -a "$G_LOG_FILE"
+        "${G_ANNOTATION_KEY}=${iam_sa_email}" \
+        --overwrite
 }
 
 remove_iam_binding() {
@@ -637,10 +737,10 @@ remove_iam_binding() {
     
     local member="serviceAccount:${project_id}.svc.id.goog[${namespace}/${ksa_name}]"
     
-    gcloud iam service-accounts remove-iam-policy-binding "$iam_sa_email" \
+    exec_cmd gcloud iam service-accounts remove-iam-policy-binding "$iam_sa_email" \
         --project "$project_id" \
         --role "$G_IAM_ROLE" \
-        --member "$member" 2>&1 | tee -a "$G_LOG_FILE"
+        --member "$member"
 }
 
 delete_ksa() {
@@ -649,7 +749,7 @@ delete_ksa() {
     
     log "Deleting Kubernetes Service Account: $ksa_name from $namespace"
     
-    kubectl delete serviceaccount "$ksa_name" -n "$namespace" 2>&1 | tee -a "$G_LOG_FILE"
+    exec_cmd kubectl delete serviceaccount "$ksa_name" -n "$namespace"
     
     log "✓ KSA deleted: $ksa_name from $namespace"
 }
@@ -726,56 +826,75 @@ show_help() {
   ╚════════════════════════════════════════════════════════════════╝
 
   DESCRIPCIÓN:
-    Herramienta interactiva para configurar GCP Workload Identity
-    entre Service Accounts de GCP y Kubernetes.
+    Herramienta para configurar GCP Workload Identity entre
+    Service Accounts de GCP y Kubernetes. Soporta modo interactivo
+    y modo CLI no-interactivo.
 
   USO:
-    ./workload-identity.sh              # Run interactive menu
-    ./workload-identity.sh --help       # Show this help
-    ./workload-identity.sh --version    # Show version
+    ./workload-identity.sh                            # Menú interactivo
+    ./workload-identity.sh --help                     # Esta ayuda
+    ./workload-identity.sh --version                  # Versión
+    ./workload-identity.sh setup   [FLAGS]            # Configurar WI
+    ./workload-identity.sh verify  [FLAGS]            # Verificar WI
+    ./workload-identity.sh cleanup [FLAGS]            # Eliminar WI
+    ./workload-identity.sh list    [FLAGS]            # Listar WIs
+    ./workload-identity.sh bulk-setup --file FILE     # Configurar en lote
 
-  MENU OPTIONS:
-    1) Configure Workload Identity
-       - Creates and configures binding between IAM SA and KSA
-       - Records operation in CSV
-       - Organizes logs by ticket
+  FLAGS DISPONIBLES:
+    --project,   -p  PROJECT    GCP Project ID
+    --cluster,   -c  CLUSTER    Nombre del cluster GKE
+    --namespace, -n  NAMESPACE  Namespace de Kubernetes (default: apps)
+    --ksa,       -k  KSA        Nombre del Kubernetes Service Account
+    --iam-sa,    -s  EMAIL       Email del IAM Service Account
+    --ticket,    -t  TICKET     Número de ticket (ej. CTASK0012345)
+    --level,     -l  LEVEL      Nivel de limpieza: 1=binding, 2=+ksa, 3=todo
+    --file,      -f  FILE       CSV de configuraciones para bulk-setup
+    --dry-run                   Previsualiza cambios sin ejecutarlos
 
-    2) Verify Workload Identity
-       - Validates IAM SA exists
-       - Validates KSA exists
-       - Verifies annotation and binding
+  OPERACIONES:
+    setup:   Crea IAM SA, KSA, binding y anotación
+    verify:  Verifica que WI esté correctamente configurado
+    cleanup: Elimina binding, KSA y/o IAM SA
+    list:    Lista KSAs con anotación de WI en un namespace
+    bulk-setup: Procesa múltiples configuraciones desde un archivo CSV
 
-    3) Delete Workload Identity
-       - Shows active configurations
-       - Allows selecting deletion level
-       - Updates status in registry
+  EJEMPLOS:
+    # 1. Modo interactivo (menú guiado):
+    $ ./workload-identity.sh
 
-    4) List Workload Identities
-       - Shows projects from registry
-       - Shows available clusters
-       - Lists KSAs with Workload Identity
+    # 2. Configurar WI en modo CLI:
+    $ ./workload-identity.sh setup \
+        --project gnp-covid-qa \
+        --cluster gke-gnp-covid-qa \
+        --namespace apps \
+        --ksa myapp \
+        --iam-sa myapp@gnp-covid-qa.iam.gserviceaccount.com \
+        --ticket CTASK0012345
 
-    5) View Operations Registry
-       - Shows latest operations
-       - Indicates status (active/deleted)
+    # 3. Dry-run (previsualizar sin ejecutar):
+    $ ./workload-identity.sh setup \
+        --project gnp-covid-qa --ksa myapp --dry-run
+
+    # 4. Eliminar todo (binding + KSA + IAM SA):
+    $ ./workload-identity.sh cleanup \
+        --project gnp-covid-qa --ksa myapp --namespace apps --level 3
+
+    # 5. Bulk setup desde CSV:
+    $ ./workload-identity.sh bulk-setup --file configs.csv
+    # CSV formato: project,cluster,namespace,ksa,iam_sa,ticket
+
+  ARCHIVOS:
+    workload-identity-registry.csv    Registro de operaciones
+    config.sh                         Configuración externa
+    logs/audit/audit_YYYY-MM.log      Auditoría estructurada
+    logs/                             Logs locales de sesión
+    Tickets/[TICKET]/logs/            Logs organizados por ticket
 
   REQUIREMENTS:
-    - gcloud CLI authenticated
-    - kubectl configured
-    - IAM permissions to create service accounts
-    - Access to GKE clusters
-
-  FILES:
-    workload-identity-registry.csv    Operations registry
-    logs/                             Local logs
-    Tickets/[TICKET]/logs/            Logs organized by ticket
-
-  EXAMPLES:
-    $ ./workload-identity.sh
-    > Select option 1 to configure
-
-  DOCUMENTATION:
-    README.md                         Complete documentation
+    - gcloud CLI autenticado
+    - kubectl configurado
+    - Permisos IAM para crear service accounts
+    - Acceso a clusters GKE
 
 HELP_TEXT
 }
@@ -797,7 +916,10 @@ show_version() {
   Repositorio:     IaC-Programming-Samples
 
   Features:
-    ✓ Interactive interface
+    ✓ Interactive interface + CLI non-interactive mode
+    ✓ Dry-run mode (preview without executing)
+    ✓ Bulk setup from CSV file
+    ✓ Structured audit log (logs/audit/)
     ✓ Organization by tickets
     ✓ Registro CSV de operaciones
     ✓ Robust validation
@@ -1074,10 +1196,13 @@ operation_setup() {
     echo -e "${GRAY}Record added to: $G_CONTROL_FILE${NC}"
     log "Session completed successfully"
     log "Registered in control file: $G_CONTROL_FILE"
+    audit_log "setup" "$project_id" "$selected_cluster" "$namespace" "$ksa_name" "SUCCESS"
     
     echo ""
-    echo -ne "${YELLOW}Press Enter to continue...${NC}"
-    read
+    if [[ "$G_CLI_MODE" == "0" ]]; then
+        echo -ne "${YELLOW}Press Enter to continue...${NC}"
+        read
+    fi
 }
 
 # =============================================================================
@@ -1448,8 +1573,14 @@ operation_cleanup() {
     echo -e "  ${LCYAN}3)${NC} Delete everything (binding + KSA + IAM SA)"
     echo -e "  ${LCYAN}0)${NC} Cancel"
     echo ""
-    echo -ne "${YELLOW}Select an option: ${NC}"
-    read cleanup_option
+    local cleanup_option=""
+    if [[ "$G_CLI_MODE" == "1" ]] && [[ -n "$G_CLI_CLEANUP_LEVEL" ]]; then
+        cleanup_option="$G_CLI_CLEANUP_LEVEL"
+        echo -e "${GRAY}  (CLI) Nivel de limpieza: $cleanup_option${NC}" >&2
+    else
+        echo -ne "${YELLOW}Select an option: ${NC}"
+        read cleanup_option
+    fi
     
     if [[ "$cleanup_option" == "0" ]]; then
         print_warning "Operation cancelled"
@@ -1468,16 +1599,17 @@ operation_cleanup() {
     fi
     
     echo ""
-    echo -e "${RED}⚠ This action cannot be undone${NC}"
-    echo -ne "${YELLOW}Are you sure? (Y/N): ${NC}"
-    read confirm
-    
-    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-        print_warning "Operation cancelled"
-        echo ""
-        echo -ne "${YELLOW}Press Enter to continue...${NC}"
-        read
-        return 0
+    if [[ "$G_CLI_MODE" == "0" ]]; then
+        echo -e "${RED}⚠ This action cannot be undone${NC}"
+        echo -ne "${YELLOW}Are you sure? (Y/N): ${NC}"
+        read confirm
+        if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+            print_warning "Operation cancelled"
+            echo ""
+            echo -ne "${YELLOW}Press Enter to continue...${NC}"
+            read
+            return 0
+        fi
     fi
     
     echo ""
@@ -1490,7 +1622,7 @@ operation_cleanup() {
     
     confirm_message+=$'\n\nProject: '"$project_id"$'\nCluster: '"$selected_cluster"$'\nNamespace: '"$namespace"$'\nKSA: '"$ksa_name"
     
-    if ! ask_confirmation "$confirm_message" "delete"; then
+    if [[ "$G_CLI_MODE" == "0" ]] && ! ask_confirmation "$confirm_message" "delete"; then
         return 0
     fi
     
@@ -1514,7 +1646,7 @@ operation_cleanup() {
     
     # Step 2: Remove annotation
     echo -ne "${WHITE}[${step}/${total_steps}]${NC} Removing KSA annotation..."
-    if kubectl annotate serviceaccount "$ksa_name" -n "$namespace" "iam.gke.io/gcp-service-account-" >/dev/null 2>&1; then
+    if exec_cmd kubectl annotate serviceaccount "$ksa_name" -n "$namespace" "iam.gke.io/gcp-service-account-" >/dev/null 2>&1; then
         echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Removing KSA annotation... ${LGREEN}✓${NC}"
     else
         echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Removing KSA annotation... ${YELLOW}(may not exist)${NC}"
@@ -1536,7 +1668,7 @@ operation_cleanup() {
     if [[ "$cleanup_option" == "3" ]]; then
         echo -ne "${WHITE}[${step}/${total_steps}]${NC} Deleting IAM account..."
         local delete_sa_error=""
-        if delete_sa_error=$(gcloud iam service-accounts delete "$annotation" --project "$project_id" --quiet 2>&1); then
+        if delete_sa_error=$(exec_cmd gcloud iam service-accounts delete "$annotation" --project "$project_id" --quiet 2>&1); then
             echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Deleting IAM account... ${LGREEN}✓${NC}"
             log "IAM SA deleted: $annotation"
         else
@@ -1580,10 +1712,13 @@ operation_cleanup() {
     echo -e "  • Status: ${LGREEN}${status_text}${NC}"
     
     log "Cleanup completed for $ksa_name in $namespace - Status: $status_text"
+    audit_log "cleanup" "$project_id" "$selected_cluster" "$namespace" "$ksa_name" "SUCCESS" "$status_text"
     
     echo ""
-    echo -ne "${YELLOW}Press Enter to continue...${NC}"
-    read
+    if [[ "$G_CLI_MODE" == "0" ]]; then
+        echo -ne "${YELLOW}Press Enter to continue...${NC}"
+        read
+    fi
 }
 
 # =============================================================================
@@ -1823,6 +1958,76 @@ operation_view_registry() {
 }
 
 # =============================================================================
+# Operation: Bulk Setup (CLI only)
+# =============================================================================
+# Reads a CSV file with columns: project,cluster,namespace,ksa,iam_sa,ticket
+# Skips the header row. Empty iam_sa = auto-generate from ksa name.
+# =============================================================================
+operation_bulk_setup() {
+    local file="${G_CLI_BULK_FILE:-}"
+
+    if [[ -z "$file" ]]; then
+        echo -e "${RED}✗ --file is required for bulk-setup${NC}" >&2
+        echo -e "${GRAY}  Example: ./workload-identity.sh bulk-setup --file configs.csv${NC}" >&2
+        exit 1
+    fi
+
+    if [[ ! -f "$file" ]]; then
+        echo -e "${RED}✗ File not found: $file${NC}" >&2
+        exit 1
+    fi
+
+    local total=0 succeeded=0 failed=0
+    local failed_list=()
+
+    print_header "Bulk Setup - Workload Identity"
+    echo -e "${GRAY}File: $file${NC}"
+    [[ "$G_DRY_RUN" == "1" ]] && echo -e "${YELLOW}Mode: DRY-RUN (no changes will be applied)${NC}"
+    echo ""
+
+    while IFS=',' read -r b_project b_cluster b_namespace b_ksa b_iam_sa b_ticket; do
+        # Skip blank lines and header
+        [[ -z "$b_project" || "$b_project" == "project" ]] && continue
+        ((total++))
+
+        # Override CLI globals for this row
+        G_CLI_PROJECT="$b_project"
+        G_CLI_CLUSTER="$b_cluster"
+        G_CLI_NAMESPACE="${b_namespace:-$G_DEFAULT_NS}"
+        G_CLI_KSA="$b_ksa"
+        G_CLI_IAM_SA="${b_iam_sa:-${b_ksa}@${b_project}.iam.gserviceaccount.com}"
+        G_CLI_TICKET="${b_ticket:-}"
+
+        echo -e "${WHITE}[$total]${NC} ${LCYAN}${b_project}${NC} / ${b_cluster} / ${b_namespace} / ${b_ksa}"
+
+        if operation_setup 2>&1; then
+            ((succeeded++))
+            echo -e "    ${LGREEN}✓ Done${NC}"
+            audit_log "bulk-setup" "$b_project" "$b_cluster" "$b_namespace" "$b_ksa" "SUCCESS"
+        else
+            ((failed++))
+            failed_list+=("$b_project/$b_ksa")
+            echo -e "    ${RED}✗ Failed${NC}"
+            audit_log "bulk-setup" "$b_project" "$b_cluster" "$b_namespace" "$b_ksa" "FAILED"
+        fi
+        echo ""
+    done < "$file"
+
+    # Summary
+    print_header "Bulk Setup Summary"
+    echo -e "  Total:    ${WHITE}$total${NC}"
+    echo -e "  Success:  ${LGREEN}$succeeded${NC}"
+    echo -e "  Failed:   ${RED}$failed${NC}"
+    if [[ ${#failed_list[@]} -gt 0 ]]; then
+        echo -e "\n${RED}Failed entries:${NC}"
+        for entry in "${failed_list[@]}"; do
+            echo -e "  • $entry"
+        done
+    fi
+    [[ $failed -gt 0 ]] && exit 1 || exit 0
+}
+
+# =============================================================================
 # Main Menu Loop
 # =============================================================================
 
@@ -1865,9 +2070,13 @@ main() {
 
 # Handle command line arguments
 main_entry() {
-    local arg="${1:-}"
-    
-    case "$arg" in
+    # No arguments → interactive menu
+    [[ $# -eq 0 ]] && return 0
+
+    local subcommand="${1:-}"
+    shift || true
+
+    case "$subcommand" in
         --help|-h)
             show_help
             exit 0
@@ -1876,15 +2085,36 @@ main_entry() {
             show_version
             exit 0
             ;;
-        "")
-            # No arguments - run interactive menu
+        setup|verify|cleanup|list|bulk-setup)
+            G_CLI_MODE=1
+            G_CLI_OPERATION="$subcommand"
             ;;
         *)
-            echo -e "${RED}✗ Argumento no reconocido: $arg${NC}"
-            echo -e "Use: ./workload-identity.sh --help for more information"
+            echo -e "${RED}✗ Argumento no reconocido: $subcommand${NC}"
+            echo -e "Use: ./workload-identity.sh --help para más información"
             exit 1
             ;;
     esac
+
+    # Parse flags for CLI subcommands
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --project|-p)    G_CLI_PROJECT="${2:-}";  shift 2 ;;
+            --cluster|-c)    G_CLI_CLUSTER="${2:-}";  shift 2 ;;
+            --namespace|-n)  G_CLI_NAMESPACE="${2:-}"; shift 2 ;;
+            --ksa|-k)        G_CLI_KSA="${2:-}";       shift 2 ;;
+            --iam-sa|-s)     G_CLI_IAM_SA="${2:-}";    shift 2 ;;
+            --ticket|-t)     G_CLI_TICKET="${2:-}";    shift 2 ;;
+            --level|-l)      G_CLI_CLEANUP_LEVEL="${2:-}"; shift 2 ;;
+            --file|-f)       G_CLI_BULK_FILE="${2:-}"; shift 2 ;;
+            --dry-run)       G_DRY_RUN=1; shift ;;
+            *)
+                echo -e "${RED}✗ Flag no reconocido: $1${NC}"
+                echo -e "Use: ./workload-identity.sh --help para más información"
+                exit 1
+                ;;
+        esac
+    done
 }
 
 # Check dependencies
@@ -1902,5 +2132,15 @@ init_control_file
 # Process arguments
 main_entry "$@"
 
-# Run main menu
-main "$@"
+# Dispatch: CLI mode or interactive menu
+if [[ "$G_CLI_MODE" == "1" ]]; then
+    case "$G_CLI_OPERATION" in
+        setup)       operation_setup ;;
+        verify)      operation_verify ;;
+        cleanup)     operation_cleanup ;;
+        list)        operation_list ;;
+        bulk-setup)  operation_bulk_setup ;;
+    esac
+else
+    main "$@"
+fi
