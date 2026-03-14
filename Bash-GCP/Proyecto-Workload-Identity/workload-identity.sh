@@ -797,7 +797,8 @@ select_cluster_from_project() {
     fi
     
     # List clusters from project
-    local clusters_raw=$(list_gke_clusters "$project_id")
+    local clusters_raw
+    clusters_raw=$(list_gke_clusters "$project_id")
     
     if [[ -z "$clusters_raw" ]]; then
         print_error "No GKE clusters found in project $project_id"
@@ -841,7 +842,8 @@ select_cluster_from_project() {
 # =============================================================================
 
 get_current_project() {
-    local project=$(gcloud config get-value project 2>/dev/null)
+    local project
+    project=$(gcloud config get-value project 2>/dev/null)
     [[ -n "$project" ]] && log_safe "Current GCP project: $project"
     echo "$project"
 }
@@ -1057,7 +1059,8 @@ list_workload_identities() {
     echo ""
     
     # Get all KSAs in namespace using kubectl
-    local ksa_output=$(kubectl get serviceaccounts -n "$namespace" -o json 2>/dev/null)
+    local ksa_output
+    ksa_output=$(kubectl get serviceaccounts -n "$namespace" -o json 2>/dev/null)
     
     if [[ -z "$ksa_output" ]]; then
         echo -e "  ${GRAY}No Service Accounts found in namespace${NC}"
@@ -1729,7 +1732,8 @@ operation_cleanup() {
     
     if [[ -f "$G_CONTROL_FILE" ]]; then
         # Get active records from CSV
-        local active_records=$(tail -n +2 "$G_CONTROL_FILE" | awk -F',' '$9 == "activo"')
+        local active_records
+        active_records=$(tail -n +2 "$G_CONTROL_FILE" | awk -F',' '$9 == "activo"')
         
         if [[ -n "$active_records" ]]; then
             echo -e "${WHITE}Active configurations in registry:${NC}"
@@ -1780,7 +1784,7 @@ operation_cleanup() {
                     annotation="${record_iam_sas[$sel_idx]}"
                     
                     echo ""
-                    echo -e "${LGREEN}✓ Selected:${NC} ${WHITE}$ksa_name${NC} en ${LCYAN}$namespace${NC}"
+                    echo -e "${LGREEN}✓ Selected:${NC} ${WHITE}$ksa_name${NC} in ${LCYAN}$namespace${NC}"
                     
                     # Connect to cluster
                     echo ""
@@ -1805,7 +1809,8 @@ operation_cleanup() {
     
     # --- Manual selection if not selected from registry ---
     if [[ -z "$project_id" ]]; then
-        local current_project=$(get_current_project)
+        local current_project
+        current_project=$(get_current_project)
         prompt_input "Enter Project ID" "project_id" "$current_project"
         
         echo ""
@@ -1868,7 +1873,7 @@ operation_cleanup() {
     local cleanup_option=""
     if [[ "$G_CLI_MODE" == "1" ]] && [[ -n "$G_CLI_CLEANUP_LEVEL" ]]; then
         cleanup_option="$G_CLI_CLEANUP_LEVEL"
-        echo -e "${GRAY}  (CLI) Nivel de limpieza: $cleanup_option${NC}" >&2
+        echo -e "${GRAY}  (CLI) Cleanup level: $cleanup_option${NC}" >&2
     else
         echo -ne "${YELLOW}Select an option: ${NC}"
         read cleanup_option
@@ -2241,7 +2246,7 @@ operation_view_registry() {
 # =============================================================================
 # Operation: Bulk Setup (CLI only)
 # =============================================================================
-# Reads a CSV file with columns: project,cluster,namespace,ksa,iam_sa,ticket
+# Reads a CSV file with columns: project_id,cluster,location,namespace,ksa,iam_sa,ticket
 # Skips the header row. Empty iam_sa = auto-generate from ksa name.
 # =============================================================================
 operation_bulk_setup() {
@@ -2486,7 +2491,7 @@ if [[ "${WI_UNIT_TEST:-0}" != "1" ]]; then
     for cmd in gcloud kubectl jq; do
         if ! command -v "$cmd" &>/dev/null; then
             echo -e "${RED}✗ Error: $cmd is not installed${NC}"
-            echo -e "${GRAY}Instale las herramientas necesarias e intente nuevamente${NC}"
+            echo -e "${GRAY}Please install the required tools and try again${NC}"
             exit 1
         fi
     done
