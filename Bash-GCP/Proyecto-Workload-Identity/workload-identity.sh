@@ -1535,9 +1535,8 @@ operation_cleanup() {
     # Step 4: Delete IAM SA (if option 3)
     if [[ "$cleanup_option" == "3" ]]; then
         echo -ne "${WHITE}[${step}/${total_steps}]${NC} Deleting IAM account..."
-        local delete_sa_error
-        delete_sa_error=$(gcloud iam service-accounts delete "$annotation" --project "$project_id" --quiet 2>&1)
-        if [[ $? -eq 0 ]]; then
+        local delete_sa_error=""
+        if delete_sa_error=$(gcloud iam service-accounts delete "$annotation" --project "$project_id" --quiet 2>&1); then
             echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Deleting IAM account... ${LGREEN}✓${NC}"
             log "IAM SA deleted: $annotation"
         else
