@@ -53,7 +53,8 @@ readonly G_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly G_BASE_DIR="$(dirname "$G_SCRIPT_DIR")"
 readonly G_TICKETS_DIR="$G_BASE_DIR/Tickets"
 readonly G_CONTROL_FILE="$G_SCRIPT_DIR/workload-identity-registry.csv"
-readonly G_TEMP_DIR="/tmp/workload-identity-$$"
+# Use mktemp for secure temporary directory (prevents symlink attacks)
+readonly G_TEMP_DIR="$(mktemp -d -t workload-identity.XXXXXX)"
 
 G_LOG_DIR=""
 G_LOG_FILE=""
@@ -73,10 +74,20 @@ mkdir -p "$G_TEMP_DIR"
 init_control_file() {
     if [[ ! -f "$G_CONTROL_FILE" ]]; then
         echo "Fecha,Ticket,ProjectId,Cluster,Location,Namespace,KSA,IAM_SA,Status" > "$G_CONTROL_FILE"
+        chmod 600 "$G_CONTROL_FILE"
     fi
     
-    # Secure file permissions (sensitive data)
-    chmod 600 "$G_CONTROL_FILE" 2>/dev/null || true
+    # Secure file permissions (sensitive data) - ensure they are strictly 600
+    if ! chmod 600 "$G_CONTROL_FILE" 2>/dev/null; then
+        echo -e "${RED}✗ Error: Cannot set secure permissions on $G_CONTROL_FILE${NC}" >&2
+        return 1
+    fi
+    
+    # Verify permissions were actually set to 600
+    local actual_perms=$(stat -f '%OA' "$G_CONTROL_FILE" 2>/dev/null || stat -c '%a' "$G_CONTROL_FILE" 2>/dev/null)
+    if [[ "$actual_perms" != "600" ]]; then
+        echo -e "${YELLOW}⚠ Warning: CSV file permissions may not be 600 (found: $actual_perms)${NC}" >&2
+    fi
     
     # Migrate old format if needed
     if [[ -f "$G_CONTROL_FILE" ]]; then
@@ -185,6 +196,25 @@ log() {
     echo "[$timestamp] $message" >> "$G_LOG_FILE"
 }
 
+# Function: log_safe
+# Description: Log messages with sensitive data (email addresses) redacted
+# Parameters: $1=message, $2=email (optional, will be redacted as <email_hash>)
+log_safe() {
+    local message="$1"
+    local email="${2:-}"
+    
+    # Redact email addresses if provided - replace with hash for privacy
+    if [[ -n "$email" ]]; then
+        local email_hash="<SA:$(echo -n "$email" | md5sum | cut -c1-8)>"
+        message="${message//$email/$email_hash}"
+    fi
+    
+    # Also redact any other email addresses in the message (pattern: *@*.iam.gserviceaccount.com)
+    message=$(echo "$message" | sed -E 's/[a-z0-9-]+@[a-z0-9-]+\.iam\.gserviceaccount\.com/<SA_EMAIL>/g')
+    
+    log "$message"
+}
+
 log_and_print() {
     local message="$1"
     local color="${2:-$NC}"
@@ -275,6 +305,72 @@ prompt_selection() {
         print_error "Invalid selection"
         return 1
     fi
+}
+
+# =============================================================================
+# Helper Functions for Reliability
+# =============================================================================
+
+# Function: check_gcloud_auth
+# Description: Verify gcloud authentication and refresh token if needed
+# Returns: 0=authenticated, 1=auth failed
+check_gcloud_auth() {
+    local max_attempts=3
+    local attempt=1
+    
+    while [[ $attempt -le $max_attempts ]]; do
+        # Check if gcloud can access current project
+        if gcloud auth list --filter=status:ACTIVE --format="value(account)" &>/dev/null; then
+            return 0
+        fi
+        
+        if [[ $attempt -lt $max_attempts ]]; then
+            echo -e "${YELLOW}⚠ gcloud authentication expired, refreshing...${NC}"
+            gcloud auth application-default print-access-token &>/dev/null
+            ((attempt++))
+            sleep 1
+        else
+            ((attempt++))
+        fi
+    done
+    
+    echo -e "${RED}✗ gcloud authentication failed. Please run: gcloud auth login${NC}" >&2
+    return 1
+}
+
+# Function: retry_gcloud_command
+# Description: Execute gcloud command with exponential backoff retry
+# Parameters: $@=gcloud command and arguments
+# Returns: Command exit code
+retry_gcloud_command() {
+    local max_retries=3
+    local timeout=1
+    local attempt=1
+    
+    while [[ $attempt -le $max_retries ]]; do
+        # Execute the command
+        if "$@"; then
+            return 0
+        fi
+        
+        local exit_code=$?
+        
+        # Don't retry on auth errors (codes 1, 403, 401)
+        if [[ $exit_code -eq 1 ]] || [[ $exit_code -eq 403 ]] || [[ $exit_code -eq 401 ]]; then
+            return $exit_code
+        fi
+        
+        if [[ $attempt -lt $max_retries ]]; then
+            echo -e "${GRAY}  Retry attempt $attempt/$max_retries in ${timeout}s...${NC}" >&2
+            sleep $timeout
+            timeout=$((timeout * 2))  # Exponential backoff
+            ((attempt++))
+        else
+            ((attempt++))
+        fi
+    done
+    
+    return $exit_code
 }
 
 # =============================================================================
@@ -438,7 +534,7 @@ annotate_ksa() {
     
     kubectl annotate serviceaccount "$ksa_name" \
         --namespace "$namespace" \
-        "iam.gke.io/gcp-service-account=${iam_sa_email}" \
+        "iam.gke.io/gcp-service-account=\"${iam_sa_email}\"" \
         --overwrite 2>&1 | tee -a "$G_LOG_FILE"
 }
 
@@ -674,6 +770,11 @@ operation_setup() {
         exit 1
     fi
     
+    # Validate project ID format and existence
+    if ! validate_project_id "$project_id"; then
+        exit 1
+    fi
+    
     echo ""
     
     # --- Step 2: IAM Service Account ---
@@ -684,8 +785,18 @@ operation_setup() {
         exit 1
     fi
     
+    # Validate IAM SA name format
+    if ! validate_k8s_name "$iam_sa_name" "IAM Service Account"; then
+        exit 1
+    fi
+    
     # Build full email
     local iam_sa_email="${iam_sa_name}@${project_id}.iam.gserviceaccount.com"
+    
+    # Validate email format
+    if ! validate_iam_sa_email "$iam_sa_email"; then
+        exit 1
+    fi
     local iam_sa_exists=true
     
     # Verify IAM SA exists (just check, don't create yet)
@@ -707,6 +818,11 @@ operation_setup() {
     
     if [[ -z "$ksa_name" ]]; then
         print_error "Kubernetes Service Account es requerido"
+        exit 1
+    fi
+    
+    # Validate KSA name format (DNS-1123)
+    if ! validate_k8s_name "$ksa_name" "Kubernetes Service Account"; then
         exit 1
     fi
     
@@ -773,6 +889,14 @@ operation_setup() {
     
     # --- Step 6: Namespace Selection ---
     prompt_input "Enter namespace" "namespace" "apps"
+    
+    # Validate namespace exists (or create if doesn't exist)
+    echo -ne "${GRAY}Validating namespace...${NC}"
+    if ! kubectl get namespace "$namespace" &>/dev/null; then
+        echo -e "\r${YELLOW}⚠ Namespace does not exist (will be created)${NC}     "
+    else
+        echo -e "\r${LGREEN}✓ Namespace verified${NC}     "
+    fi
     
     echo ""
     
@@ -1110,10 +1234,24 @@ ask_confirmation() {
     # Convert to lowercase for comparison
     response1=$(echo "$response1" | tr '[:upper:]' '[:lower:]')
     
-    # Accept: yes, y, or empty (default yes for critical operations)
+    # Accept: yes, y
     if [[ ! "$response1" =~ ^(yes|y)$ ]]; then
         echo -e "${LGREEN}✓ Operation cancelled${NC}"
         return 1
+    fi
+    
+    # For destructive operations (delete), require double confirmation
+    if [[ "$action" =~ delete|remove|destroy ]]; then
+        echo ""
+        echo -e "${RED}⚠ This is a DESTRUCTIVE operation and cannot be undone${NC}"
+        echo -ne "Type ${YELLOW}'CONFIRM'${NC} to proceed: "
+        local response2
+        read response2
+        
+        if [[ "$response2" != "CONFIRM" ]]; then
+            echo -e "${LGREEN}✓ Operation cancelled${NC}"
+            return 1
+        fi
     fi
     
     return 0
@@ -1412,8 +1550,10 @@ operation_cleanup() {
     esac
     
     # Get cluster info from current context
+    # Format: gke_PROJECT_LOCATION_CLUSTER, where location can be regional (us-central1) or zonal (us-central1-a)
     local current_context=$(kubectl config current-context 2>/dev/null)
-    local current_cluster=$(echo "$current_context" | grep -oP 'gke_[^_]+_[^_]+_\K[^_]+')
+    # Use kubectl config view to get cluster name instead of regex parsing
+    local current_cluster=$(kubectl config get-contexts "$current_context" --no-headers 2>/dev/null | awk '{print $3}' | sed 's|.*clusters/||' || echo "")
     
     if update_registry_status "$project_id" "$current_cluster" "$namespace" "$ksa_name" "$status_text"; then
         echo -e "${GRAY}Registry updated: ${status_text}${NC}"
@@ -1706,7 +1846,8 @@ operation_view_registry() {
     echo -e "${GRAY}──────────────────────────────────────────────────────────────────────────────────────────────${NC}"
     
     # Data (skip header, show all records - add newline to handle EOF without newline)
-    (cat "$G_CONTROL_FILE" && echo "") | tail -n +2 | while IFS=',' read -r fecha ticket project cluster location namespace ksa iam_sa status; do
+    # Ensure file ends with newline for proper parsing
+    (cat "$G_CONTROL_FILE"; [[ -n "$(tail -c1 \"$G_CONTROL_FILE\")" ]] && echo) | tail -n +2 | while IFS=',' read -r fecha ticket project cluster location namespace ksa iam_sa status; do
         # Skip empty lines
         [[ -z "$fecha" ]] && continue
         
@@ -1732,7 +1873,16 @@ operation_view_registry() {
 # Main Menu Loop
 # =============================================================================
 
+# Main Menu Loop
+# =============================================================================
+
 main() {
+    # Verify gcloud authentication at start of session
+    if ! check_gcloud_auth; then
+        print_error "Unable to authenticate with gcloud"
+        exit 1
+    fi
+    
     while true; do
         show_main_menu
         read option
@@ -1785,8 +1935,8 @@ main_entry() {
 }
 
 # Check dependencies
-for cmd in gcloud kubectl; do
-    if ! command -v $cmd &>/dev/null; then
+for cmd in gcloud kubectl jq; do
+    if ! command -v "$cmd" &>/dev/null; then
         echo -e "${RED}✗ Error: $cmd is not installed${NC}"
         echo -e "${GRAY}Instale las herramientas necesarias e intente nuevamente${NC}"
         exit 1
