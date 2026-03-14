@@ -463,6 +463,12 @@ list_gke_clusters() {
 validate_project_id() {
     local project="$1"
     
+    # GCP rules: 6-30 chars, lowercase letters, numbers, hyphens; start/end with letter or number
+    if [[ ${#project} -lt 6 ]] || [[ ${#project} -gt 30 ]]; then
+        echo -e "${RED}✗ Project ID must be 6-30 characters: $project${NC}" >&2
+        return 1
+    fi
+    
     if [[ ! "$project" =~ ^[a-z0-9][a-z0-9-]*[a-z0-9]$ ]]; then
         echo -e "${RED}✗ Invalid project ID format: $project${NC}" >&2
         return 1
@@ -1529,10 +1535,25 @@ operation_cleanup() {
     # Step 4: Delete IAM SA (if option 3)
     if [[ "$cleanup_option" == "3" ]]; then
         echo -ne "${WHITE}[${step}/${total_steps}]${NC} Deleting IAM account..."
-        if gcloud iam service-accounts delete "$annotation" --project "$project_id" --quiet >/dev/null 2>&1; then
+        local delete_sa_error
+        delete_sa_error=$(gcloud iam service-accounts delete "$annotation" --project "$project_id" --quiet 2>&1)
+        if [[ $? -eq 0 ]]; then
             echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Deleting IAM account... ${LGREEN}✓${NC}"
+            log "IAM SA deleted: $annotation"
         else
             echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Deleting IAM account... ${RED}✗${NC}"
+            # Extract the specific cause from gcloud error output
+            if echo "$delete_sa_error" | grep -qi "PERMISSION_DENIED"; then
+                echo -e "  ${RED}✗ Permission denied:${NC} La cuenta ${YELLOW}$(gcloud config get-value account 2>/dev/null)${NC} no tiene el rol ${WHITE}roles/iam.serviceAccountAdmin${NC} en el proyecto ${WHITE}$project_id${NC}"
+                echo -e "  ${GRAY}  Solicita el rol o elimina la cuenta manualmente.${NC}"
+            elif echo "$delete_sa_error" | grep -qi "NOT_FOUND\|does not exist"; then
+                echo -e "  ${YELLOW}⚠ IAM SA no encontrada:${NC} ${WHITE}$annotation${NC} (puede que ya haya sido eliminada)"
+            elif echo "$delete_sa_error" | grep -qi "UNAUTHENTICATED\|not authenticated"; then
+                echo -e "  ${RED}✗ Sin autenticación:${NC} Ejecuta ${WHITE}gcloud auth login${NC} y vuelve a intentarlo."
+            else
+                echo -e "  ${RED}✗ Error:${NC} ${GRAY}$delete_sa_error${NC}"
+            fi
+            log "ERROR deleting IAM SA $annotation: $delete_sa_error"
         fi
     fi
     
@@ -1546,13 +1567,7 @@ operation_cleanup() {
         3) status_text="eliminado-todo" ;;
     esac
     
-    # Get cluster info from current context
-    # Format: gke_PROJECT_LOCATION_CLUSTER, where location can be regional (us-central1) or zonal (us-central1-a)
-    local current_context=$(kubectl config current-context 2>/dev/null)
-    # Use kubectl config view to get cluster name instead of regex parsing
-    local current_cluster=$(kubectl config get-contexts "$current_context" --no-headers 2>/dev/null | awk '{print $3}' | sed 's|.*clusters/||' || echo "")
-    
-    if update_registry_status "$project_id" "$current_cluster" "$namespace" "$ksa_name" "$status_text"; then
+    if update_registry_status "$project_id" "$selected_cluster" "$namespace" "$ksa_name" "$status_text"; then
         echo -e "${GRAY}Registry updated: ${status_text}${NC}"
     fi
     
