@@ -666,6 +666,59 @@ CSV
         fi
         rm -rf "$tmp_dir"
     fi
+
+    # T051 — bulk-setup 7-column CSV: location column parsed, namespace correct
+    if should_run T051 integration; then
+        local tmp_dir
+        tmp_dir=$(mktemp -d -t wi-t051.XXXXXX)
+        local bulk_file="$tmp_dir/bulk7.csv"
+        cat > "$bulk_file" << 'CSV'
+project_id,cluster,location,namespace,ksa,iam_sa,ticket
+proj-test,my-cluster,us-central1,apps,app-ksa,app-ksa@proj-test.iam.gserviceaccount.com,TKT051
+CSV
+        local output exit_code=0
+        output=$(
+            WI_DRY_RUN=1 \
+            WI_ENCRYPT_REGISTRY=0 \
+            PATH="$STUB_BIN:$PATH" \
+            bash "$SCRIPT" bulk-setup \
+                --file "$bulk_file" \
+                --dry-run </dev/null 2>&1
+        ) || exit_code=$?
+        # namespace should appear as "apps" not "us-central1" (location column must be skipped)
+        if echo "$output" | grep -q "apps" && ! echo "$output" | grep -q "Namespace.*us-central1"; then
+            pass T051 "bulk-setup 7-column CSV: namespace parsed correctly (not location)"
+        else
+            fail T051 "bulk-setup 7-column CSV: namespace parsed correctly (not location)" \
+                "output did not confirm namespace=apps (exit=$exit_code)"
+            [[ "$OPT_VERBOSE" == "1" ]] && echo -e "${GRAY}$(echo "$output" | head -15)${NC}"
+        fi
+        rm -rf "$tmp_dir"
+    fi
+
+    # T052 — verify subcommand: CLI mode exits 0 and produces output
+    if should_run T052 integration; then
+        local output exit_code=0
+        output=$(
+            WI_DRY_RUN=0 \
+            WI_ENCRYPT_REGISTRY=0 \
+            PATH="$STUB_BIN:$PATH" \
+            bash "$SCRIPT" verify \
+                --project test-project \
+                --cluster test-cluster \
+                --namespace apps \
+                --ksa app-ksa \
+                --iam-sa app-ksa@test-project.iam.gserviceaccount.com \
+                </dev/null 2>&1
+        ) || exit_code=$?
+        if [[ $exit_code -eq 0 ]] && [[ -n "$output" ]]; then
+            pass T052 "verify CLI mode: exits 0 and produces output"
+        else
+            fail T052 "verify CLI mode: exits 0 and produces output" \
+                "exit=$exit_code, output='$(echo "$output" | head -3)'"
+            [[ "$OPT_VERBOSE" == "1" ]] && echo -e "${GRAY}$(echo "$output" | head -15)${NC}"
+        fi
+    fi
 }
 
 # =============================================================================
