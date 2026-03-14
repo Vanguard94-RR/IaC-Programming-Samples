@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# kubectl stub for workload-identity test suite
+# Simulates successful responses for all kubectl subcommands used by the script.
+
+cmd_str="$*"
+
+case "$cmd_str" in
+    "get namespace"*)
+        exit 0
+        ;;
+    "get serviceaccount"*)
+        exit 0
+        ;;
+    "get serviceaccounts"*)
+        echo "NAME"
+        echo "default"
+        echo "test-app-sa"
+        exit 0
+        ;;
+    "create serviceaccount"*)
+        exit 0
+        ;;
+    "annotate serviceaccount"*)
+        exit 0
+        ;;
+    "config current-context"*)
+        echo "gke_test-project-01_us-central1_test-cluster"
+        exit 0
+        ;;
+    "config use-context"*)
+        exit 0
+        ;;
+    "config get-contexts"*)
+        printf "CURRENT   NAME                                                      CLUSTER                                                   AUTHINFO                                                  NAMESPACE\n"
+        printf "*         gke_test-project-01_us-central1_test-cluster              gke_test-project-01_us-central1_test-cluster              gke_test-project-01_us-central1_test-cluster\n"
+        exit 0
+        ;;
+    *)
+        exit 0
+        ;;
+esac

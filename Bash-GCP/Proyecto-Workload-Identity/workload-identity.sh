@@ -61,7 +61,7 @@ NC='\033[0m'
 readonly G_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly G_BASE_DIR="$(dirname "$G_SCRIPT_DIR")"
 readonly G_TICKETS_DIR="$G_BASE_DIR/Tickets"
-readonly G_CONTROL_FILE="$G_SCRIPT_DIR/workload-identity-registry.csv"
+readonly G_CONTROL_FILE="${WI_REGISTRY_FILE:-$G_SCRIPT_DIR/workload-identity-registry.csv}"
 # Use mktemp for secure temporary directory (prevents symlink attacks)
 readonly G_TEMP_DIR="$(mktemp -d -t workload-identity.XXXXXX)"
 
@@ -131,7 +131,8 @@ init_control_file() {
     fi
     
     # Verify permissions were actually set to 600
-    local actual_perms=$(stat -f '%OA' "$G_CONTROL_FILE" 2>/dev/null || stat -c '%a' "$G_CONTROL_FILE" 2>/dev/null)
+    local actual_perms
+    actual_perms=$(stat -c '%a' "$G_CONTROL_FILE" 2>/dev/null || stat -f '%OA' "$G_CONTROL_FILE" 2>/dev/null)
     if [[ "$actual_perms" != "600" ]]; then
         echo -e "${YELLOW}⚠ Warning: CSV file permissions may not be 600 (found: $actual_perms)${NC}" >&2
     fi
@@ -1185,14 +1186,14 @@ HELP_TEXT
 }
 
 show_version() {
-    cat << 'VERSION_TEXT'
+    sed "s/G_VERSION/$G_VERSION/" << 'VERSION_TEXT'
 
   ╔════════════════════════════════════════════════════════════════╗
   ║        WORKLOAD IDENTITY MANAGER                               ║
   ╚════════════════════════════════════════════════════════════════╝
 
   Nombre:          Workload Identity Manager
-  Version:         VERSION
+  Version:         G_VERSION
   Project:        GCP Infrastructure Management
   Description:     Configure GCP Workload Identity for GKE
 
@@ -1215,8 +1216,6 @@ show_version() {
     ✓ Logs estructurados
 
 VERSION_TEXT
-    # Reemplazar VERSION con el valor real
-    sed "s/VERSION/$G_VERSION/" <<< "$VERSION_TEXT"
 }
 
 # =============================================================================
@@ -1666,6 +1665,14 @@ operation_verify() {
 ask_confirmation() {
     local message="$1"
     local action="${2:-continue}"
+
+    # In CLI mode or dry-run, skip interactive prompt and auto-accept
+    if [[ "${G_CLI_MODE:-0}" == "1" ]] || [[ "${G_DRY_RUN:-0}" == "1" ]]; then
+        local dry_tag=""
+        [[ "${G_DRY_RUN:-0}" == "1" ]] && dry_tag=" [DRY-RUN]"
+        echo -e "${GRAY}  (CLI${dry_tag}) auto-confirmed${NC}"
+        return 0
+    fi
     
     echo -e "\n${YELLOW}⚠ Confirmation Required${NC}"
     echo -e "${GRAY}─────────────────────────────────────${NC}"
@@ -2022,57 +2029,68 @@ operation_list() {
     clear
     print_header "List Workload Identities"
     echo ""
-    
+
     # --- Project Selection from Registry or Manual ---
     local project_id=""
     local current_project=$(get_current_project)
+
+    # CLI mode: use --project flag directly, skip interactive selection
+    if [[ "$G_CLI_MODE" == "1" ]] && [[ -n "$G_CLI_PROJECT" ]]; then
+        project_id="$G_CLI_PROJECT"
+        echo -e "${GRAY}  (CLI) Project: $project_id${NC}" >&2
+    fi
     
     # Check if registry has projects (only active ones)
     if [[ -f "$G_CONTROL_FILE" ]]; then
-        # Get unique projects from CSV (column 3) - only active records (Status = activo)
-        local registry_projects=$(tail -n +2 "$G_CONTROL_FILE" | awk -F',' '$9 == "activo" {print $3}' | sort -u | grep -v '^$')
-        
-        if [[ -n "$registry_projects" ]]; then
-            echo -e "${WHITE}Active projects in registry:${NC}"
-            echo ""
-            
-            declare -a project_options
-            local idx=1
-            
-            while IFS= read -r proj; do
-                project_options+=("$proj")
-                echo -e "  ${LCYAN}${idx})${NC} $proj"
-                ((idx++))
-            done <<< "$registry_projects"
-            
-            echo -e "  ${LCYAN}${idx})${NC} ${YELLOW}Enter another project manually${NC}"
-            echo ""
-            
-            local max_opt=${#project_options[@]}
-            ((max_opt++))
-            
-            echo -ne "${WHITE}Select an option [1-${max_opt}]:${NC} "
-            read selection
-            
-            if [[ "$selection" =~ ^[0-9]+$ ]] && [[ "$selection" -ge 1 ]] && [[ "$selection" -le "$max_opt" ]]; then
-                if [[ "$selection" -eq "$max_opt" ]]; then
-                    # Manual input
-                    prompt_input "Enter Project ID" "project_id" "$current_project"
+    # Interactive project selection (only when not pre-filled by CLI)
+    if [[ -z "$project_id" ]]; then
+        # Check if registry has projects (only active ones)
+        if [[ -f "$G_CONTROL_FILE" ]]; then
+            # Get unique projects from CSV (column 3) - only active records (Status = activo)
+            local registry_projects=$(tail -n +2 "$G_CONTROL_FILE" | awk -F',' '$9 == "activo" {print $3}' | sort -u | grep -v '^$')
+
+            if [[ -n "$registry_projects" ]]; then
+                echo -e "${WHITE}Active projects in registry:${NC}"
+                echo ""
+
+                declare -a project_options
+                local idx=1
+
+                while IFS= read -r proj; do
+                    project_options+=("$proj")
+                    echo -e "  ${LCYAN}${idx})${NC} $proj"
+                    ((idx++))
+                done <<< "$registry_projects"
+
+                echo -e "  ${LCYAN}${idx})${NC} ${YELLOW}Enter another project manually${NC}"
+                echo ""
+
+                local max_opt=${#project_options[@]}
+                ((max_opt++))
+
+                echo -ne "${WHITE}Select an option [1-${max_opt}]:${NC} "
+                read selection
+
+                if [[ "$selection" =~ ^[0-9]+$ ]] && [[ "$selection" -ge 1 ]] && [[ "$selection" -le "$max_opt" ]]; then
+                    if [[ "$selection" -eq "$max_opt" ]]; then
+                        # Manual input
+                        prompt_input "Enter Project ID" "project_id" "$current_project"
+                    else
+                        project_id="${project_options[$((selection-1))]}"
+                        echo -e "${LGREEN}✓ Selected project:${NC} ${WHITE}$project_id${NC}"
+                    fi
                 else
-                    project_id="${project_options[$((selection-1))]}"
-                    echo -e "${LGREEN}✓ Selected project:${NC} ${WHITE}$project_id${NC}"
+                    echo -e "${RED}Invalid option${NC}"
+                    echo -ne "${YELLOW}Press Enter to continue...${NC}"
+                    read
+                    return 1
                 fi
             else
-                echo -e "${RED}Invalid option${NC}"
-                echo -ne "${YELLOW}Press Enter to continue...${NC}"
-                read
-                return 1
+                prompt_input "Enter Project ID" "project_id" "$current_project"
             fi
         else
             prompt_input "Enter Project ID" "project_id" "$current_project"
         fi
-    else
-        prompt_input "Enter Project ID" "project_id" "$current_project"
     fi
     
     echo ""
@@ -2080,9 +2098,19 @@ operation_list() {
     # --- Cluster Selection from Registry or GCP ---
     local selected_cluster=""
     local selected_location=""
-    
-    # Check if registry has clusters for this project
-    if [[ -f "$G_CONTROL_FILE" ]]; then
+
+    # CLI mode: skip registry-based cluster selection, call select_cluster_from_project
+    # which already handles --cluster bypass via G_CLI_CLUSTER
+    if [[ "$G_CLI_MODE" == "1" ]]; then
+        if ! select_cluster_from_project "$project_id"; then
+            return 1
+        fi
+        selected_cluster="$SELECTED_CLUSTER"
+        selected_location="$SELECTED_LOCATION"
+    fi
+
+    # Interactive cluster selection (only when not in CLI mode)
+    if [[ "$G_CLI_MODE" != "1" ]]; then
         # Get unique clusters for this project (columns 4=cluster, 5=location) - only active records
         local registry_clusters=$(tail -n +2 "$G_CONTROL_FILE" | awk -F',' -v proj="$project_id" '$3 == proj && $9 == "activo" {print $4 "," $5}' | sort -u | grep -v '^,$')
         
@@ -2136,7 +2164,8 @@ operation_list() {
             fi
         fi
     fi
-    
+    fi  # end non-CLI cluster selection
+
     # If no cluster selected from registry, search in GCP
     if [[ -z "$selected_cluster" ]]; then
         if ! select_cluster_from_project "$project_id"; then
@@ -2184,8 +2213,10 @@ operation_list() {
     fi
     
     echo ""
-    echo -ne "${YELLOW}Press Enter to continue...${NC}"
-    read
+    if [[ "$G_CLI_MODE" == "0" ]]; then
+        echo -ne "${YELLOW}Press Enter to continue...${NC}"
+        read
+    fi
 }
 
 # =============================================================================
@@ -2485,30 +2516,38 @@ main_entry() {
     done
 }
 
-# Check dependencies
-for cmd in gcloud kubectl jq; do
-    if ! command -v "$cmd" &>/dev/null; then
-        echo -e "${RED}✗ Error: $cmd is not installed${NC}"
-        echo -e "${GRAY}Instale las herramientas necesarias e intente nuevamente${NC}"
-        exit 1
+# ─── Entry Point Guard ───────────────────────────────────────────────────────
+# When WI_UNIT_TEST=1, the script is being sourced by the test suite.
+# Skip dependency checks, file initialization and entry-point dispatch so the
+# test suite can call individual functions in isolation.
+if [[ "${WI_UNIT_TEST:-0}" != "1" ]]; then
+
+    # Check dependencies
+    for cmd in gcloud kubectl jq; do
+        if ! command -v "$cmd" &>/dev/null; then
+            echo -e "${RED}✗ Error: $cmd is not installed${NC}"
+            echo -e "${GRAY}Instale las herramientas necesarias e intente nuevamente${NC}"
+            exit 1
+        fi
+    done
+
+    # Initialize control file
+    init_control_file
+
+    # Process arguments
+    main_entry "$@"
+
+    # Dispatch: CLI mode or interactive menu
+    if [[ "$G_CLI_MODE" == "1" ]]; then
+        case "$G_CLI_OPERATION" in
+            setup)       operation_setup ;;
+            verify)      operation_verify ;;
+            cleanup)     operation_cleanup ;;
+            list)        operation_list ;;
+            bulk-setup)  operation_bulk_setup ;;
+        esac
+    else
+        main "$@"
     fi
-done
 
-# Initialize control file
-init_control_file
-
-# Process arguments
-main_entry "$@"
-
-# Dispatch: CLI mode or interactive menu
-if [[ "$G_CLI_MODE" == "1" ]]; then
-    case "$G_CLI_OPERATION" in
-        setup)       operation_setup ;;
-        verify)      operation_verify ;;
-        cleanup)     operation_cleanup ;;
-        list)        operation_list ;;
-        bulk-setup)  operation_bulk_setup ;;
-    esac
-else
-    main "$@"
-fi
+fi  # end WI_UNIT_TEST guard
