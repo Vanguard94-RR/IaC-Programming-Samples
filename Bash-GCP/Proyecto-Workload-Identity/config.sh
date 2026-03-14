@@ -68,6 +68,37 @@ export WI_USE_COLORS="${WI_USE_COLORS:-1}"
 export WI_SA_DOMAIN="${WI_SA_DOMAIN:-gserviceaccount.com}"
 
 # =============================================================================
+# Phase 4: Security & Backup Settings
+# =============================================================================
+
+# Encrypt the registry CSV with AES-256-CBC (1=yes, 0=no)
+# Default: 0 (plaintext CSV, chmod 600)
+# Set to 1 to store registry as workload-identity-registry.csv.enc
+# Requires WI_REGISTRY_PASSPHRASE to be set in the environment
+export WI_ENCRYPT_REGISTRY="${WI_ENCRYPT_REGISTRY:-0}"
+
+# Passphrase for AES-256-CBC registry encryption
+# Default: empty (encryption disabled when empty)
+# NEVER store the passphrase in this file — set it in the shell environment:
+#   export WI_REGISTRY_PASSPHRASE="your-strong-passphrase"
+export WI_REGISTRY_PASSPHRASE="${WI_REGISTRY_PASSPHRASE:-}"
+
+# Directory for automatic backups of the registry
+# Default: <script_dir>/backups/
+# Backups are named: workload-identity-registry_YYYYMMDD_HHMMSS.csv[.enc]
+export WI_BACKUP_DIR="${WI_BACKUP_DIR:-}"
+
+# Maximum number of local backups to keep (older ones are automatically pruned)
+# Default: 10
+export WI_BACKUP_MAX="${WI_BACKUP_MAX:-10}"
+
+# GCS bucket for remote state synchronization (optional)
+# Default: empty (no remote sync)
+# Format: gs://your-bucket/path  (do NOT include trailing slash)
+# Example: gs://gnp-wi-state/workload-identity
+export WI_GCS_BUCKET="${WI_GCS_BUCKET:-}"
+
+# =============================================================================
 # End of Configuration File
 # =============================================================================
 # NOTE: All variables are optional and have reasonable defaults.

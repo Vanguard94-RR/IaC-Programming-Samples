@@ -4,12 +4,16 @@
 # Configure GCP Workload Identity between GCP SA and Kubernetes SA
 # 
 # Project: GCP Infrastructure Management
-# Version: 3.0.0
+# Version: 4.0.0
 # Author: Infrastructure Team
 # License: Internal Use
 #
 # Features:
 #   - Interactive menu system with colored output
+#   - AES-256-CBC encrypted registry storage (opt-in via WI_ENCRYPT_REGISTRY)
+#   - Automatic backup before any destructive operation
+#   - Backup restore with interactive selection
+#   - GCS remote state sync (push/pull for team sharing)
 #   - CLI non-interactive mode (setup/verify/cleanup/list/bulk-setup)
 #   - Dry-run mode: preview all operations without executing
 #   - Bulk setup from CSV file for batch provisioning
@@ -31,7 +35,7 @@ set -euo pipefail
 IFS=$'\n\t'
 
 # Metadata
-readonly G_VERSION="3.0.0"
+readonly G_VERSION="4.0.0"
 readonly G_SCRIPT_NAME="Workload Identity Manager"
 readonly G_SCRIPT_DESC="Configure GCP Workload Identity between GCP SA and Kubernetes SA"
 
@@ -82,6 +86,13 @@ readonly G_ANNOTATION_KEY="${WI_ANNOTATION_KEY:-iam.gke.io/gcp-service-account}"
 readonly G_REGISTRY_FILE="${WI_REGISTRY_FILE:-$G_SCRIPT_DIR/workload-identity-registry.csv}"
 G_DRY_RUN="${WI_DRY_RUN:-0}"   # 1 = preview commands only, 0 = execute normally
 
+# Security & Backup settings (from config.sh or environment)
+G_ENCRYPT_REGISTRY="${WI_ENCRYPT_REGISTRY:-0}"
+G_REGISTRY_PASSPHRASE="${WI_REGISTRY_PASSPHRASE:-}"
+G_BACKUP_DIR="${WI_BACKUP_DIR:-$G_SCRIPT_DIR/backups}"
+G_BACKUP_MAX="${WI_BACKUP_MAX:-10}"
+G_GCS_BUCKET="${WI_GCS_BUCKET:-}"
+
 # CLI mode prefill variables (empty = interactive, non-empty = auto-fill)
 G_CLI_MODE=0
 G_CLI_PROJECT=""
@@ -97,12 +108,17 @@ G_CLI_BULK_FILE=""
 # Cleanup on exit
 trap 'cleanup' EXIT
 cleanup() {
+    # Re-encrypt registry if encryption is enabled (no-op when plaintext mode)
+    encrypt_registry 2>/dev/null || true
     rm -rf "$G_TEMP_DIR" 2>/dev/null || true
 }
 mkdir -p "$G_TEMP_DIR"
 
 # --- Initialize and secure control file ---
 init_control_file() {
+    # Decrypt registry if encryption is enabled, making G_CONTROL_FILE available
+    decrypt_registry || return 1
+    
     if [[ ! -f "$G_CONTROL_FILE" ]]; then
         echo "Fecha,Ticket,ProjectId,Cluster,Location,Namespace,KSA,IAM_SA,Status" > "$G_CONTROL_FILE"
         chmod 600 "$G_CONTROL_FILE"
@@ -173,6 +189,275 @@ update_registry_status() {
     
     mv "$temp_file" "$G_CONTROL_FILE"
     chmod 600 "$G_CONTROL_FILE"
+}
+
+# =============================================================================
+# Function: registry_encrypted_path
+# Returns: path to the .enc file corresponding to G_CONTROL_FILE
+# =============================================================================
+registry_encrypted_path() {
+    echo "${G_CONTROL_FILE}.enc"
+}
+
+# =============================================================================
+# Function: encrypt_registry
+# Description: Encrypt the plaintext CSV into .csv.enc using AES-256-CBC.
+#              The plaintext file is securely removed after encryption.
+# Returns: 0=success, 1=error
+# =============================================================================
+encrypt_registry() {
+    [[ "$G_ENCRYPT_REGISTRY" != "1" ]] && return 0
+    if [[ -z "$G_REGISTRY_PASSPHRASE" ]]; then
+        echo -e "${RED}✗ WI_REGISTRY_PASSPHRASE is not set — cannot encrypt registry${NC}" >&2
+        return 1
+    fi
+    local enc_file
+    enc_file=$(registry_encrypted_path)
+
+    openssl enc -aes-256-cbc -pbkdf2 -iter 100000 \
+        -pass "pass:${G_REGISTRY_PASSPHRASE}" \
+        -in "$G_CONTROL_FILE" -out "$enc_file" 2>/dev/null || {
+        echo -e "${RED}✗ Registry encryption failed${NC}" >&2
+        return 1
+    }
+    chmod 600 "$enc_file"
+    # Securely wipe plaintext
+    shred -u "$G_CONTROL_FILE" 2>/dev/null || rm -f "$G_CONTROL_FILE"
+    log "Registry encrypted → $enc_file"
+}
+
+# =============================================================================
+# Function: decrypt_registry
+# Description: Decrypt .csv.enc into the plaintext CSV for reading/writing.
+#              Call encrypt_registry() after all writes are complete.
+# Returns: 0=success, 1=error
+# =============================================================================
+decrypt_registry() {
+    [[ "$G_ENCRYPT_REGISTRY" != "1" ]] && return 0
+    local enc_file
+    enc_file=$(registry_encrypted_path)
+
+    [[ ! -f "$enc_file" ]] && return 0   # no encrypted file yet (first run)
+
+    if [[ -z "$G_REGISTRY_PASSPHRASE" ]]; then
+        echo -e "${RED}✗ WI_REGISTRY_PASSPHRASE is not set — cannot decrypt registry${NC}" >&2
+        return 1
+    fi
+
+    openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 \
+        -pass "pass:${G_REGISTRY_PASSPHRASE}" \
+        -in "$enc_file" -out "$G_CONTROL_FILE" 2>/dev/null || {
+        echo -e "${RED}✗ Registry decryption failed — wrong passphrase?${NC}" >&2
+        return 1
+    }
+    chmod 600 "$G_CONTROL_FILE"
+    log "Registry decrypted from $enc_file"
+}
+
+# =============================================================================
+# Function: backup_registry
+# Description: Copy current registry to G_BACKUP_DIR with a timestamp name.
+#              Encrypts the backup if encryption is enabled.
+#              Prunes old backups keeping at most G_BACKUP_MAX copies.
+# Parameters: $1 = label (optional, e.g. "pre-cleanup")
+# Returns: 0=success, 1=error
+# =============================================================================
+backup_registry() {
+    local label="${1:-manual}"
+    local source_file="$G_CONTROL_FILE"
+
+    # If only encrypted file exists, decrypt to a temp path for the backup
+    local enc_file
+    enc_file=$(registry_encrypted_path)
+    local temp_csv=""
+    if [[ "$G_ENCRYPT_REGISTRY" == "1" ]] && [[ ! -f "$source_file" ]] && [[ -f "$enc_file" ]]; then
+        temp_csv=$(mktemp --tmpdir="$G_TEMP_DIR" registry-backup.XXXXXX.csv)
+        openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 \
+            -pass "pass:${G_REGISTRY_PASSPHRASE}" \
+            -in "$enc_file" -out "$temp_csv" 2>/dev/null || {
+            echo -e "${RED}✗ Backup: decryption failed${NC}" >&2; return 1
+        }
+        source_file="$temp_csv"
+    fi
+
+    [[ ! -f "$source_file" ]] && { echo -e "${YELLOW}⚠ Nothing to back up${NC}" >&2; return 0; }
+
+    mkdir -p "$G_BACKUP_DIR" 2>/dev/null || {
+        echo -e "${RED}✗ Cannot create backup directory: $G_BACKUP_DIR${NC}" >&2; return 1
+    }
+
+    local timestamp
+    timestamp=$(date '+%Y%m%d_%H%M%S')
+    local backup_name="workload-identity-registry_${timestamp}_${label}.csv"
+    local backup_path="$G_BACKUP_DIR/$backup_name"
+
+    cp "$source_file" "$backup_path"
+    chmod 600 "$backup_path"
+
+    # Encrypt the backup copy if encryption is enabled
+    if [[ "$G_ENCRYPT_REGISTRY" == "1" ]] && [[ -n "$G_REGISTRY_PASSPHRASE" ]]; then
+        openssl enc -aes-256-cbc -pbkdf2 -iter 100000 \
+            -pass "pass:${G_REGISTRY_PASSPHRASE}" \
+            -in "$backup_path" -out "${backup_path}.enc" 2>/dev/null
+        chmod 600 "${backup_path}.enc"
+        shred -u "$backup_path" 2>/dev/null || rm -f "$backup_path"
+        backup_path="${backup_path}.enc"
+    fi
+
+    # Clean temp file if we created one
+    [[ -n "$temp_csv" ]] && rm -f "$temp_csv"
+
+    # Prune old backups (keep G_BACKUP_MAX most recent)
+    local ext="csv"; [[ "$G_ENCRYPT_REGISTRY" == "1" ]] && ext="csv.enc"
+    local count
+    count=$(find "$G_BACKUP_DIR" -maxdepth 1 -name "workload-identity-registry_*.${ext}" | wc -l)
+    if [[ $count -gt $G_BACKUP_MAX ]]; then
+        find "$G_BACKUP_DIR" -maxdepth 1 -name "workload-identity-registry_*.${ext}" \
+            | sort | head -n $(( count - G_BACKUP_MAX )) \
+            | xargs rm -f --
+    fi
+
+    echo -e "${LGREEN}✓ Backup saved:${NC} ${GRAY}$(basename "$backup_path")${NC}"
+    log "Registry backup created: $backup_path (label=$label)"
+}
+
+# =============================================================================
+# Function: restore_registry
+# Description: Restore the registry from a backup file.
+#              Creates a backup of the current registry before restoring.
+# Parameters: $1 = backup file path (full path)
+# Returns: 0=success, 1=error
+# =============================================================================
+restore_registry() {
+    local backup_file="${1:-}"
+
+    if [[ -z "$backup_file" ]]; then
+        # Interactive: list available backups and let user choose
+        local ext="csv"; [[ "$G_ENCRYPT_REGISTRY" == "1" ]] && ext="csv.enc"
+        local -a backups=()
+        while IFS= read -r f; do
+            backups+=("$f")
+        done < <(find "$G_BACKUP_DIR" -maxdepth 1 -name "workload-identity-registry_*.${ext}" | sort -r)
+
+        if [[ ${#backups[@]} -eq 0 ]]; then
+            echo -e "${YELLOW}⚠ No backups found in $G_BACKUP_DIR${NC}"
+            return 1
+        fi
+
+        echo -e "${WHITE}Available backups:${NC}"
+        for i in "${!backups[@]}"; do
+            echo -e "  ${LCYAN}$((i+1)))${NC} $(basename "${backups[$i]}")"
+        done
+        echo ""
+        echo -ne "${YELLOW}Select backup to restore [1-${#backups[@]}]: ${NC}"
+        read sel
+        if [[ ! "$sel" =~ ^[0-9]+$ ]] || [[ $sel -lt 1 ]] || [[ $sel -gt ${#backups[@]} ]]; then
+            echo -e "${RED}✗ Invalid selection${NC}" >&2; return 1
+        fi
+        backup_file="${backups[$((sel-1))]}"
+    fi
+
+    [[ ! -f "$backup_file" ]] && { echo -e "${RED}✗ File not found: $backup_file${NC}" >&2; return 1; }
+
+    # Safety backup of current registry before overwriting
+    backup_registry "pre-restore"
+
+    if [[ "$backup_file" == *.enc ]]; then
+        [[ -z "$G_REGISTRY_PASSPHRASE" ]] && {
+            echo -e "${RED}✗ WI_REGISTRY_PASSPHRASE required to restore encrypted backup${NC}" >&2; return 1
+        }
+        openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 \
+            -pass "pass:${G_REGISTRY_PASSPHRASE}" \
+            -in "$backup_file" -out "$G_CONTROL_FILE" 2>/dev/null || {
+            echo -e "${RED}✗ Restore: decryption failed — wrong passphrase?${NC}" >&2; return 1
+        }
+    else
+        cp "$backup_file" "$G_CONTROL_FILE"
+    fi
+    chmod 600 "$G_CONTROL_FILE"
+
+    echo -e "${LGREEN}✓ Registry restored from:${NC} ${GRAY}$(basename "$backup_file")${NC}"
+    log "Registry restored from: $backup_file"
+}
+
+# =============================================================================
+# Function: sync_push
+# Description: Push registry (and audit log) to a GCS bucket for team sharing.
+#              Uploads the encrypted file when encryption is enabled,
+#              otherwise uploads the plaintext CSV.
+# Returns: 0=success, 1=no bucket configured or upload error
+# =============================================================================
+sync_push() {
+    if [[ -z "$G_GCS_BUCKET" ]]; then
+        echo -e "${YELLOW}⚠ WI_GCS_BUCKET not set — skipping remote sync${NC}" >&2
+        return 1
+    fi
+
+    local upload_file="$G_CONTROL_FILE"
+    local remote_name="workload-identity-registry.csv"
+
+    if [[ "$G_ENCRYPT_REGISTRY" == "1" ]]; then
+        local enc_file
+        enc_file=$(registry_encrypted_path)
+        [[ -f "$enc_file" ]] && upload_file="$enc_file" && remote_name="workload-identity-registry.csv.enc"
+    fi
+
+    [[ ! -f "$upload_file" ]] && { echo -e "${YELLOW}⚠ Registry file not found — nothing to push${NC}" >&2; return 1; }
+
+    echo -ne "${GRAY}Pushing registry to ${G_GCS_BUCKET}...${NC}"
+    if gcloud storage cp "$upload_file" "${G_GCS_BUCKET}/${remote_name}" --quiet 2>/dev/null; then
+        echo -e "\r${LGREEN}✓ Registry pushed to ${G_GCS_BUCKET}/${remote_name}${NC}"
+        log "Registry pushed to GCS: ${G_GCS_BUCKET}/${remote_name}"
+
+        # Also push the current monthly audit log if it exists
+        local audit_file="$G_SCRIPT_DIR/logs/audit/audit_$(date '+%Y-%m').log"
+        if [[ -f "$audit_file" ]]; then
+            gcloud storage cp "$audit_file" \
+                "${G_GCS_BUCKET}/audit/audit_$(date '+%Y-%m').log" --quiet 2>/dev/null || true
+        fi
+        return 0
+    else
+        echo -e "\r${RED}✗ Failed to push registry to GCS${NC}"
+        log "ERROR: GCS push failed to ${G_GCS_BUCKET}"
+        return 1
+    fi
+}
+
+# =============================================================================
+# Function: sync_pull
+# Description: Pull the latest registry from GCS, replacing the local copy.
+#              Creates a backup of the current local registry first.
+# Returns: 0=success, 1=no bucket configured or download error
+# =============================================================================
+sync_pull() {
+    if [[ -z "$G_GCS_BUCKET" ]]; then
+        echo -e "${YELLOW}⚠ WI_GCS_BUCKET not set — skipping remote sync${NC}" >&2
+        return 1
+    fi
+
+    local remote_name="workload-identity-registry.csv"
+    [[ "$G_ENCRYPT_REGISTRY" == "1" ]] && remote_name="workload-identity-registry.csv.enc"
+
+    local remote_url="${G_GCS_BUCKET}/${remote_name}"
+    local dest_file="$G_CONTROL_FILE"
+    [[ "$G_ENCRYPT_REGISTRY" == "1" ]] && dest_file=$(registry_encrypted_path)
+
+    # Safety backup before overwriting
+    backup_registry "pre-sync-pull" 2>/dev/null || true
+
+    echo -ne "${GRAY}Pulling registry from ${G_GCS_BUCKET}...${NC}"
+    if gcloud storage cp "$remote_url" "$dest_file" --quiet 2>/dev/null; then
+        chmod 600 "$dest_file"
+        echo -e "\r${LGREEN}✓ Registry pulled from ${remote_url}${NC}"
+        log "Registry pulled from GCS: $remote_url"
+        # Decrypt if needed so G_CONTROL_FILE is usable immediately
+        [[ "$G_ENCRYPT_REGISTRY" == "1" ]] && decrypt_registry
+        return 0
+    else
+        echo -e "\r${RED}✗ Failed to pull registry from GCS${NC}"
+        log "ERROR: GCS pull failed from ${remote_url}"
+        return 1
+    fi
 }
 
 # =============================================================================
@@ -920,6 +1205,10 @@ show_version() {
     ✓ Dry-run mode (preview without executing)
     ✓ Bulk setup from CSV file
     ✓ Structured audit log (logs/audit/)
+    ✓ AES-256-CBC registry encryption (opt-in)
+    ✓ Automatic backup before destructive ops
+    ✓ Restore registry from backup
+    ✓ GCS remote state sync (push/pull)
     ✓ Organization by tickets
     ✓ Registro CSV de operaciones
     ✓ Robust validation
@@ -945,6 +1234,7 @@ show_main_menu() {
     echo -e "${LGREEN}║${NC}  ${LCYAN}3)${NC} Delete Workload Identity           ${LGREEN}║${NC}"
     echo -e "${LGREEN}║${NC}  ${LCYAN}4)${NC} List Bindings in Namespace         ${LGREEN}║${NC}"
     echo -e "${LGREEN}║${NC}  ${LCYAN}5)${NC} View Operations Registry           ${LGREEN}║${NC}"
+    echo -e "${LGREEN}║${NC}  ${LCYAN}6)${NC} Security / Backup & Restore        ${LGREEN}║${NC}"
     echo -e "${LGREEN}║${NC}                                        ${LGREEN}║${NC}"
     echo -e "${LGREEN}║${NC}  ${LCYAN}0)${NC} Exit                               ${LGREEN}║${NC}"
     echo -e "${LGREEN}║${NC}                                        ${LGREEN}║${NC}"
@@ -1627,6 +1917,9 @@ operation_cleanup() {
     fi
     
     # --- Execute Cleanup ---
+    # Auto-backup before any deletion
+    backup_registry "pre-cleanup" 2>/dev/null || true
+    
     print_header "Executing Cleanup"
     echo ""
     
@@ -2028,6 +2321,80 @@ operation_bulk_setup() {
 }
 
 # =============================================================================
+# Operation: Security / Backup & Restore
+# =============================================================================
+operation_security() {
+    clear
+    print_header "Security / Backup & Restore"
+    echo ""
+
+    local enc_status="${RED}disabled${NC}"
+    [[ "$G_ENCRYPT_REGISTRY" == "1" ]] && enc_status="${LGREEN}enabled${NC}"
+
+    local gcs_status="${GRAY}not configured${NC}"
+    [[ -n "$G_GCS_BUCKET" ]] && gcs_status="${LCYAN}${G_GCS_BUCKET}${NC}"
+
+    echo -e "  Registry encryption : $(echo -e "$enc_status")"
+    echo -e "  GCS sync bucket     : $(echo -e "$gcs_status")"
+    echo -e "  Backup directory    : ${GRAY}$G_BACKUP_DIR${NC}"
+    echo ""
+    echo -e "${WHITE}What would you like to do?${NC}"
+    echo ""
+    echo -e "  ${LCYAN}1)${NC} Create backup now"
+    echo -e "  ${LCYAN}2)${NC} Restore from backup"
+    echo -e "  ${LCYAN}3)${NC} Push registry to GCS (sync push)"
+    echo -e "  ${LCYAN}4)${NC} Pull registry from GCS (sync pull)"
+    echo -e "  ${LCYAN}5)${NC} List local backups"
+    echo -e "  ${LCYAN}0)${NC} Back to main menu"
+    echo ""
+    echo -ne "${YELLOW}Select an option: ${NC}"
+    read sec_option
+
+    case "$sec_option" in
+        1)
+            echo ""
+            echo -ne "${YELLOW}Backup label (Enter for 'manual'): ${NC}"
+            read bk_label
+            backup_registry "${bk_label:-manual}"
+            ;;
+        2)
+            echo ""
+            restore_registry
+            ;;
+        3)
+            echo ""
+            sync_push
+            ;;
+        4)
+            echo ""
+            sync_pull
+            ;;
+        5)
+            echo ""
+            print_header "Local Backups"
+            local ext="csv"; [[ "$G_ENCRYPT_REGISTRY" == "1" ]] && ext="csv.enc"
+            local count=0
+            while IFS= read -r f; do
+                ((count++))
+                local size; size=$(du -h "$f" 2>/dev/null | cut -f1)
+                echo -e "  ${LCYAN}${count})${NC} $(basename "$f")  ${GRAY}(${size})${NC}"
+            done < <(find "$G_BACKUP_DIR" -maxdepth 1 -name "workload-identity-registry_*.${ext}" 2>/dev/null | sort -r)
+            [[ $count -eq 0 ]] && echo -e "  ${GRAY}No backups found${NC}"
+            ;;
+        0) return 0 ;;
+        *)
+            echo -e "${RED}✗ Invalid option${NC}"
+            sleep 1
+            return 0
+            ;;
+    esac
+
+    echo ""
+    echo -ne "${YELLOW}Press Enter to continue...${NC}"
+    read
+}
+
+# =============================================================================
 # Main Menu Loop
 # =============================================================================
 
@@ -2051,6 +2418,7 @@ main() {
             3) operation_cleanup ;;
             4) operation_list ;;
             5) operation_view_registry ;;
+            6) operation_security ;;
             0) 
                 clear
                 echo -e "${LGREEN}Goodbye!${NC}"
