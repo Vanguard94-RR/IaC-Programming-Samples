@@ -63,6 +63,19 @@ G_PROJECT_ID=""
 G_CLUSTER_NAME=""
 G_NAMESPACE="apps"
 
+# --- Load Configuration ---
+# Source external configuration file if it exists
+if [[ -f "$G_SCRIPT_DIR/config.sh" ]]; then
+    # shellcheck source=config.sh
+    source "$G_SCRIPT_DIR/config.sh"
+fi
+
+# Use configuration values with fallbacks to defaults
+readonly G_IAM_ROLE="${WI_IAM_ROLE:-roles/iam.workloadIdentityUser}"
+readonly G_DEFAULT_NS="${WI_DEFAULT_NAMESPACE:-apps}"
+readonly G_ANNOTATION_KEY="${WI_ANNOTATION_KEY:-iam.gke.io/gcp-service-account}"
+readonly G_REGISTRY_FILE="${WI_REGISTRY_FILE:-$G_SCRIPT_DIR/workload-identity-registry.csv}"
+
 # Cleanup on exit
 trap 'cleanup' EXIT
 cleanup() {
@@ -374,15 +387,71 @@ retry_gcloud_command() {
 }
 
 # =============================================================================
+# Function: select_cluster_from_project
+# Description: Interactive cluster selection from GCP project
+# Parameters: 
+#   $1: project_id (required) - GCP project ID
+#   $2: prompt_msg (optional) - Custom prompt message
+# Returns: 0 on success, 1 on error or cancellation
+# Side Effects: Sets global variables SELECTED_CLUSTER and SELECTED_LOCATION
+# =============================================================================
+select_cluster_from_project() {
+    local project_id="$1"
+    local prompt_msg="${2:-Select GKE cluster:}"
+    
+    # List clusters from project
+    local clusters_raw=$(list_gke_clusters "$project_id")
+    
+    if [[ -z "$clusters_raw" ]]; then
+        print_error "No hay clusters GKE en el proyecto $project_id"
+        return 1
+    fi
+    
+    # Parse clusters into arrays
+    declare -a cluster_names
+    declare -a cluster_locations
+    declare -a cluster_options
+    
+    while IFS=$'\t' read -r name location; do
+        cluster_names+=("$name")
+        cluster_locations+=("$location")
+        cluster_options+=("$name ($location)")
+    done <<< "$clusters_raw"
+    
+    # Show selection menu or auto-select
+    if [[ ${#cluster_options[@]} -eq 1 ]]; then
+        SELECTED_CLUSTER="${cluster_names[0]}"
+        SELECTED_LOCATION="${cluster_locations[0]}"
+        print_info "Single cluster found" "$SELECTED_CLUSTER ($SELECTED_LOCATION)"
+    else
+        prompt_selection "$prompt_msg" cluster_options selected_option
+        
+        # Find selected cluster in array
+        for i in "${!cluster_options[@]}"; do
+            if [[ "${cluster_options[$i]}" == "$selected_option" ]]; then
+                SELECTED_CLUSTER="${cluster_names[$i]}"
+                SELECTED_LOCATION="${cluster_locations[$i]}"
+                break
+            fi
+        done
+    fi
+    
+    return 0
+}
+
+# =============================================================================
 # GCP Functions
 # =============================================================================
 
 get_current_project() {
-    gcloud config get-value project 2>/dev/null
+    local project=$(gcloud config get-value project 2>/dev/null)
+    [[ -n "$project" ]] && log_safe "Current GCP project: $project"
+    echo "$project"
 }
 
 list_gke_clusters() {
     local project_id="$1"
+    log "Listing GKE clusters in project: $project_id"
     gcloud container clusters list --project "$project_id" --format="value(name,location)" 2>/dev/null
 }
 
@@ -477,7 +546,15 @@ verify_iam_sa() {
     local sa_email="$1"
     local project_id="$2"
     
-    gcloud iam service-accounts describe "$sa_email" --project "$project_id" &>/dev/null
+    log "Verifying IAM Service Account: $sa_email"
+    
+    if gcloud iam service-accounts describe "$sa_email" --project "$project_id" &>/dev/null; then
+        log "✓ IAM SA verified: $sa_email"
+        return 0
+    else
+        log "⚠ IAM SA not found: $sa_email"
+        return 1
+    fi
 }
 
 create_iam_sa() {
@@ -485,9 +562,13 @@ create_iam_sa() {
     local project_id="$2"
     local display_name="${3:-$sa_name}"
     
+    log "Creating IAM Service Account: $sa_name"
+    
     gcloud iam service-accounts create "$sa_name" \
         --project "$project_id" \
         --display-name "$display_name" 2>&1 | tee -a "$G_LOG_FILE"
+    
+    log "✓ IAM SA created: $sa_name@${project_id}.iam.gserviceaccount.com"
 }
 
 create_namespace() {
@@ -510,7 +591,11 @@ create_ksa() {
         return 0
     fi
     
+    log "Creating Kubernetes Service Account: $ksa_name in $namespace"
+    
     kubectl create serviceaccount "$ksa_name" -n "$namespace" 2>&1 | tee -a "$G_LOG_FILE"
+    
+    log "✓ KSA created: $ksa_name in $namespace"
 }
 
 add_iam_binding() {
@@ -523,7 +608,7 @@ add_iam_binding() {
     
     gcloud iam service-accounts add-iam-policy-binding "$iam_sa_email" \
         --project "$project_id" \
-        --role "roles/iam.workloadIdentityUser" \
+        --role "$G_IAM_ROLE" \
         --member "$member" 2>&1 | tee -a "$G_LOG_FILE"
 }
 
@@ -534,7 +619,7 @@ annotate_ksa() {
     
     kubectl annotate serviceaccount "$ksa_name" \
         --namespace "$namespace" \
-        "iam.gke.io/gcp-service-account=\"${iam_sa_email}\"" \
+        "${G_ANNOTATION_KEY}=\"${iam_sa_email}\"" \
         --overwrite 2>&1 | tee -a "$G_LOG_FILE"
 }
 
@@ -548,7 +633,7 @@ remove_iam_binding() {
     
     gcloud iam service-accounts remove-iam-policy-binding "$iam_sa_email" \
         --project "$project_id" \
-        --role "roles/iam.workloadIdentityUser" \
+        --role "$G_IAM_ROLE" \
         --member "$member" 2>&1 | tee -a "$G_LOG_FILE"
 }
 
@@ -556,12 +641,18 @@ delete_ksa() {
     local ksa_name="$1"
     local namespace="$2"
     
+    log "Deleting Kubernetes Service Account: $ksa_name from $namespace"
+    
     kubectl delete serviceaccount "$ksa_name" -n "$namespace" 2>&1 | tee -a "$G_LOG_FILE"
+    
+    log "✓ KSA deleted: $ksa_name from $namespace"
 }
 
 get_ksa_annotation() {
     local ksa_name="$1"
     local namespace="$2"
+    
+    log_safe "Retrieving annotation from KSA: $ksa_name in $namespace"
     
     kubectl get serviceaccount "$ksa_name" -n "$namespace" \
         -o jsonpath='{.metadata.annotations.iam\.gke\.io/gcp-service-account}' 2>/dev/null
@@ -580,8 +671,6 @@ list_workload_identities() {
         echo -e "  ${GRAY}No Service Accounts found in namespace${NC}"
         return 0
     fi
-    
-    local found=false
     
     # Parse JSON output
     echo "$ksa_output" | jq -r '.items[] | "\(.metadata.name)|\(.metadata.annotations["iam.gke.io/gcp-service-account"] // "")"' 2>/dev/null | while IFS='|' read -r ksa annotation; do
@@ -602,7 +691,7 @@ list_workload_identities() {
     # Show all KSAs if none have annotations
     echo "$ksa_output" | jq -r '.items[] | select(.metadata.annotations["iam.gke.io/gcp-service-account"] == null or .metadata.annotations["iam.gke.io/gcp-service-account"] == "") | .metadata.name' 2>/dev/null | while read -r ksa; do
         if [[ -n "$ksa" ]]; then
-            found=false
+            :
         fi
     done
     
@@ -829,47 +918,13 @@ operation_setup() {
     echo ""
     
     # --- Step 4: List and Select Cluster ---
-    echo -ne "${GRAY}Searching for clusters in the project...${NC}"
-    
-    local clusters_raw=$(list_gke_clusters "$project_id")
-    
-    if [[ -z "$clusters_raw" ]]; then
-        echo -e "\r${RED}✗ No clusters found${NC}     "
+    if ! select_cluster_from_project "$project_id"; then
         print_error "No hay clusters GKE en el proyecto $project_id"
         exit 1
     fi
-    
-    echo -e "\r${LGREEN}✓ Clusters found${NC}          "
-    echo ""
-    
-    # Parse clusters into arrays
-    declare -a cluster_names
-    declare -a cluster_locations
-    declare -a cluster_options
-    
-    while IFS=$'\t' read -r name location; do
-        cluster_names+=("$name")
-        cluster_locations+=("$location")
-        cluster_options+=("$name ($location)")
-    done <<< "$clusters_raw"
-    
-    # Show selection menu
-    if [[ ${#cluster_options[@]} -eq 1 ]]; then
-        selected_cluster="${cluster_names[0]}"
-        selected_location="${cluster_locations[0]}"
-        print_info "Single cluster found" "$selected_cluster ($selected_location)"
-    else
-        prompt_selection "Select GKE cluster:" cluster_options selected_option
-        
-        # Find selected cluster
-        for i in "${!cluster_options[@]}"; do
-            if [[ "${cluster_options[$i]}" == "$selected_option" ]]; then
-                selected_cluster="${cluster_names[$i]}"
-                selected_location="${cluster_locations[$i]}"
-                break
-            fi
-        done
-    fi
+    # Variables SELECTED_CLUSTER, SELECTED_LOCATION are now set
+    local selected_cluster="$SELECTED_CLUSTER"
+    local selected_location="$SELECTED_LOCATION"
     
     echo ""
     
@@ -888,7 +943,7 @@ operation_setup() {
     echo ""
     
     # --- Step 6: Namespace Selection ---
-    prompt_input "Enter namespace" "namespace" "apps"
+    prompt_input "Enter namespace" "namespace" "$G_DEFAULT_NS"
     
     # Validate namespace exists (or create if doesn't exist)
     echo -ne "${GRAY}Validating namespace...${NC}"
@@ -1083,41 +1138,12 @@ operation_verify() {
     echo ""
     
     # --- List and Select Cluster ---
-    echo -ne "${GRAY}Searching for clusters in the project...${NC}"
-    
-    local clusters_raw=$(list_gke_clusters "$project_id")
-    
-    if [[ -z "$clusters_raw" ]]; then
-        echo -e "\r${RED}✗ No clusters found${NC}     "
+    if ! select_cluster_from_project "$project_id"; then
         return 1
     fi
-    
-    echo -e "\r${LGREEN}✓ Clusters found${NC}          "
-    echo ""
-    
-    declare -a cluster_names
-    declare -a cluster_locations
-    declare -a cluster_options
-    
-    while IFS=$'\t' read -r name location; do
-        cluster_names+=("$name")
-        cluster_locations+=("$location")
-        cluster_options+=("$name ($location)")
-    done <<< "$clusters_raw"
-    
-    if [[ ${#cluster_options[@]} -eq 1 ]]; then
-        selected_cluster="${cluster_names[0]}"
-        selected_location="${cluster_locations[0]}"
-    else
-        prompt_selection "Select GKE cluster:" cluster_options selected_option
-        for i in "${!cluster_options[@]}"; do
-            if [[ "${cluster_options[$i]}" == "$selected_option" ]]; then
-                selected_cluster="${cluster_names[$i]}"
-                selected_location="${cluster_locations[$i]}"
-                break
-            fi
-        done
-    fi
+    # Variables SELECTED_CLUSTER, SELECTED_LOCATION are now set
+    local selected_cluster="$SELECTED_CLUSTER"
+    local selected_location="$SELECTED_LOCATION"
     
     echo ""
     
@@ -1133,7 +1159,7 @@ operation_verify() {
     echo ""
     
     # --- KSA and Namespace ---
-    prompt_input "Enter namespace" "namespace" "apps"
+    prompt_input "Enter namespace" "namespace" "$G_DEFAULT_NS"
     prompt_input "Enter KSA name to verify" "ksa_name"
     prompt_input "Enter IAM Service Account name (without @...)" "iam_sa_name" "$ksa_name"
     
@@ -1362,41 +1388,12 @@ operation_cleanup() {
         echo ""
         
         # --- List and Select Cluster ---
-        echo -ne "${GRAY}Searching for clusters in the project...${NC}"
-        
-        local clusters_raw=$(list_gke_clusters "$project_id")
-        
-        if [[ -z "$clusters_raw" ]]; then
-            echo -e "\r${RED}✗ No clusters found${NC}     "
+        if ! select_cluster_from_project "$project_id"; then
             return 1
         fi
-        
-        echo -e "\r${LGREEN}✓ Clusters found${NC}          "
-        echo ""
-        
-        declare -a cluster_names
-        declare -a cluster_locations
-        declare -a cluster_options
-        
-        while IFS=$'\t' read -r name location; do
-            cluster_names+=("$name")
-            cluster_locations+=("$location")
-            cluster_options+=("$name ($location)")
-        done <<< "$clusters_raw"
-        
-        if [[ ${#cluster_options[@]} -eq 1 ]]; then
-            selected_cluster="${cluster_names[0]}"
-            selected_location="${cluster_locations[0]}"
-        else
-            prompt_selection "Select GKE cluster:" cluster_options selected_option
-            for i in "${!cluster_options[@]}"; do
-                if [[ "${cluster_options[$i]}" == "$selected_option" ]]; then
-                    selected_cluster="${cluster_names[$i]}"
-                    selected_location="${cluster_locations[$i]}"
-                    break
-                fi
-            done
-        fi
+        # Variables SELECTED_CLUSTER, SELECTED_LOCATION are now set
+        local selected_cluster="$SELECTED_CLUSTER"
+        local selected_location="$SELECTED_LOCATION"
         
         echo ""
         
@@ -1412,7 +1409,7 @@ operation_cleanup() {
         echo ""
         
         # --- KSA and Namespace ---
-        prompt_input "Enter namespace" "namespace" "apps"
+        prompt_input "Enter namespace" "namespace" "$G_DEFAULT_NS"
         prompt_input "Enter KSA name to delete" "ksa_name"
         
         # Get current annotation
@@ -1675,44 +1672,15 @@ operation_list() {
                 if [[ "$selection" -eq "$max_opt" ]]; then
                     # Search clusters in GCP
                     echo ""
-                    echo -ne "${GRAY}Searching for clusters in the project...${NC}"
-                    
-                    local clusters_raw=$(list_gke_clusters "$project_id")
-                    
-                    if [[ -z "$clusters_raw" ]]; then
-                        echo -e "\r${RED}✗ No clusters found${NC}     "
+                    if ! select_cluster_from_project "$project_id"; then
                         echo ""
                         echo -ne "${YELLOW}Press Enter to continue...${NC}"
                         read
                         return 1
                     fi
-                    
-                    echo -e "\r${LGREEN}✓ Clusters found${NC}          "
-                    echo ""
-                    
-                    declare -a cluster_names
-                    declare -a cluster_locations
-                    declare -a cluster_options
-                    
-                    while IFS=$'\t' read -r name location; do
-                        cluster_names+=("$name")
-                        cluster_locations+=("$location")
-                        cluster_options+=("$name ($location)")
-                    done <<< "$clusters_raw"
-                    
-                    if [[ ${#cluster_options[@]} -eq 1 ]]; then
-                        selected_cluster="${cluster_names[0]}"
-                        selected_location="${cluster_locations[0]}"
-                    else
-                        prompt_selection "Select GKE cluster:" cluster_options selected_option
-                        for i in "${!cluster_options[@]}"; do
-                            if [[ "${cluster_options[$i]}" == "$selected_option" ]]; then
-                                selected_cluster="${cluster_names[$i]}"
-                                selected_location="${cluster_locations[$i]}"
-                                break
-                            fi
-                        done
-                    fi
+                    # Variables SELECTED_CLUSTER, SELECTED_LOCATION are now set
+                    selected_cluster="$SELECTED_CLUSTER"
+                    selected_location="$SELECTED_LOCATION"
                 else
                     selected_cluster="${reg_cluster_names[$((selection-1))]}"
                     selected_location="${reg_cluster_locations[$((selection-1))]}"
@@ -1729,44 +1697,15 @@ operation_list() {
     
     # If no cluster selected from registry, search in GCP
     if [[ -z "$selected_cluster" ]]; then
-        echo -ne "${GRAY}Searching for clusters in the project...${NC}"
-        
-        local clusters_raw=$(list_gke_clusters "$project_id")
-        
-        if [[ -z "$clusters_raw" ]]; then
-            echo -e "\r${RED}✗ No clusters found${NC}     "
+        if ! select_cluster_from_project "$project_id"; then
             echo ""
             echo -ne "${YELLOW}Press Enter to continue...${NC}"
             read
             return 1
         fi
-        
-        echo -e "\r${LGREEN}✓ Clusters found${NC}          "
-        echo ""
-        
-        declare -a cluster_names
-        declare -a cluster_locations
-        declare -a cluster_options
-        
-        while IFS=$'\t' read -r name location; do
-            cluster_names+=("$name")
-            cluster_locations+=("$location")
-            cluster_options+=("$name ($location)")
-        done <<< "$clusters_raw"
-        
-        if [[ ${#cluster_options[@]} -eq 1 ]]; then
-            selected_cluster="${cluster_names[0]}"
-            selected_location="${cluster_locations[0]}"
-        else
-            prompt_selection "Select GKE cluster:" cluster_options selected_option
-            for i in "${!cluster_options[@]}"; do
-                if [[ "${cluster_options[$i]}" == "$selected_option" ]]; then
-                    selected_cluster="${cluster_names[$i]}"
-                    selected_location="${cluster_locations[$i]}"
-                    break
-                fi
-            done
-        fi
+        # Variables SELECTED_CLUSTER, SELECTED_LOCATION are now set
+        selected_cluster="$SELECTED_CLUSTER"
+        selected_location="$SELECTED_LOCATION"
     fi
     
     echo ""
