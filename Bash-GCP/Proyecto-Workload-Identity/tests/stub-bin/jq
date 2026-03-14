@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# jq stub for workload-identity test suite
+# Delegates to the real jq if available; otherwise returns minimal valid JSON.
+
+real_jq="$(command -v jq 2>/dev/null)"
+if [[ -n "$real_jq" ]] && [[ "$real_jq" != "$0" ]]; then
+    exec "$real_jq" "$@"
+fi
+# Fallback: echo empty object (prevents hard failures when jq isn't present)
+echo "null"
+exit 0
