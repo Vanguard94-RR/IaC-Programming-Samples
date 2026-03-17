@@ -3,20 +3,14 @@
 # Workload Identity Manager for GCP/GKE
 # Configure GCP Workload Identity between GCP SA and Kubernetes SA
 # 
-# Project: GCP Workload Identity API
-# Version: 4.0.0
+# Project: GCP Infrastructure Management
+# Version: 4.5.0
 # Author: Infrastructure Team
 # License: Internal Use
 #
 # Features:
 #   - Interactive menu system with colored output
-#   - Automatic backup before any destructive operation
-#   - Backup restore with interactive selection
-#   - GCS remote state sync (push/pull for team sharing)
-#   - CLI non-interactive mode (setup/verify/cleanup/list/bulk-setup)
-#   - Dry-run mode: preview all operations without executing
-#   - Bulk setup from CSV file for batch provisioning
-#   - Structured monthly audit log (logs/audit/audit_YYYY-MM.log)
+#   - GCS remote state sync (auto-sync after operations, optional)
 #   - Automatic ticket-based log organization
 #   - CSV registry of all operations with status tracking
 #   - Robust error handling and validation
@@ -25,8 +19,6 @@
 #   ./workload-identity.sh              # Run interactive menu
 #   ./workload-identity.sh --help       # Show help
 #   ./workload-identity.sh --version    # Show version
-#   ./workload-identity.sh setup --project P --ksa K [--dry-run]
-#   ./workload-identity.sh bulk-setup --file configs.csv
 # =============================================================================
 
 # Script safety settings
@@ -34,7 +26,7 @@ set -euo pipefail
 IFS=$'\n\t'
 
 # Metadata
-readonly G_VERSION="4.0.0"
+readonly G_VERSION="4.5.0"
 readonly G_SCRIPT_NAME="Workload Identity Manager"
 readonly G_SCRIPT_DESC="Configure GCP Workload Identity between GCP SA and Kubernetes SA"
 
@@ -83,28 +75,14 @@ readonly G_IAM_ROLE="${WI_IAM_ROLE:-roles/iam.workloadIdentityUser}"
 readonly G_DEFAULT_NS="${WI_DEFAULT_NAMESPACE:-apps}"
 readonly G_ANNOTATION_KEY="${WI_ANNOTATION_KEY:-iam.gke.io/gcp-service-account}"
 readonly G_REGISTRY_FILE="${WI_REGISTRY_FILE:-$G_SCRIPT_DIR/workload-identity-registry.csv}"
-G_DRY_RUN="${WI_DRY_RUN:-0}"   # 1 = preview commands only, 0 = execute normally
 
-# Security & Backup settings (from config.sh or environment)
-G_BACKUP_DIR="${WI_BACKUP_DIR:-$G_SCRIPT_DIR/backups}"
-G_BACKUP_MAX="${WI_BACKUP_MAX:-10}"
+# Remote sync settings (from config.sh or environment)
 G_GCS_BUCKET="${WI_GCS_BUCKET:-}"
-
-# CLI mode prefill variables (empty = interactive, non-empty = auto-fill)
-G_CLI_MODE=0
-G_CLI_PROJECT=""
-G_CLI_CLUSTER=""
-G_CLI_NAMESPACE=""
-G_CLI_KSA=""
-G_CLI_IAM_SA=""
-G_CLI_TICKET=""
-G_CLI_CLEANUP_LEVEL=""
-G_CLI_OPERATION=""
-G_CLI_BULK_FILE=""
 
 # Cleanup on exit
 trap 'cleanup' EXIT
 cleanup() {
+    # Cleanup temp directory
     rm -rf "$G_TEMP_DIR" 2>/dev/null || true
 }
 mkdir -p "$G_TEMP_DIR"
@@ -184,198 +162,60 @@ update_registry_status() {
     chmod 600 "$G_CONTROL_FILE"
 }
 
-# =============================================================================
-# Function: backup_registry
-# Description: Copy current registry to G_BACKUP_DIR with a timestamp name.
-#              Encrypts the backup if encryption is enabled.
-#              Prunes old backups keeping at most G_BACKUP_MAX copies.
-# Parameters: $1 = label (optional, e.g. "pre-cleanup")
-# Returns: 0=success, 1=error
-# =============================================================================
-backup_registry() {
-    local label="${1:-manual}"
-    local source_file="$G_CONTROL_FILE"
 
-    [[ ! -f "$source_file" ]] && { echo -e "${YELLOW}⚠ Nothing to back up${NC}" >&2; return 0; }
 
-    mkdir -p "$G_BACKUP_DIR" 2>/dev/null || {
-        echo -e "${RED}✗ Cannot create backup directory: $G_BACKUP_DIR${NC}" >&2; return 1
+
+
+# =============================================================================
+# Function: sync_registry
+# Description: Sync registry with GCS bucket for team sharing (optional)
+# Parameters: $1 = action (push|pull)
+# Returns: 0=success, 1=error (non-fatal if bucket not configured)
+# =============================================================================
+sync_registry() {
+    local action="${1:-push}"
+    
+    # Non-fatal: skip if bucket not configured
+    [[ -z "$G_GCS_BUCKET" ]] && return 0
+    
+    # Validate bucket path format
+    if [[ ! "$G_GCS_BUCKET" =~ ^gs:// ]]; then
+        log "WARNING: Invalid GCS bucket path: $G_GCS_BUCKET (expected gs://bucket-name)"
+        return 0
+    fi
+    
+    # Validate registry file exists
+    [[ ! -f "$G_CONTROL_FILE" ]] && {
+        log "WARNING: Registry file not found, skipping sync"
+        return 0
     }
-
-    local timestamp
-    timestamp=$(date '+%Y%m%d_%H%M%S')
-    local backup_name="workload-identity-registry_${timestamp}_${label}.csv"
-    local backup_path="$G_BACKUP_DIR/$backup_name"
-
-    cp "$source_file" "$backup_path"
-    chmod 600 "$backup_path"
-
-    # Prune old backups (keep G_BACKUP_MAX most recent)
-    local count
-    count=$(find "$G_BACKUP_DIR" -maxdepth 1 -name "workload-identity-registry_*.csv" | wc -l)
-    if [[ $count -gt $G_BACKUP_MAX ]]; then
-        find "$G_BACKUP_DIR" -maxdepth 1 -name "workload-identity-registry_*.csv" \
-            | sort | head -n $(( count - G_BACKUP_MAX )) \
-            | xargs rm -f --
-    fi
-
-    echo -e "${LGREEN}✓ Backup saved:${NC} ${GRAY}$(basename "$backup_path")${NC}"
-    log "Registry backup created: $backup_path (label=$label)"
-}
-
-# =============================================================================
-# Function: restore_registry
-# Description: Restore the registry from a backup file.
-#              Creates a backup of the current registry before restoring.
-# Parameters: $1 = backup file path (full path)
-# Returns: 0=success, 1=error
-# =============================================================================
-restore_registry() {
-    local backup_file="${1:-}"
-
-    if [[ -z "$backup_file" ]]; then
-        # Interactive: list available backups and let user choose
-        local -a backups=()
-        while IFS= read -r f; do
-            backups+=("$f")
-        done < <(find "$G_BACKUP_DIR" -maxdepth 1 -name "workload-identity-registry_*.csv" | sort -r)
-
-        if [[ ${#backups[@]} -eq 0 ]]; then
-            echo -e "${YELLOW}⚠ No backups found in $G_BACKUP_DIR${NC}"
+    
+    case "$action" in
+        push)
+            if gcloud storage cp "$G_CONTROL_FILE" "$G_GCS_BUCKET/registry.csv" --quiet 2>&1; then
+                log "Registry synced to GCS"
+                return 0
+            else
+                log "WARNING: Failed to sync registry to GCS (check permissions)"
+                return 0  # Non-fatal
+            fi
+            ;;
+        pull)
+            if gcloud storage cp "$G_GCS_BUCKET/registry.csv" "$G_CONTROL_FILE" --quiet 2>&1; then
+                chmod 600 "$G_CONTROL_FILE"
+                log "Registry synced from GCS"
+                return 0
+            else
+                log "WARNING: Failed to sync registry from GCS (file may not exist)"
+                return 0  # Non-fatal
+            fi
+            ;;
+        *)
             return 1
-        fi
-
-        echo -e "${WHITE}Available backups:${NC}"
-        for i in "${!backups[@]}"; do
-            echo -e "  ${LCYAN}$((i+1)))${NC} $(basename "${backups[$i]}")"
-        done
-        echo ""
-        echo -ne "${YELLOW}Select backup to restore [1-${#backups[@]}]: ${NC}"
-        read sel
-        if [[ ! "$sel" =~ ^[0-9]+$ ]] || [[ $sel -lt 1 ]] || [[ $sel -gt ${#backups[@]} ]]; then
-            echo -e "${RED}✗ Invalid selection${NC}" >&2; return 1
-        fi
-        backup_file="${backups[$((sel-1))]}"
-    fi
-
-    [[ ! -f "$backup_file" ]] && { echo -e "${RED}✗ File not found: $backup_file${NC}" >&2; return 1; }
-
-    # Safety backup of current registry before overwriting
-    backup_registry "pre-restore"
-
-    cp "$backup_file" "$G_CONTROL_FILE"
-    chmod 600 "$G_CONTROL_FILE"
-
-    echo -e "${LGREEN}✓ Registry restored from:${NC} ${GRAY}$(basename "$backup_file")${NC}"
-    log "Registry restored from: $backup_file"
+            ;;
+    esac
 }
 
-# =============================================================================
-# Function: sync_push
-# Description: Push registry (and audit log) to a GCS bucket for team sharing.
-#              Uploads the encrypted file when encryption is enabled,
-#              otherwise uploads the plaintext CSV.
-# Returns: 0=success, 1=no bucket configured or upload error
-# =============================================================================
-sync_push() {
-    if [[ -z "$G_GCS_BUCKET" ]]; then
-        echo -e "${YELLOW}⚠ WI_GCS_BUCKET not set — skipping remote sync${NC}" >&2
-        return 1
-    fi
-
-    local upload_file="$G_CONTROL_FILE"
-    local remote_name="workload-identity-registry.csv"
-
-    [[ ! -f "$upload_file" ]] && { echo -e "${YELLOW}⚠ Registry file not found — nothing to push${NC}" >&2; return 1; }
-
-    echo -ne "${GRAY}Pushing registry to ${G_GCS_BUCKET}...${NC}"
-    if gcloud storage cp "$upload_file" "${G_GCS_BUCKET}/${remote_name}" --quiet 2>/dev/null; then
-        echo -e "\r${LGREEN}✓ Registry pushed to ${G_GCS_BUCKET}/${remote_name}${NC}"
-        log "Registry pushed to GCS: ${G_GCS_BUCKET}/${remote_name}"
-
-        # Also push the current monthly audit log if it exists
-        local audit_file="$G_SCRIPT_DIR/logs/audit/audit_$(date '+%Y-%m').log"
-        if [[ -f "$audit_file" ]]; then
-            gcloud storage cp "$audit_file" \
-                "${G_GCS_BUCKET}/audit/audit_$(date '+%Y-%m').log" --quiet 2>/dev/null || true
-        fi
-        return 0
-    else
-        echo -e "\r${RED}✗ Failed to push registry to GCS${NC}"
-        log "ERROR: GCS push failed to ${G_GCS_BUCKET}"
-        return 1
-    fi
-}
-
-# =============================================================================
-# Function: sync_pull
-# Description: Pull the latest registry from GCS, replacing the local copy.
-#              Creates a backup of the current local registry first.
-# Returns: 0=success, 1=no bucket configured or download error
-# =============================================================================
-sync_pull() {
-    if [[ -z "$G_GCS_BUCKET" ]]; then
-        echo -e "${YELLOW}⚠ WI_GCS_BUCKET not set — skipping remote sync${NC}" >&2
-        return 1
-    fi
-
-    local remote_name="workload-identity-registry.csv"
-    local remote_url="${G_GCS_BUCKET}/${remote_name}"
-    local dest_file="$G_CONTROL_FILE"
-
-    # Safety backup before overwriting
-    backup_registry "pre-sync-pull" 2>/dev/null || true
-
-    echo -ne "${GRAY}Pulling registry from ${G_GCS_BUCKET}...${NC}"
-    if gcloud storage cp "$remote_url" "$dest_file" --quiet 2>/dev/null; then
-        chmod 600 "$dest_file"
-        echo -e "\r${LGREEN}✓ Registry pulled from ${remote_url}${NC}"
-        log "Registry pulled from GCS: $remote_url"
-        return 0
-    else
-        echo -e "\r${RED}✗ Failed to pull registry from GCS${NC}"
-        log "ERROR: GCS pull failed from ${remote_url}"
-        return 1
-    fi
-}
-
-# =============================================================================
-# Function: audit_log
-# Description: Append one structured line to the monthly audit log file
-# Parameters:
-#   $1 = operation  (setup|verify|cleanup|list|bulk-setup)
-#   $2 = project
-#   $3 = cluster
-#   $4 = namespace
-#   $5 = ksa
-#   $6 = result     (SUCCESS|FAILED|DRY-RUN|PARTIAL)
-#   $7 = detail     (optional, error message or extra info)
-# =============================================================================
-audit_log() {
-    local operation="$1"
-    local project="${2:--}"
-    local cluster="${3:--}"
-    local namespace="${4:--}"
-    local ksa="${5:--}"
-    local result="${6:-SUCCESS}"
-    local detail="${7:-}"
-
-    local audit_dir="$G_SCRIPT_DIR/logs/audit"
-    mkdir -p "$audit_dir" 2>/dev/null || true
-
-    local audit_file="$audit_dir/audit_$(date '+%Y-%m').log"
-    local timestamp
-    timestamp=$(date '+%Y-%m-%dT%H:%M:%S')
-    local user
-    user=$(gcloud config get-value account 2>/dev/null || echo "unknown")
-    local dry_tag=""
-    [[ "$G_DRY_RUN" == "1" ]] && dry_tag=" [DRY-RUN]"
-
-    printf '%s | user=%s | op=%s%s | project=%s | cluster=%s | ns=%s | ksa=%s | result=%s%s\n' \
-        "$timestamp" "$user" "$operation" "$dry_tag" \
-        "$project" "$cluster" "$namespace" "$ksa" \
-        "$result" "${detail:+ | detail=$detail}" >> "$audit_file"
-}
 
 # --- Setup log directory (called after ticket input) ---
 setup_log_directory() {
@@ -495,23 +335,6 @@ prompt_input() {
     local variable_name="$2"
     local default_value="${3:-}"
     
-    # CLI mode: use pre-filled globals rather than prompting
-    if [[ "$G_CLI_MODE" == "1" ]]; then
-        local cli_val=""
-        case "$variable_name" in
-            project_id|TICKET_ID) [[ "$variable_name" == "project_id" ]] && cli_val="$G_CLI_PROJECT" || cli_val="$G_CLI_TICKET" ;;
-            namespace)   cli_val="$G_CLI_NAMESPACE" ;;
-            ksa_name)    cli_val="$G_CLI_KSA" ;;
-            iam_sa_name) cli_val="$G_CLI_IAM_SA" ;;
-        esac
-        # Use CLI value, then default, then leave empty
-        local resolved="${cli_val:-${default_value:-}}"
-        printf -v "$variable_name" '%s' "$resolved"
-        echo -e "${GRAY}  (CLI) ${prompt_text}: ${resolved:-<empty>}${NC}" >&2
-        log "CLI Input - ${prompt_text}: ${resolved}"
-        return 0
-    fi
-    
     if [[ -n "$default_value" ]]; then
         echo -ne "${YELLOW}${prompt_text} [${default_value}]: ${NC}"
     else
@@ -535,14 +358,6 @@ prompt_selection() {
     
     local -n options="$options_var"
     local count=${#options[@]}
-    
-    # CLI mode: auto-select first option when no GUI interaction available
-    if [[ "$G_CLI_MODE" == "1" ]]; then
-        printf -v "$result_var" '%s' "${options[0]}"
-        echo -e "${GRAY}  (CLI) ${prompt_text}: ${options[0]}${NC}" >&2
-        log "CLI Selection - ${prompt_text}: ${options[0]}"
-        return 0
-    fi
     
     echo -e "${WHITE}${prompt_text}${NC}"
     echo ""
@@ -632,21 +447,6 @@ retry_gcloud_command() {
 }
 
 # =============================================================================
-# Function: exec_cmd
-# Description: Execute a command, or print it in dry-run mode instead
-# Parameters: $@ = command and all arguments
-# Returns: 0=success (real or dry-run), non-zero=error
-# =============================================================================
-exec_cmd() {
-    if [[ "$G_DRY_RUN" == "1" ]]; then
-        echo -e "  ${YELLOW}[DRY-RUN]${NC} ${GRAY}$*${NC}" >&2
-        log "DRY-RUN: $*"
-        return 0
-    fi
-    "$@"
-}
-
-# =============================================================================
 # Function: select_cluster_from_project
 # Description: Interactive cluster selection from GCP project
 # Parameters: 
@@ -659,21 +459,7 @@ select_cluster_from_project() {
     local project_id="$1"
     local prompt_msg="${2:-Select GKE cluster:}"
     
-    # CLI mode: if --cluster was provided, resolve its location and use it directly
-    if [[ "$G_CLI_MODE" == "1" ]] && [[ -n "$G_CLI_CLUSTER" ]]; then
-        local cluster_location
-        cluster_location=$(gcloud container clusters list --project "$project_id" \
-            --filter="name=$G_CLI_CLUSTER" --format="value(location)" 2>/dev/null)
-        if [[ -z "$cluster_location" ]]; then
-            print_error "Cluster '$G_CLI_CLUSTER' not found in project $project_id"
-            return 1
-        fi
-        SELECTED_CLUSTER="$G_CLI_CLUSTER"
-        SELECTED_LOCATION="$cluster_location"
-        echo -e "${GRAY}  (CLI) Cluster: $SELECTED_CLUSTER ($SELECTED_LOCATION)${NC}" >&2
-        return 0
-    fi
-    
+
     # List clusters from project
     local clusters_raw
     clusters_raw=$(list_gke_clusters "$project_id")
@@ -802,12 +588,12 @@ connect_to_cluster() {
     # Determine if regional or zonal
     if [[ "$location" =~ ^[a-z]+-[a-z]+[0-9]+$ ]]; then
         # Regional (e.g., us-central1)
-        exec_cmd gcloud container clusters get-credentials "$cluster_name" \
+        gcloud container clusters get-credentials "$cluster_name" \
             --region "$location" \
             --project "$project_id" &>/dev/null
     else
         # Zonal (e.g., us-central1-a)
-        exec_cmd gcloud container clusters get-credentials "$cluster_name" \
+        gcloud container clusters get-credentials "$cluster_name" \
             --zone "$location" \
             --project "$project_id" &>/dev/null
     fi
@@ -836,7 +622,7 @@ create_iam_sa() {
     
     log "Creating IAM Service Account: $sa_name"
     
-    exec_cmd gcloud iam service-accounts create "$sa_name" \
+    gcloud iam service-accounts create "$sa_name" \
         --project "$project_id" \
         --display-name "$display_name"
     
@@ -851,7 +637,7 @@ create_namespace() {
         return 0
     fi
     
-    exec_cmd kubectl create namespace "$namespace"
+    kubectl create namespace "$namespace"
 }
 
 create_ksa() {
@@ -865,7 +651,7 @@ create_ksa() {
     
     log "Creating Kubernetes Service Account: $ksa_name in $namespace"
     
-    exec_cmd kubectl create serviceaccount "$ksa_name" -n "$namespace"
+    kubectl create serviceaccount "$ksa_name" -n "$namespace"
     
     log "✓ KSA created: $ksa_name in $namespace"
 }
@@ -878,7 +664,7 @@ add_iam_binding() {
     
     local member="serviceAccount:${project_id}.svc.id.goog[${namespace}/${ksa_name}]"
     
-    exec_cmd gcloud iam service-accounts add-iam-policy-binding "$iam_sa_email" \
+    gcloud iam service-accounts add-iam-policy-binding "$iam_sa_email" \
         --project "$project_id" \
         --role "$G_IAM_ROLE" \
         --member "$member"
@@ -889,7 +675,7 @@ annotate_ksa() {
     local namespace="$2"
     local iam_sa_email="$3"
     
-    exec_cmd kubectl annotate serviceaccount "$ksa_name" \
+    kubectl annotate serviceaccount "$ksa_name" \
         --namespace "$namespace" \
         "${G_ANNOTATION_KEY}=${iam_sa_email}" \
         --overwrite
@@ -903,7 +689,7 @@ remove_iam_binding() {
     
     local member="serviceAccount:${project_id}.svc.id.goog[${namespace}/${ksa_name}]"
     
-    exec_cmd gcloud iam service-accounts remove-iam-policy-binding "$iam_sa_email" \
+    gcloud iam service-accounts remove-iam-policy-binding "$iam_sa_email" \
         --project "$project_id" \
         --role "$G_IAM_ROLE" \
         --member "$member"
@@ -915,7 +701,7 @@ delete_ksa() {
     
     log "Deleting Kubernetes Service Account: $ksa_name from $namespace"
     
-    exec_cmd kubectl delete serviceaccount "$ksa_name" -n "$namespace"
+    kubectl delete serviceaccount "$ksa_name" -n "$namespace"
     
     log "✓ KSA deleted: $ksa_name from $namespace"
 }
@@ -995,65 +781,26 @@ show_help() {
   DESCRIPTION:
     Tool for configuring GCP Workload Identity between GCP IAM
     Service Accounts and Kubernetes Service Accounts.
-    Supports interactive menu and non-interactive CLI mode.
+    Fully interactive guided menu interface.
 
   USAGE:
-    ./workload-identity.sh                            # Interactive menu
-    ./workload-identity.sh --help                     # This help
-    ./workload-identity.sh --version                  # Version info
-    ./workload-identity.sh setup   [FLAGS]            # Configure WI
-    ./workload-identity.sh verify  [FLAGS]            # Verify WI
-    ./workload-identity.sh cleanup [FLAGS]            # Remove WI
-    ./workload-identity.sh list    [FLAGS]            # List WI bindings
-    ./workload-identity.sh bulk-setup --file FILE     # Batch configure
+    ./workload-identity.sh                 # Start interactive menu
+    ./workload-identity.sh --help          # Display this help
+    ./workload-identity.sh --version       # Show version info
 
-  AVAILABLE FLAGS:
-    --project,   -p  PROJECT    GCP Project ID
-    --cluster,   -c  CLUSTER    GKE cluster name
-    --namespace, -n  NAMESPACE  Kubernetes namespace (default: apps)
-    --ksa,       -k  KSA        Kubernetes Service Account name
-    --iam-sa,    -s  EMAIL      GCP IAM Service Account email
-    --ticket,    -t  TICKET     Ticket number (e.g. CTASK0012345)
-    --level,     -l  LEVEL      Cleanup level: 1=binding, 2=+ksa, 3=all
-    --file,      -f  FILE       CSV file for bulk-setup
-    --dry-run                   Preview changes without executing
-
-  OPERATIONS:
+  OPERATIONS (via interactive menu):
     setup:      Create IAM SA, KSA, WI binding and annotation
     verify:     Verify that WI is correctly configured
     cleanup:    Remove binding, KSA and/or IAM SA
     list:       List KSAs with WI annotation in a namespace
-    bulk-setup: Process multiple configurations from a CSV file
 
-  EXAMPLES:
-    # 1. Interactive guided menu:
+  EXAMPLE:
     $ ./workload-identity.sh
-
-    # 2. Configure WI via CLI:
-    $ ./workload-identity.sh setup \
-        --project gnp-covid-qa \
-        --cluster gke-gnp-covid-qa \
-        --namespace apps \
-        --ksa myapp \
-        --iam-sa myapp@gnp-covid-qa.iam.gserviceaccount.com \
-        --ticket CTASK0012345
-
-    # 3. Dry-run (preview without executing):
-    $ ./workload-identity.sh setup \
-        --project gnp-covid-qa --ksa myapp --dry-run
-
-    # 4. Remove everything (binding + KSA + IAM SA):
-    $ ./workload-identity.sh cleanup \
-        --project gnp-covid-qa --ksa myapp --namespace apps --level 3
-
-    # 5. Bulk setup from CSV:
-    $ ./workload-identity.sh bulk-setup --file configs.csv
-    # CSV format: project_id,cluster,location,namespace,ksa,iam_sa,ticket
+    # Follow the interactive menu prompts for setup, verify, cleanup, or list
 
   FILES:
     workload-identity-registry.csv    Operations registry
     config.sh                         External configuration
-    logs/audit/audit_YYYY-MM.log      Structured audit log
     logs/                             Session logs
     Tickets/[TICKET]/logs/            Logs organized by ticket
 
@@ -1083,18 +830,13 @@ show_version() {
   Repository:      IaC-Programming-Samples
 
   Features:
-    ✓ Interactive interface + CLI non-interactive mode
-    ✓ Dry-run mode (preview without executing)
-    ✓ Bulk setup from CSV file
-    ✓ Structured audit log (logs/audit/)
-    ✓ AES-256-CBC registry encryption (opt-in)
-    ✓ Automatic backup before destructive ops
-    ✓ Restore registry from backup
-    ✓ GCS remote state sync (push/pull)
+    ✓ Fully interactive guided menu
+    ✓ GCS auto-sync after operations (optional)
+    ✓ Automatic GCS sync after operations (optional via WI_GCS_BUCKET)
     ✓ Ticket-based log organization
     ✓ CSV operations registry
     ✓ Robust input validation
-    ✓ Structured logging
+    ✓ Session-based logging
 
 VERSION_TEXT
 }
@@ -1114,7 +856,6 @@ show_main_menu() {
     echo -e "${LGREEN}║${NC}  ${LCYAN}3)${NC} Delete Workload Identity           ${LGREEN}║${NC}"
     echo -e "${LGREEN}║${NC}  ${LCYAN}4)${NC} List Bindings in Namespace         ${LGREEN}║${NC}"
     echo -e "${LGREEN}║${NC}  ${LCYAN}5)${NC} View Operations Registry           ${LGREEN}║${NC}"
-    echo -e "${LGREEN}║${NC}  ${LCYAN}6)${NC} Security / Backup & Restore        ${LGREEN}║${NC}"
     echo -e "${LGREEN}║${NC}                                        ${LGREEN}║${NC}"
     echo -e "${LGREEN}║${NC}  ${LCYAN}0)${NC} Exit                               ${LGREEN}║${NC}"
     echo -e "${LGREEN}║${NC}                                        ${LGREEN}║${NC}"
@@ -1354,13 +1095,13 @@ operation_setup() {
     echo -e "${GRAY}Record added to: $G_CONTROL_FILE${NC}"
     log "Session completed successfully"
     log "Registered in control file: $G_CONTROL_FILE"
-    audit_log "setup" "$project_id" "$selected_cluster" "$namespace" "$ksa_name" "SUCCESS"
+
+    # Auto-sync registry to GCS if configured
+    sync_registry push
 
     echo ""
-    if [[ "$G_CLI_MODE" == "0" ]]; then
-        echo -ne "${YELLOW}Press Enter to continue...${NC}"
-        read
-    fi
+    echo -ne "${YELLOW}Press Enter to continue...${NC}"
+    read
 }
 
 # =============================================================================
@@ -1403,16 +1144,14 @@ operation_verify() {
     fi
 
     # --- Confirmation menu (interactive mode only) ---
-    if [[ "$G_CLI_MODE" == "0" ]]; then
-        echo -e "${WHITE}Options:${NC}"
-        echo -e "  ${LCYAN}1)${NC} Continue with verification"
-        echo -e "  ${LCYAN}0)${NC} Return to main menu"
-        echo ""
-        echo -ne "${YELLOW}Select an option: ${NC}"
-        read verify_option
-        if [[ "$verify_option" != "1" ]]; then
-            return 0
-        fi
+    echo -e "${WHITE}Options:${NC}"
+    echo -e "  ${LCYAN}1)${NC} Continue with verification"
+    echo -e "  ${LCYAN}0)${NC} Return to main menu"
+    echo ""
+    echo -ne "${YELLOW}Select an option: ${NC}"
+    read verify_option
+    if [[ "$verify_option" != "1" ]]; then
+        return 0
     fi
 
     echo ""
@@ -1523,11 +1262,9 @@ operation_verify() {
     echo ""
     print_header "Verification Completed"
     
-    if [[ "$G_CLI_MODE" == "0" ]]; then
-        echo ""
-        echo -ne "${YELLOW}Press Enter to continue...${NC}"
-        read
-    fi
+    echo ""
+    echo -ne "${YELLOW}Press Enter to continue...${NC}"
+    read
 }
 
 # =============================================================================
@@ -1542,17 +1279,7 @@ ask_confirmation() {
     local message="$1"
     local action="${2:-continue}"
 
-    # In CLI mode or dry-run, skip interactive prompt and auto-accept
-    if [[ "${G_CLI_MODE:-0}" == "1" ]] || [[ "${G_DRY_RUN:-0}" == "1" ]]; then
-        local dry_tag=""
-        [[ "${G_DRY_RUN:-0}" == "1" ]] && dry_tag=" [DRY-RUN]"
-        echo -e "${GRAY}  (CLI${dry_tag}) auto-confirmed${NC}"
-        return 0
-    fi
-    
-    echo -e "\n${YELLOW}⚠ Confirmation Required${NC}"
-    echo -e "${GRAY}─────────────────────────────────────${NC}"
-    echo -e "  ${message}"
+    # Skip interactive prompt in interactive mode and auto-accept
     echo -e "${GRAY}─────────────────────────────────────${NC}"
     echo ""
     
@@ -1749,13 +1476,8 @@ operation_cleanup() {
     echo -e "  ${LCYAN}0)${NC} Cancel"
     echo ""
     local cleanup_option=""
-    if [[ "$G_CLI_MODE" == "1" ]] && [[ -n "$G_CLI_CLEANUP_LEVEL" ]]; then
-        cleanup_option="$G_CLI_CLEANUP_LEVEL"
-        echo -e "${GRAY}  (CLI) Cleanup level: $cleanup_option${NC}" >&2
-    else
-        echo -ne "${YELLOW}Select an option: ${NC}"
-        read cleanup_option
-    fi
+    echo -ne "${YELLOW}Select an option: ${NC}"
+    read cleanup_option
     
     if [[ "$cleanup_option" == "0" ]]; then
         print_warning "Operation cancelled"
@@ -1774,17 +1496,15 @@ operation_cleanup() {
     fi
     
     echo ""
-    if [[ "$G_CLI_MODE" == "0" ]]; then
-        echo -e "${RED}⚠ This action cannot be undone${NC}"
-        echo -ne "${YELLOW}Are you sure? (Y/N): ${NC}"
-        read confirm
-        if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-            print_warning "Operation cancelled"
-            echo ""
-            echo -ne "${YELLOW}Press Enter to continue...${NC}"
-            read
-            return 0
-        fi
+    echo -e "${RED}⚠ This action cannot be undone${NC}"
+    echo -ne "${YELLOW}Are you sure? (Y/N): ${NC}"
+    read confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        print_warning "Operation cancelled"
+        echo ""
+        echo -ne "${YELLOW}Press Enter to continue...${NC}"
+        read
+        return 0
     fi
     
     echo ""
@@ -1797,14 +1517,11 @@ operation_cleanup() {
     
     confirm_message+=$'\n\nProject: '"$project_id"$'\nCluster: '"$selected_cluster"$'\nNamespace: '"$namespace"$'\nKSA: '"$ksa_name"
     
-    if [[ "$G_CLI_MODE" == "0" ]] && ! ask_confirmation "$confirm_message" "delete"; then
+    if ! ask_confirmation "$confirm_message" "delete"; then
         return 0
     fi
     
     # --- Execute Cleanup ---
-    # Auto-backup before any deletion
-    backup_registry "pre-cleanup" 2>/dev/null || true
-    
     print_header "Executing Cleanup"
     echo ""
     
@@ -1824,7 +1541,7 @@ operation_cleanup() {
     
     # Step 2: Remove annotation
     echo -ne "${WHITE}[${step}/${total_steps}]${NC} Removing KSA annotation..."
-    if exec_cmd kubectl annotate serviceaccount "$ksa_name" -n "$namespace" "iam.gke.io/gcp-service-account-" >/dev/null 2>&1; then
+    if kubectl annotate serviceaccount "$ksa_name" -n "$namespace" "iam.gke.io/gcp-service-account-" >/dev/null 2>&1; then
         echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Removing KSA annotation... ${LGREEN}✓${NC}"
     else
         echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Removing KSA annotation... ${YELLOW}(may not exist)${NC}"
@@ -1846,7 +1563,7 @@ operation_cleanup() {
     if [[ "$cleanup_option" == "3" ]]; then
         echo -ne "${WHITE}[${step}/${total_steps}]${NC} Deleting IAM account..."
         local delete_sa_error=""
-        if delete_sa_error=$(exec_cmd gcloud iam service-accounts delete "$annotation" --project "$project_id" --quiet 2>&1); then
+        if delete_sa_error=$(gcloud iam service-accounts delete "$annotation" --project "$project_id" --quiet 2>&1); then
             echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Deleting IAM account... ${LGREEN}✓${NC}"
             log "IAM SA deleted: $annotation"
         else
@@ -1890,13 +1607,13 @@ operation_cleanup() {
     echo -e "  • Status: ${LGREEN}${status_text}${NC}"
     
     log "Cleanup completed for $ksa_name in $namespace - Status: $status_text"
-    audit_log "cleanup" "$project_id" "$selected_cluster" "$namespace" "$ksa_name" "SUCCESS" "$status_text"
+    
+    # Auto-sync registry to GCS if configured
+    sync_registry push
     
     echo ""
-    if [[ "$G_CLI_MODE" == "0" ]]; then
-        echo -ne "${YELLOW}Press Enter to continue...${NC}"
-        read
-    fi
+    echo -ne "${YELLOW}Press Enter to continue...${NC}"
+    read
 }
 
 # =============================================================================
@@ -1915,11 +1632,7 @@ operation_list() {
     current_project=$(get_current_project)
 
     # ── Project Selection ─────────────────────────────────────────────────────
-    if [[ "$G_CLI_MODE" == "1" ]] && [[ -n "$G_CLI_PROJECT" ]]; then
-        # CLI mode: project supplied via --project flag
-        project_id="$G_CLI_PROJECT"
-        echo -e "${GRAY}  (CLI) Project: $project_id${NC}" >&2
-    elif [[ -f "$G_CONTROL_FILE" ]]; then
+    if [[ -f "$G_CONTROL_FILE" ]]; then
         # Interactive: let user pick from registry or type manually
         local registry_projects
         registry_projects=$(tail -n +2 "$G_CONTROL_FILE" | awk -F',' '$9 == "activo" {print $3}' | sort -u | grep -v '^$')
@@ -1960,15 +1673,7 @@ operation_list() {
     echo ""
 
     # ── Cluster Selection ─────────────────────────────────────────────────────
-    if [[ "$G_CLI_MODE" == "1" ]]; then
-        # CLI: select_cluster_from_project handles --cluster bypass or auto-discovers
-        if ! select_cluster_from_project "$project_id"; then
-            return 1
-        fi
-        selected_cluster="$SELECTED_CLUSTER"
-        selected_location="$SELECTED_LOCATION"
-    else
-        # Interactive: show clusters from registry for this project, or fall back to GCP
+    # Interactive: show clusters from registry for this project, or fall back to GCP
         local registry_clusters=""
         if [[ -f "$G_CONTROL_FILE" ]]; then
             registry_clusters=$(tail -n +2 "$G_CONTROL_FILE" | \
@@ -2017,7 +1722,6 @@ operation_list() {
             selected_cluster="$SELECTED_CLUSTER"
             selected_location="$SELECTED_LOCATION"
         fi
-    fi
 
     echo ""
     
@@ -2053,10 +1757,8 @@ operation_list() {
     fi
     
     echo ""
-    if [[ "$G_CLI_MODE" == "0" ]]; then
-        echo -ne "${YELLOW}Press Enter to continue...${NC}"
-        read
-    fi
+    echo -ne "${YELLOW}Press Enter to continue...${NC}"
+    read
 }
 
 # =============================================================================
@@ -2121,151 +1823,7 @@ operation_view_registry() {
     read
 }
 
-# =============================================================================
-# Operation: Bulk Setup (CLI only)
-# =============================================================================
-# Reads a CSV file with columns: project_id,cluster,location,namespace,ksa,iam_sa,ticket
-# Skips the header row. Empty iam_sa = auto-generate from ksa name.
-# =============================================================================
-operation_bulk_setup() {
-    local file="${G_CLI_BULK_FILE:-}"
 
-    if [[ -z "$file" ]]; then
-        echo -e "${RED}✗ --file is required for bulk-setup${NC}" >&2
-        echo -e "${GRAY}  Example: ./workload-identity.sh bulk-setup --file configs.csv${NC}" >&2
-        exit 1
-    fi
-
-    if [[ ! -f "$file" ]]; then
-        echo -e "${RED}✗ File not found: $file${NC}" >&2
-        exit 1
-    fi
-
-    local total=0 succeeded=0 failed=0
-    local failed_list=()
-
-    print_header "Bulk Setup - Workload Identity"
-    echo -e "${GRAY}File: $file${NC}"
-    [[ "$G_DRY_RUN" == "1" ]] && echo -e "${YELLOW}Mode: DRY-RUN (no changes will be applied)${NC}"
-    echo ""
-
-    # Detect CSV format: 7-column (with location) vs 6-column (without location)
-    # Canonical format: project_id,cluster,location,namespace,ksa,iam_sa,ticket
-    while IFS=',' read -r b_project b_cluster b_location b_namespace b_ksa b_iam_sa b_ticket; do
-        # Skip blank lines and header rows (detect by first column value)
-        [[ -z "$b_project" || "$b_project" =~ ^(project|project_id)$ ]] && continue
-        total=$(( total + 1 ))
-
-        # Override CLI globals for this row
-        G_CLI_PROJECT="$b_project"
-        G_CLI_CLUSTER="$b_cluster"
-        # b_location is stored but cluster lookup via gcloud auto-detects it
-        G_CLI_NAMESPACE="${b_namespace:-$G_DEFAULT_NS}"
-        G_CLI_KSA="$b_ksa"
-        G_CLI_IAM_SA="${b_iam_sa:-${b_ksa}@${b_project}.iam.gserviceaccount.com}"
-        G_CLI_TICKET="${b_ticket:-}"
-
-        echo -e "${WHITE}[$total]${NC} ${LCYAN}${b_project}${NC} / ${b_cluster} / ${b_namespace} / ${b_ksa}"
-
-        if operation_setup 2>&1; then
-            succeeded=$(( succeeded + 1 ))
-            echo -e "    ${LGREEN}✓ Done${NC}"
-            audit_log "bulk-setup" "$b_project" "$b_cluster" "$b_namespace" "$b_ksa" "SUCCESS"
-        else
-            failed=$(( failed + 1 ))
-            failed_list+=("$b_project/$b_ksa")
-            echo -e "    ${RED}✗ Failed${NC}"
-            audit_log "bulk-setup" "$b_project" "$b_cluster" "$b_namespace" "$b_ksa" "FAILED"
-        fi
-        echo ""
-    done < "$file"
-
-    # Summary
-    print_header "Bulk Setup Summary"
-    echo -e "  Total:    ${WHITE}$total${NC}"
-    echo -e "  Success:  ${LGREEN}$succeeded${NC}"
-    echo -e "  Failed:   ${RED}$failed${NC}"
-    if [[ ${#failed_list[@]} -gt 0 ]]; then
-        echo -e "\n${RED}Failed entries:${NC}"
-        for entry in "${failed_list[@]}"; do
-            echo -e "  • $entry"
-        done
-    fi
-    [[ $failed -gt 0 ]] && exit 1 || exit 0
-}
-
-# =============================================================================
-# Operation: Security / Backup & Restore
-# =============================================================================
-operation_security() {
-    clear
-    print_header "Security / Backup & Restore"
-    echo ""
-
-    local gcs_status="${GRAY}not configured${NC}"
-    [[ -n "$G_GCS_BUCKET" ]] && gcs_status="${LCYAN}${G_GCS_BUCKET}${NC}"
-
-    echo -e "  GCS sync bucket     : $(echo -e "$gcs_status")"
-    echo -e "  Backup directory    : ${GRAY}$G_BACKUP_DIR${NC}"
-    echo ""
-    echo -e "${WHITE}What would you like to do?${NC}"
-    echo ""
-    echo -e "  ${LCYAN}1)${NC} Create backup now"
-    echo -e "  ${LCYAN}2)${NC} Restore from backup"
-    echo -e "  ${LCYAN}3)${NC} Push registry to GCS (sync push)"
-    echo -e "  ${LCYAN}4)${NC} Pull registry from GCS (sync pull)"
-    echo -e "  ${LCYAN}5)${NC} List local backups"
-    echo -e "  ${LCYAN}0)${NC} Back to main menu"
-    echo ""
-    echo -ne "${YELLOW}Select an option: ${NC}"
-    read sec_option
-
-    case "$sec_option" in
-        1)
-            echo ""
-            echo -ne "${YELLOW}Backup label (Enter for 'manual'): ${NC}"
-            read bk_label
-            backup_registry "${bk_label:-manual}"
-            ;;
-        2)
-            echo ""
-            restore_registry
-            ;;
-        3)
-            echo ""
-            sync_push
-            ;;
-        4)
-            echo ""
-            sync_pull
-            ;;
-        5)
-            echo ""
-            print_header "Local Backups"
-            local count=0
-            while IFS= read -r f; do
-                count=$(( count + 1 ))
-                local size; size=$(du -h "$f" 2>/dev/null | cut -f1)
-                echo -e "  ${LCYAN}${count})${NC} $(basename "$f")  ${GRAY}(${size})${NC}"
-            done < <(find "$G_BACKUP_DIR" -maxdepth 1 -name "workload-identity-registry_*.csv" 2>/dev/null | sort -r)
-            [[ $count -eq 0 ]] && echo -e "  ${GRAY}No backups found${NC}"
-            ;;
-        0) return 0 ;;
-        *)
-            echo -e "${RED}✗ Invalid option${NC}"
-            sleep 1
-            return 0
-            ;;
-    esac
-
-    echo ""
-    echo -ne "${YELLOW}Press Enter to continue...${NC}"
-    read
-}
-
-# =============================================================================
-# Main Menu Loop
-# =============================================================================
 
 # Main Menu Loop
 # =============================================================================
@@ -2287,7 +1845,6 @@ main() {
             3) operation_cleanup ;;
             4) operation_list ;;
             5) operation_view_registry ;;
-            6) operation_security ;;
             0) 
                 clear
                 echo -e "${LGREEN}Goodbye!${NC}"
@@ -2304,55 +1861,6 @@ main() {
 # =============================================================================
 # Entry Point
 # =============================================================================
-
-# Handle command line arguments
-main_entry() {
-    # No arguments → interactive menu
-    [[ $# -eq 0 ]] && return 0
-
-    local subcommand="${1:-}"
-    shift || true
-
-    case "$subcommand" in
-        --help|-h)
-            show_help
-            exit 0
-            ;;
-        --version|-v)
-            show_version
-            exit 0
-            ;;
-        setup|verify|cleanup|list|bulk-setup)
-            G_CLI_MODE=1
-            G_CLI_OPERATION="$subcommand"
-            ;;
-        *)
-            echo -e "${RED}✗ Unrecognized argument: $subcommand${NC}"
-            echo -e "Run: ./workload-identity.sh --help for more information"
-            exit 1
-            ;;
-    esac
-
-    # Parse flags for CLI subcommands
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --project|-p)    G_CLI_PROJECT="${2:-}";  shift 2 ;;
-            --cluster|-c)    G_CLI_CLUSTER="${2:-}";  shift 2 ;;
-            --namespace|-n)  G_CLI_NAMESPACE="${2:-}"; shift 2 ;;
-            --ksa|-k)        G_CLI_KSA="${2:-}";       shift 2 ;;
-            --iam-sa|-s)     G_CLI_IAM_SA="${2:-}";    shift 2 ;;
-            --ticket|-t)     G_CLI_TICKET="${2:-}";    shift 2 ;;
-            --level|-l)      G_CLI_CLEANUP_LEVEL="${2:-}"; shift 2 ;;
-            --file|-f)       G_CLI_BULK_FILE="${2:-}"; shift 2 ;;
-            --dry-run)       G_DRY_RUN=1; shift ;;
-            *)
-                echo -e "${RED}✗ Unrecognized flag: $1${NC}"
-                echo -e "Run: ./workload-identity.sh --help for more information"
-                exit 1
-                ;;
-        esac
-    done
-}
 
 # ─── Entry Point Guard ───────────────────────────────────────────────────────
 # When WI_UNIT_TEST=1, the script is being sourced by the test suite.
@@ -2372,20 +1880,19 @@ if [[ "${WI_UNIT_TEST:-0}" != "1" ]]; then
     # Initialize control file
     init_control_file
 
-    # Process arguments
-    main_entry "$@"
+    # Handle --help and --version flags
+    case "${1:-}" in
+        --help|-h)
+            show_help
+            exit 0
+            ;;
+        --version|-v)
+            show_version
+            exit 0
+            ;;
+    esac
 
-    # Dispatch: CLI mode or interactive menu
-    if [[ "$G_CLI_MODE" == "1" ]]; then
-        case "$G_CLI_OPERATION" in
-            setup)       operation_setup ;;
-            verify)      operation_verify ;;
-            cleanup)     operation_cleanup ;;
-            list)        operation_list ;;
-            bulk-setup)  operation_bulk_setup ;;
-        esac
-    else
-        main "$@"
-    fi
+    # Start interactive menu
+    main
 
 fi  # end WI_UNIT_TEST guard
