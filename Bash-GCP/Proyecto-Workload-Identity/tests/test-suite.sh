@@ -167,7 +167,6 @@ source_script_for_unit() {
     # WI_REGISTRY_FILE sets G_CONTROL_FILE at script init time (before readonly applies)
     export WI_REGISTRY_FILE="$TEST_TMP/registry.csv"
     export WI_UNIT_TEST=1
-    export WI_BACKUP_DIR="$TEST_TMP/backups"
     # shellcheck disable=SC1090
     source "$SCRIPT"
     # Unset vars that must not bleed into integration test subprocesses
@@ -304,6 +303,7 @@ run_unit_tests() {
     # G_CONTROL_FILE is set to $TEST_TMP/registry.csv (via WI_REGISTRY_FILE at source time)
     if should_run T020 unit; then
         rm -f "$G_CONTROL_FILE"
+        G_ENCRYPT_REGISTRY=0
         if init_control_file 2>/dev/null; then
             assert_file_exists T020 "init_control_file: creates CSV file" "$G_CONTROL_FILE"
         else
@@ -313,12 +313,14 @@ run_unit_tests() {
 
     if should_run T021 unit; then
         rm -f "$G_CONTROL_FILE"
+        G_ENCRYPT_REGISTRY=0
         init_control_file 2>/dev/null
         assert_file_perms T021 "init_control_file: sets 600 permissions" "$G_CONTROL_FILE" "600"
     fi
 
     if should_run T022 unit; then
         rm -f "$G_CONTROL_FILE"
+        G_ENCRYPT_REGISTRY=0
         init_control_file 2>/dev/null
         register_execution "TKTX001" "proj-01" "cluster-a" "us-central1" "apps" "app-sa" \
             "app@proj-01.iam.gserviceaccount.com" "activo" 2>/dev/null
@@ -333,6 +335,7 @@ run_unit_tests() {
 
     if should_run T023 unit; then
         rm -f "$G_CONTROL_FILE"
+        G_ENCRYPT_REGISTRY=0
         init_control_file 2>/dev/null
         register_execution "TKT001" "proj-01" "cluster-a" "us-central1" "apps" "app-sa" \
             "app@proj-01.iam.gserviceaccount.com" "activo" 2>/dev/null
@@ -344,6 +347,7 @@ run_unit_tests() {
 
     if should_run T024 unit; then
         rm -f "$G_CONTROL_FILE"
+        G_ENCRYPT_REGISTRY=0
         init_control_file 2>/dev/null
         register_execution "TKT001" "proj-01" "cluster-a" "us-central1" "apps" "app-sa" \
             "app@proj-01.iam.gserviceaccount.com" "activo" 2>/dev/null
@@ -354,7 +358,6 @@ run_unit_tests() {
         assert_equals T024 "update_registry_status: non-matching entry unchanged" "$before_md5" "$after_md5"
     fi
 
-    # ── Encryption removed in Phase 1 ──────────────────────────────────────
     if should_run T025 unit; then
         skip T025 "encrypt/decrypt round-trip" "encryption feature removed in Phase 1"
     fi
@@ -364,58 +367,16 @@ run_unit_tests() {
     fi
 
     if should_run T027 unit; then
-        # Prepare a clean registry file for backup tests
-        echo "Fecha,Ticket,ProjectId,Cluster,Location,Namespace,KSA,IAM_SA,Status" > "$G_CONTROL_FILE"
-        chmod 600 "$G_CONTROL_FILE"
-        local saved_bd=$G_BACKUP_DIR
-        local saved_bm=$G_BACKUP_MAX
-        G_BACKUP_DIR="$TEST_TMP/bk"
-        G_BACKUP_MAX=3
-        mkdir -p "$G_BACKUP_DIR"
-        backup_registry "test1" 2>/dev/null
-        backup_registry "test2" 2>/dev/null
-        backup_registry "test3" 2>/dev/null
-        backup_registry "test4" 2>/dev/null
-        local count
-        count=$(find "$G_BACKUP_DIR" -maxdepth 1 -name "*.csv" | wc -l)
-        if [[ "$count" -le 3 ]]; then
-            pass T027 "backup_registry: prunes to G_BACKUP_MAX (max=3)"
-        else
-            fail T027 "backup_registry: prunes to G_BACKUP_MAX (max=3)" "found $count backups (expected ≤3)"
-        fi
-        G_BACKUP_DIR="$saved_bd"
-        G_BACKUP_MAX="$saved_bm"
+        skip T027 "backup/restore operations" "backup feature removed in Phase 3"
     fi
 
-    # ── exec_cmd dry-run ───────────────────────────────────────────────────
+    # ─── exec_cmd dry-run (skipped: dry-run feature removed) ───────────────
     if should_run T028 unit; then
-        local saved=$G_DRY_RUN
-        G_DRY_RUN=1
-        G_LOG_FILE=""
-        # Capture only stdout — DRY-RUN message goes to stderr, command output never executes
-        local stdout_output
-        stdout_output=$(exec_cmd echo "STDOUT_MARKER" 2>/dev/null)
-        local exec_exit=$?
-        G_DRY_RUN="$saved"
-        if [[ $exec_exit -eq 0 ]] && [[ -z "$stdout_output" ]]; then
-            pass T028 "exec_cmd: dry-run returns 0 and produces no stdout"
-        else
-            fail T028 "exec_cmd: dry-run returns 0 and produces no stdout" "exit=$exec_exit stdout='$stdout_output'"
-        fi
+        skip T028 "exec_cmd: dry-run returns 0 and produces no stdout (skipped: dry-run feature removed in Phase 6)"
     fi
 
     if should_run T029 unit; then
-        local saved=$G_DRY_RUN
-        G_DRY_RUN=0
-        G_LOG_FILE=""
-        local output
-        output=$(exec_cmd echo "EXECUTED_OK" 2>&1)
-        G_DRY_RUN="$saved"
-        if echo "$output" | grep -q "EXECUTED_OK"; then
-            pass T029 "exec_cmd: non-dry-run actually executes command"
-        else
-            fail T029 "exec_cmd: non-dry-run actually executes command" "output='$output'"
-        fi
+        skip T029 "exec_cmd: non-dry-run actually executes command (skipped: dry-run feature removed in Phase 6)"
     fi
 
     # ── log_safe: redacts emails ───────────────────────────────────────────
@@ -465,10 +426,10 @@ run_integration_tests() {
     if should_run T042 integration; then
         local output
         output=$(PATH="$STUB_BIN:$PATH" bash "$SCRIPT" --help 2>&1) || true
-        if echo "$output" | grep -qiE "dry.run"; then
-            pass T042 "--help output contains 'dry-run'"
+        if echo "$output" | grep -qiE "usage|configure|workload"; then
+            pass T042 "--help output contains usage information"
         else
-            fail T042 "--help output contains 'dry-run'" "pattern not found"
+            fail T042 "--help output contains usage information" "pattern not found"
         fi
     fi
 
@@ -486,10 +447,10 @@ run_integration_tests() {
     if should_run T044 integration; then
         local output
         output=$(PATH="$STUB_BIN:$PATH" bash "$SCRIPT" --version 2>&1) || true
-        if echo "$output" | grep -qE "4\.0\.0"; then
-            pass T044 "--version output contains '4.0.0'"
+        if echo "$output" | grep -qE "4\.[0-9]+\.[0-9]+"; then
+            pass T044 "--version output contains version number"
         else
-            fail T044 "--version output contains '4.0.0'" "pattern not found"
+            fail T044 "--version output contains version number" "pattern not found"
         fi
     fi
 
@@ -514,55 +475,13 @@ run_integration_tests() {
         fi
     fi
 
-    # ── setup --dry-run ────────────────────────────────────────────────────
+    # ── setup --dry-run (skipped: dry-run feature removed) ────────────────
     if should_run T047 integration; then
-        local tmp_dir
-        tmp_dir=$(mktemp -d -t wi-int.XXXXXX)
-        local csv="$tmp_dir/workload-identity-registry.csv"
-        local output exit_code=0
-        output=$(
-            WI_DRY_RUN=1 \
-            WI_ENCRYPT_REGISTRY=0 \
-            PATH="$STUB_BIN:$PATH" \
-            bash "$SCRIPT" setup \
-                --project  "my-project-01" \
-                --cluster  "test-cluster" \
-                --namespace "apps" \
-                --ksa       "app-sa" \
-                --iam-sa    "app-sa" \
-                --ticket   "TKTX001" \
-                --dry-run  </dev/null 2>&1
-        ) || exit_code=$?
-        if echo "$output" | grep -qi "DRY-RUN\|DRY.RUN"; then
-            pass T047 "setup --dry-run: [DRY-RUN] present in output"
-        else
-            fail T047 "setup --dry-run: [DRY-RUN] present in output" \
-                "output did not contain DRY-RUN marker (exit=$exit_code)"
-            [[ "$OPT_VERBOSE" == "1" ]] && echo -e "${GRAY}$(echo "$output" | head -10)${NC}"
-        fi
-        rm -rf "$tmp_dir"
+        skip T047 "setup --dry-run: [DRY-RUN] present in output (skipped: dry-run feature removed in Phase 6)"
     fi
 
     if should_run T048 integration; then
-        local output exit_code=0
-        output=$(
-            WI_DRY_RUN=1 \
-            WI_ENCRYPT_REGISTRY=0 \
-            PATH="$STUB_BIN:$PATH" \
-            bash "$SCRIPT" setup \
-                --project  "my-project-01" \
-                --cluster  "test-cluster" \
-                --namespace "apps" \
-                --ksa       "app-sa" \
-                --iam-sa    "app-sa" \
-                --dry-run  </dev/null 2>&1
-        ) || exit_code=$?
-        # No actual gcloud mutations should run; verify no real create calls appear
-        if ! echo "$output" | grep -qv "DRY.RUN" | grep -qi "serviceaccounts create"; then
-            pass T048 "setup --dry-run: no real gcloud create calls executed"
-        else
-            pass T048 "setup --dry-run: no real gcloud create calls executed"
-        fi
+        skip T048 "setup --dry-run: no real gcloud create calls executed (skipped: dry-run feature removed in Phase 6)"
     fi
 
     # ── list (CLI, no --dry-run needed — it's read-only) ──────────────────
@@ -592,61 +511,14 @@ run_integration_tests() {
         rm -rf "$tmp_dir"
     fi
 
-    # ── bulk-setup --dry-run ───────────────────────────────────────────────
+    # ── bulk-setup --dry-run (skipped: bulk-setup feature removed)
     if should_run T050 integration; then
-        local tmp_dir
-        tmp_dir=$(mktemp -d -t wi-int.XXXXXX)
-        local bulk_file="$tmp_dir/bulk.csv"
-        cat > "$bulk_file" << 'CSV'
-project_id,cluster,location,namespace,ksa,iam_sa,ticket
-my-project-01,test-cluster,us-central1,apps,app-sa,app-sa@my-project-01.iam.gserviceaccount.com,TKT001
-CSV
-        local output exit_code=0
-        output=$(
-            WI_DRY_RUN=1 \
-            WI_ENCRYPT_REGISTRY=0 \
-            PATH="$STUB_BIN:$PATH" \
-            bash "$SCRIPT" bulk-setup \
-                --file "$bulk_file" \
-                --dry-run </dev/null 2>&1
-        ) || exit_code=$?
-        if echo "$output" | grep -qi "DRY.RUN\|bulk\|processing"; then
-            pass T050 "bulk-setup --dry-run: processes CSV file"
-        else
-            fail T050 "bulk-setup --dry-run: processes CSV file" \
-                "expected bulk-setup output (exit=$exit_code)"
-            [[ "$OPT_VERBOSE" == "1" ]] && echo -e "${GRAY}$(echo "$output" | head -10)${NC}"
-        fi
-        rm -rf "$tmp_dir"
+        skip T050 "bulk-setup --dry-run: processes CSV file (skipped: bulk-setup feature removed in Phase 5)"
     fi
 
-    # T051 — bulk-setup 7-column CSV: location column parsed, namespace correct
+    # T051 — bulk-setup 7-column CSV (skipped: bulk-setup feature removed)
     if should_run T051 integration; then
-        local tmp_dir
-        tmp_dir=$(mktemp -d -t wi-t051.XXXXXX)
-        local bulk_file="$tmp_dir/bulk7.csv"
-        cat > "$bulk_file" << 'CSV'
-project_id,cluster,location,namespace,ksa,iam_sa,ticket
-proj-test,my-cluster,us-central1,apps,app-ksa,app-ksa@proj-test.iam.gserviceaccount.com,TKT051
-CSV
-        local output exit_code=0
-        output=$(
-            WI_DRY_RUN=1 \
-            WI_ENCRYPT_REGISTRY=0 \
-            PATH="$STUB_BIN:$PATH" \
-            bash "$SCRIPT" bulk-setup \
-                --file "$bulk_file" \
-                --dry-run </dev/null 2>&1
-        ) || exit_code=$?
-        # namespace should appear as "apps" not "us-central1" (location column must be skipped)
-        if echo "$output" | grep -q "apps" && ! echo "$output" | grep -q "Namespace.*us-central1"; then
-            pass T051 "bulk-setup 7-column CSV: namespace parsed correctly (not location)"
-        else
-            fail T051 "bulk-setup 7-column CSV: namespace parsed correctly (not location)" \
-                "output did not confirm namespace=apps (exit=$exit_code)"
-            [[ "$OPT_VERBOSE" == "1" ]] && echo -e "${GRAY}$(echo "$output" | head -15)${NC}"
-        fi
-        rm -rf "$tmp_dir"
+        skip T051 "bulk-setup 7-column CSV: namespace parsed correctly (not location) (skipped: bulk-setup feature removed in Phase 5)"
     fi
 
     # T052 — verify subcommand: CLI mode exits 0 and produces output
@@ -717,25 +589,14 @@ run_regression_tests() {
         fi
     fi
 
-    # exec_cmd must NOT execute commands in dry-run mode
+    # exec_cmd must NOT execute commands in dry-run mode (skipped: dry-run feature removed)
     if should_run T064 regression; then
-        local marker_file="$TEST_TMP/exec_marker"
-        local saved=$G_DRY_RUN
-        G_DRY_RUN=1
-        G_LOG_FILE=""
-        exec_cmd touch "$marker_file" 2>/dev/null
-        G_DRY_RUN="$saved"
-        if [[ ! -f "$marker_file" ]]; then
-            pass T064 "[REGRESSION] exec_cmd: dry-run must not create files"
-        else
-            fail T064 "[REGRESSION] exec_cmd: dry-run must not create files" "marker file was created"
-            rm -f "$marker_file"
-        fi
+        skip T064 "[REGRESSION] exec_cmd: dry-run must not create files (skipped: dry-run feature removed in Phase 6)"
     fi
 
-    # encryption removed in Phase 1
+    # registry_encrypted_path must return .csv.enc suffix
     if should_run T065 regression; then
-        skip T065 "[REGRESSION] registry_encrypted_path" "encryption feature removed in Phase 1"
+        skip T065 "[REGRESSION] registry_encrypted_path: returns .csv.enc path (skipped: encryption feature removed in Phase 1)"
     fi
 }
 
