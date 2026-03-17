@@ -1,129 +1,233 @@
 # Workload Identity Manager
 
-Script interactivo para configurar GCP Workload Identity entre Service Accounts de GCP y Kubernetes.
+Your friendly tool for setting up secure authentication between Kubernetes and Google Cloud. No more managing complex service account keys — let your pods authenticate safely and directly with Google Cloud services!
 
-## Quick Start
+## What's This Tool Do?
+
+Workload Identity is a secure way for your Kubernetes pods to authenticate with Google Cloud services without passing around sensitive keys. Think of it as giving your pod an identity that GCP recognizes and trusts.
+
+This tool walks you through the entire setup process step-by-step:
+- ✨ Creates the Kubernetes Service Account (KSA) for your pod
+- ✨ Creates the Google Cloud Service Account (IAM SA) 
+- ✨ Links them together so they trust each other
+- ✨ Sets up the annotation so pods know which GCP account to use
+- ✨ Keeps a detailed log of everything for your team
+
+Perfect for teams that want a simple, audit-friendly way to manage workload identity configurations.
+
+## Getting Started (30 seconds)
+
+Just run the interactive menu:
 
 ```bash
-# Ejecutar el script interactivo
 ./workload-identity.sh
 ```
 
-## ¿Qué es Workload Identity?
+Follow the prompts — the tool guides you through everything! No flags or command-line arguments needed.
 
-Workload Identity permite que los pods de Kubernetes se autentiquen como Service Accounts de GCP sin necesidad de usar claves de cuenta de servicio. Este script automatiza la configuración:
+## What You Get
 
-1. **Crea el KSA** en el namespace destino (si no existe)
-2. **Crea el IAM SA** en GCP (si no existe)
-3. **Agrega el IAM binding** entre GCP SA y KSA
-4. **Anota el KSA** para que los pods puedan acceder a servicios GCP
+- **Interactive Menu** — No need to memorize commands, just follow the colorful prompts
+- **Full Audit Trail** — CSV registry tracks every configuration and change
+- **Team-Friendly Logs** — Organized by ticket number for easy tracking
+- **Smart Validation** — Catches typos and common mistakes before they cause problems
+- **Clear Error Messages** — When something goes wrong, you'll know exactly what and why
+- **One-Click Verification** — Verify your setup is working correctly
+- **Easy Cleanup** — Remove configurations safely when you need to
 
-## Características
+## How to Use It — Step by Step
 
-- ✅ **Interfaz Interactiva** - Menú intuitivo con colores y validación
-- ✅ **Rastreo Completo** - Registro CSV de todas las operaciones
-- ✅ **Organización por Tickets** - Logs y documentación automáticos
-- ✅ **Validaciones Robustas** - Verificación de entrada y seguridad
-- ✅ **Manejo de Errores** - Recuperación elegante con mensajes claros
-- ✅ **Seguridad** - Permisos restrictivos en archivos sensibles
-- ✅ **Performance** - Optimizaciones en búsquedas y actualizaciones
-- ✅ **Código Humanizado** - Variables prefijadas, funciones documentadas
+### Option 1: Set Up Workload Identity for a New App
 
-## Menú Principal
-
-```
-╔════════════════════════════════════════╗
-║     WORKLOAD IDENTITY MANAGER          ║
-╠════════════════════════════════════════╣
-║  1) Configurar Workload Identity       ║
-║  2) Verificar Workload Identity        ║
-║  3) Eliminar Workload Identity         ║
-║  4) Listar Workload Identities         ║
-║  5) Ver Registro de Operaciones        ║
-║  0) Salir                              ║
-╚════════════════════════════════════════╝
+```bash
+./workload-identity.sh
+→ Select: 1) Setup Workload Identity
+→ Enter ticket number (e.g., CTASK0012345)
+→ Choose your GCP project
+→ Pick your GKE cluster
+→ Enter namespace (e.g., apps, staging, production)
+→ Enter Kubernetes Service Account name for your app
+→ Enter GCP Service Account email (it'll create it if it doesn't exist)
+→ Done! ✨
 ```
 
-## Opciones
+Your pod can now authenticate with GCP. Easy, right?
 
-### 1) Configurar Workload Identity
-- Solicita Ticket/CTask para organizar logs
-- Permite seleccionar proyecto y cluster
-- Crea IAM SA si no existe
-- Crea KSA si no existe
-- Configura el binding y la anotación
-- Registra la operación en CSV
+### Option 2: Verify Everything is Wired Correctly
 
-### 2) Verificar Workload Identity
-- Verifica si el IAM SA existe
-- Verifica si el KSA existe
-- Verifica la anotación del KSA
-- Verifica el IAM binding
+Already set something up and want to make sure it works?
 
-### 3) Eliminar Workload Identity
-- Muestra configuraciones activas del registro
-- Permite seleccionar qué eliminar:
-  - Solo binding (mantiene KSA e IAM SA)
-  - Binding + KSA (mantiene IAM SA)
-  - Todo (Binding + KSA + IAM SA)
-- Actualiza el registro con el estado
-
-### 4) Listar Workload Identities
-- Lista proyectos del registro
-- Lista clusters del registro
-- Muestra todos los KSAs con Workload Identity en un namespace
-
-### 5) Ver Registro de Operaciones
-- Muestra los últimos registros del CSV
-- Incluye estado (activo/eliminado)
-
-## Registro CSV
-
-El script mantiene un archivo `workload-identity-registry.csv` con todas las operaciones:
-
-```csv
-Fecha,Ticket,ProjectId,Cluster,Location,Namespace,KSA,IAM_SA,Status
-2026-02-12 21:48:41,CTASK999999,gnp-app-qa,gke-cluster,us-central1,apps,ka-backend,sa-backend@gnp-app-qa.iam.gserviceaccount.com,activo
+```bash
+./workload-identity.sh
+→ Select: 2) Verify Workload Identity
+→ Choose your project and cluster
+→ Verify checks:
+   ✓ Is the GCP account there?
+   ✓ Is the Kubernetes account there?
+   ✓ Are they linked correctly?
+   ✓ Does the pod annotation work?
 ```
 
-Estados posibles:
-- `activo` - Configuración activa
-- `eliminado-binding` - Solo se eliminó el binding
-- `eliminado-binding-ksa` - Se eliminó binding + KSA
-- `eliminado-todo` - Se eliminó todo (binding + KSA + IAM SA)
+Gives you a clean report of what's working and what's not.
 
-## Logs
+### Option 3: Clean Up When You're Done
 
-Los logs se organizan por ticket:
-```
-Tickets/
-└── CTASK999999/
-    ├── logs/
-    │   └── workload_identity_20260212_214803.log
-    ├── docs/                 # Documentación de la operación
-    └── scripts/              # Scripts relacionados
+Need to remove a workload identity setup?
+
+```bash
+./workload-identity.sh
+→ Select: 3) Remove/Cleanup Workload Identity
+→ Choose what to remove:
+   • Just the connection (keep both accounts)
+   • Connection + Kubernetes account (keep GCP account)
+   • Everything (clean slate)
 ```
 
-## Seguridad
+Safe and reversible!
 
-- 🔒 **Archivos CSV** - Permisos restrictivos (600) en archivos con datos sensibles
-- 🔒 **Validación de Entrada** - Validación de formato para:
-  - IDs de proyecto GCP
-  - Emails de IAM Service Accounts
-  - Nombres de Kubernetes (DNS-1123)
-  - Namespaces existentes
-- 🔒 **Manejo de Errores** - Trap handlers para cleanup seguro
-- 🔒 **Inyección de Comandos** - Variables siempre quoted
+### Option 4: See Everything That's Configured
 
-## Requisitos
+Lost track of what you've set up?
 
-- `gcloud` CLI configurado y autenticado
-- `kubectl` configurado
-- Permisos para:
-  - Crear/modificar IAM Service Accounts
-  - Agregar IAM bindings
-  - Crear/modificar Kubernetes Service Accounts
-  - Conectarse a clusters GKE
+```bash
+./workload-identity.sh
+→ Select: 4) List Workload Identities
+→ Shows all your projects, clusters, and configurations
+```
+
+See everything at a glance.
+
+### Option 5: Check Your Operation History
+
+Curious about what was done and when?
+
+```bash
+./workload-identity.sh
+→ Select: 5) View Operations Registry
+→ Shows recent operations with dates and status
+```
+
+Complete audit trail.
+
+## Setting Up Cloud Storage (Optional but Recommended)
+
+Want your workload identity registry backed up and synced across your team? Cloud Storage auto-sync keeps everyone in sync!
+
+### Why Use Cloud Storage?
+
+- 🤝 **Team Collaboration** — Everyone has the same registry
+- 📦 **Automatic Backup** — Your configuration is always backed up
+- 🔄 **Sync Across Machines** — Pull latest configs when you run the tool
+- 🛡️ **Never Lose History** — GCS keeps versions of your registry
+
+### Quick Setup (5 minutes)
+
+#### Step 1: Create a Cloud Storage Bucket
+
+```bash
+# Choose a unique bucket name (globally unique across all of Google Cloud!)
+BUCKET_NAME="my-company-workload-identity-registry"
+PROJECT_ID="your-gcp-project-id"
+
+# Create the bucket
+gsutil mb -p $PROJECT_ID gs://$BUCKET_NAME/
+
+# Make it versioned so you can recover old versions
+gsutil versioning set on gs://$BUCKET_NAME/
+```
+
+#### Step 2: Set Up Permissions
+
+Everyone who uses this tool needs read/write access:
+
+```bash
+# Get your GCP user email
+gcloud config get-value account
+
+# Add yourself and team members
+gsutil iam ch user:YOUR-EMAIL:objectCreator gs://$BUCKET_NAME/
+gsutil iam ch user:YOUR-EMAIL:objectViewer gs://$BUCKET_NAME/
+```
+
+#### Step 3: Enable Auto-Sync in the Tool
+
+Before running the script, set one environment variable:
+
+```bash
+export WI_GCS_BUCKET="gs://my-company-workload-identity-registry"
+
+# Now run the tool as usual
+./workload-identity.sh
+```
+
+Or make it permanent by adding to your shell profile (`.bashrc` or `.zshrc`):
+
+```bash
+echo 'export WI_GCS_BUCKET="gs://my-company-workload-identity-registry"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**That's it!** Now every time you:
+- ✅ Set up a workload identity
+- ✅ Verify a configuration
+- ✅ Clean something up
+
+Your team's registry is automatically synced to Cloud Storage. When teammates run the tool, they'll see your latest configurations!
+
+### Checking if It's Working
+
+The tool will show a message like:
+```
+✓ Registry pushed to gs://my-company-workload-identity-registry/workload-identity-registry.csv
+```
+
+If you don't see that message, the bucket isn't set or there's a permission issue — no problem though, the tool works fine without it!
+
+## What You Need Before Starting
+
+Before you run this tool, make sure you have:
+
+- ✅ **gcloud CLI** installed and logged in
+  ```bash
+  gcloud auth login
+  gcloud config set project YOUR-PROJECT-ID
+  ```
+
+- ✅ **kubectl** installed and pointing to your GKE cluster
+  ```bash
+  kubectl cluster-info
+  ```
+
+- ✅ **jq** installed (for JSON parsing)
+  ```bash
+  # On Mac
+  brew install jq
+  # On Ubuntu/Debian
+  sudo apt-get install jq
+  ```
+
+- ✅ **Permissions in GCP** to:
+  - Create service accounts
+  - Add IAM bindings
+  - Manage Kubernetes namespaces and service accounts
+
+That's really it! If you can run `gcloud` and `kubectl` commands manually, you can use this tool.
+
+## Understanding Your Registry
+
+The tool keeps a simple CSV file (`workload-identity-registry.csv`) that tracks everything:
+
+```
+Ticket,Project,Cluster,Namespace,KSA,IAM_SA,Status,Date
+CTASK0012345,my-project,gke-cluster-1,apps,my-app,my-app@my-project.iam.gserviceaccount.com,active,2026-03-17
+```
+
+**What the Status column means:**
+- `active` — This workload identity is up and running
+- `removed-binding` — Connection was removed, but accounts still exist
+- `removed-all` — Everything was cleaned up
+
+This registry is your audit log — shows exactly what was done, when, and by which ticket.
 
 ## Estructura
 
