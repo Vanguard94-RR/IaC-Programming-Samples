@@ -167,8 +167,6 @@ source_script_for_unit() {
     # WI_REGISTRY_FILE sets G_CONTROL_FILE at script init time (before readonly applies)
     export WI_REGISTRY_FILE="$TEST_TMP/registry.csv"
     export WI_UNIT_TEST=1
-    export WI_ENCRYPT_REGISTRY=0
-    export WI_REGISTRY_PASSPHRASE=""
     export WI_BACKUP_DIR="$TEST_TMP/backups"
     # shellcheck disable=SC1090
     source "$SCRIPT"
@@ -306,7 +304,6 @@ run_unit_tests() {
     # G_CONTROL_FILE is set to $TEST_TMP/registry.csv (via WI_REGISTRY_FILE at source time)
     if should_run T020 unit; then
         rm -f "$G_CONTROL_FILE"
-        G_ENCRYPT_REGISTRY=0
         if init_control_file 2>/dev/null; then
             assert_file_exists T020 "init_control_file: creates CSV file" "$G_CONTROL_FILE"
         else
@@ -316,14 +313,12 @@ run_unit_tests() {
 
     if should_run T021 unit; then
         rm -f "$G_CONTROL_FILE"
-        G_ENCRYPT_REGISTRY=0
         init_control_file 2>/dev/null
         assert_file_perms T021 "init_control_file: sets 600 permissions" "$G_CONTROL_FILE" "600"
     fi
 
     if should_run T022 unit; then
         rm -f "$G_CONTROL_FILE"
-        G_ENCRYPT_REGISTRY=0
         init_control_file 2>/dev/null
         register_execution "TKTX001" "proj-01" "cluster-a" "us-central1" "apps" "app-sa" \
             "app@proj-01.iam.gserviceaccount.com" "activo" 2>/dev/null
@@ -338,7 +333,6 @@ run_unit_tests() {
 
     if should_run T023 unit; then
         rm -f "$G_CONTROL_FILE"
-        G_ENCRYPT_REGISTRY=0
         init_control_file 2>/dev/null
         register_execution "TKT001" "proj-01" "cluster-a" "us-central1" "apps" "app-sa" \
             "app@proj-01.iam.gserviceaccount.com" "activo" 2>/dev/null
@@ -350,7 +344,6 @@ run_unit_tests() {
 
     if should_run T024 unit; then
         rm -f "$G_CONTROL_FILE"
-        G_ENCRYPT_REGISTRY=0
         init_control_file 2>/dev/null
         register_execution "TKT001" "proj-01" "cluster-a" "us-central1" "apps" "app-sa" \
             "app@proj-01.iam.gserviceaccount.com" "activo" 2>/dev/null
@@ -361,60 +354,21 @@ run_unit_tests() {
         assert_equals T024 "update_registry_status: non-matching entry unchanged" "$before_md5" "$after_md5"
     fi
 
-    # ── Encryption round-trip ───────────────────────────────────────────────
-    # For T025/T026 we work with G_CONTROL_FILE directly (set at source time)
+    # ── Encryption removed in Phase 1 ──────────────────────────────────────
     if should_run T025 unit; then
-        if ! command -v openssl &>/dev/null; then
-            skip T025 "encrypt/decrypt round-trip" "openssl not installed"
-        else
-            local saved_enc=$G_ENCRYPT_REGISTRY
-            local saved_pass=$G_REGISTRY_PASSPHRASE
-            echo "test,data,line" > "$G_CONTROL_FILE"
-            chmod 600 "$G_CONTROL_FILE"
-            G_ENCRYPT_REGISTRY=1
-            G_REGISTRY_PASSPHRASE="test-passphrase-1234"
-            encrypt_registry 2>/dev/null
-            decrypt_registry 2>/dev/null
-            if [[ -f "$G_CONTROL_FILE" ]] && grep -q "test,data,line" "$G_CONTROL_FILE"; then
-                pass T025 "encrypt/decrypt round-trip: content preserved"
-            else
-                fail T025 "encrypt/decrypt round-trip: content preserved" "plaintext not recovered"
-            fi
-            G_ENCRYPT_REGISTRY="$saved_enc"
-            G_REGISTRY_PASSPHRASE="$saved_pass"
-        fi
+        skip T025 "encrypt/decrypt round-trip" "encryption feature removed in Phase 1"
     fi
 
     if should_run T026 unit; then
-        if ! command -v openssl &>/dev/null; then
-            skip T026 "decrypt with wrong passphrase → fail" "openssl not installed"
-        else
-            local saved_enc=$G_ENCRYPT_REGISTRY
-            local saved_pass=$G_REGISTRY_PASSPHRASE
-            echo "secret,data" > "$G_CONTROL_FILE"
-            chmod 600 "$G_CONTROL_FILE"
-            G_ENCRYPT_REGISTRY=1
-            G_REGISTRY_PASSPHRASE="correct-passphrase"
-            encrypt_registry 2>/dev/null
-            G_REGISTRY_PASSPHRASE="wrong-passphrase"
-            if decrypt_registry 2>/dev/null; then
-                fail T026 "decrypt with wrong passphrase → fail" "returned 0 unexpectedly"
-            else
-                pass T026 "decrypt with wrong passphrase → fail"
-            fi
-            G_ENCRYPT_REGISTRY="$saved_enc"
-            G_REGISTRY_PASSPHRASE="$saved_pass"
-        fi
+        skip T026 "decrypt with wrong passphrase → fail" "encryption feature removed in Phase 1"
     fi
 
     if should_run T027 unit; then
         # Prepare a clean registry file for backup tests
         echo "Fecha,Ticket,ProjectId,Cluster,Location,Namespace,KSA,IAM_SA,Status" > "$G_CONTROL_FILE"
         chmod 600 "$G_CONTROL_FILE"
-        local saved_enc=$G_ENCRYPT_REGISTRY
         local saved_bd=$G_BACKUP_DIR
         local saved_bm=$G_BACKUP_MAX
-        G_ENCRYPT_REGISTRY=0
         G_BACKUP_DIR="$TEST_TMP/bk"
         G_BACKUP_MAX=3
         mkdir -p "$G_BACKUP_DIR"
@@ -429,7 +383,6 @@ run_unit_tests() {
         else
             fail T027 "backup_registry: prunes to G_BACKUP_MAX (max=3)" "found $count backups (expected ≤3)"
         fi
-        G_ENCRYPT_REGISTRY="$saved_enc"
         G_BACKUP_DIR="$saved_bd"
         G_BACKUP_MAX="$saved_bm"
     fi
@@ -780,16 +733,9 @@ run_regression_tests() {
         fi
     fi
 
-    # registry_encrypted_path must return .csv.enc suffix
+    # encryption removed in Phase 1
     if should_run T065 regression; then
-        local enc_path
-        enc_path=$(registry_encrypted_path)
-        local expected="${G_CONTROL_FILE}.enc"
-        if [[ "$enc_path" == "$expected" ]]; then
-            pass T065 "[REGRESSION] registry_encrypted_path: returns .csv.enc path"
-        else
-            fail T065 "[REGRESSION] registry_encrypted_path: returns .csv.enc path" "got='$enc_path'"
-        fi
+        skip T065 "[REGRESSION] registry_encrypted_path" "encryption feature removed in Phase 1"
     fi
 }
 

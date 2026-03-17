@@ -27,7 +27,6 @@ Workload Identity permite que los pods de Kubernetes se autentiquen como Service
 - ✅ **Manejo de Errores** - Recuperación elegante con mensajes claros
 - ✅ **Seguridad** - Permisos restrictivos en archivos sensibles
 - ✅ **Performance** - Optimizaciones en búsquedas y actualizaciones
-- ✅ **Código Humanizado** - Variables prefijadas, funciones documentadas
 
 ## Menú Principal
 
@@ -47,6 +46,7 @@ Workload Identity permite que los pods de Kubernetes se autentiquen como Service
 ## Opciones
 
 ### 1) Configurar Workload Identity
+
 - Solicita Ticket/CTask para organizar logs
 - Permite seleccionar proyecto y cluster
 - Crea IAM SA si no existe
@@ -55,12 +55,14 @@ Workload Identity permite que los pods de Kubernetes se autentiquen como Service
 - Registra la operación en CSV
 
 ### 2) Verificar Workload Identity
+
 - Verifica si el IAM SA existe
 - Verifica si el KSA existe
 - Verifica la anotación del KSA
 - Verifica el IAM binding
 
 ### 3) Eliminar Workload Identity
+
 - Muestra configuraciones activas del registro
 - Permite seleccionar qué eliminar:
   - Solo binding (mantiene KSA e IAM SA)
@@ -69,11 +71,13 @@ Workload Identity permite que los pods de Kubernetes se autentiquen como Service
 - Actualiza el registro con el estado
 
 ### 4) Listar Workload Identities
+
 - Lista proyectos del registro
 - Lista clusters del registro
 - Muestra todos los KSAs con Workload Identity en un namespace
 
 ### 5) Ver Registro de Operaciones
+
 - Muestra los últimos registros del CSV
 - Incluye estado (activo/eliminado)
 
@@ -87,6 +91,7 @@ Fecha,Ticket,ProjectId,Cluster,Location,Namespace,KSA,IAM_SA,Status
 ```
 
 Estados posibles:
+
 - `activo` - Configuración activa
 - `eliminado-binding` - Solo se eliminó el binding
 - `eliminado-binding-ksa` - Se eliminó binding + KSA
@@ -95,6 +100,7 @@ Estados posibles:
 ## Logs
 
 Los logs se organizan por ticket:
+
 ```
 Tickets/
 └── CTASK999999/
@@ -138,26 +144,29 @@ Proyecto-Workload-Identity/
 ## Optimizaciones Implementadas
 
 ### Performance
+
 - ✅ Actualización CSV con awk (single-pass en O(n) en vez de O(n²))
 - ✅ Búsquedas consolidadas en una sola pasada
 - ✅ Reutilización de variables
 
 ### Robustez
+
 - ✅ `set -euo pipefail` para manejo seguro de errores
 - ✅ Trap handlers para cleanup en caso de fallo
 - ✅ Validación completa de entrada
 - ✅ Manejo graceful de casos edge
 
 ### Seguridad
+
 - ✅ Permisos CSV 600 (solo lectura/escritura propietario)
 - ✅ Variables siempre quoted
 - ✅ Validación de formato de IDs y nombres
 - ✅ Sanitización de entrada de usuario
 
 ### Código
+
 - ✅ Variables globales con prefijo `G_`
 - ✅ Funciones documentadas con propósito claro
 - ✅ Nomenclatura consistente
 - ✅ Logging en todos los puntos críticos
 - ✅ Errores con contexto de línea
-
