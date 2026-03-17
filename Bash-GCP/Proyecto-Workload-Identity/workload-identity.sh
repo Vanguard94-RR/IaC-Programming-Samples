@@ -10,7 +10,7 @@
 #
 # Features:
 #   - Interactive menu system with colored output
-#   - GCS remote state sync (auto-sync after operations, optional)
+#   - GCS remote state sync (integrated with gs://gnp-workloadidentity, can override via WI_GCS_BUCKET)
 #   - Automatic ticket-based log organization
 #   - CSV registry of all operations with status tracking
 #   - Robust error handling and validation
@@ -76,8 +76,8 @@ readonly G_DEFAULT_NS="${WI_DEFAULT_NAMESPACE:-apps}"
 readonly G_ANNOTATION_KEY="${WI_ANNOTATION_KEY:-iam.gke.io/gcp-service-account}"
 readonly G_REGISTRY_FILE="${WI_REGISTRY_FILE:-$G_SCRIPT_DIR/workload-identity-registry.csv}"
 
-# Remote sync settings (from config.sh or environment)
-G_GCS_BUCKET="${WI_GCS_BUCKET:-}"
+# Remote sync settings (default: gs://gnp-workloadidentity, override via WI_GCS_BUCKET)
+G_GCS_BUCKET="${WI_GCS_BUCKET:-gs://gnp-workloadidentity}"
 
 # Cleanup on exit
 trap 'cleanup' EXIT
