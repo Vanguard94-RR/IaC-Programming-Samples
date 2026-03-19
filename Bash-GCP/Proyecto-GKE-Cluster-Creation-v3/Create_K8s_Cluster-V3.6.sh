@@ -491,82 +491,8 @@ function apply_cluster_hardening() {
         fi
     fi
     
-    # Determinar ambiente (PRO vs QA/UAT)
-    local is_production=false
-    if [[ "$project_id" =~ -pro$ ]]; then
-        is_production=true
-        echo "[HARDENING] Ambiente detectado: PRODUCCIÓN" | tee -a "$hardening_log"
-    else
-        echo "[HARDENING] Ambiente detectado: QA/UAT" | tee -a "$hardening_log"
-    fi
-    
-    # 2. Configurar reglas según ambiente
-    if [[ "$is_production" == true ]]; then
-        # === REGLAS PARA PRODUCCIÓN (3 reglas) ===
-        echo "[HARDENING] === PASO 2/6: Aplicando reglas para ambiente PRO ===" | tee -a "$hardening_log"
-        
-        # Regla 1: CVE-Canary (Prioridad 1)
-        echo "[HARDENING]   • Regla 1: CVE-Canary (deny-403)" | tee -a "$hardening_log"
-        if gcloud compute security-policies rules describe 1 \
-            --security-policy="$security_policy_name" \
-            --project="$project_id" &>/dev/null; then
-            echo -e "${YELLOW}    [!] Regla CVE (1) ya existe${NC}" | tee -a "$hardening_log"
-        else
-            if gcloud compute security-policies rules create 1 \
-                --action=deny-403 \
-                --security-policy="$security_policy_name" \
-                --expression="evaluatePreconfiguredExpr('cve-canary')" \
-                --project="$project_id" 2>>"$hardening_log"; then
-                echo -e "${LGREEN}    [✓] Regla CVE-Canary creada${NC}" | tee -a "$hardening_log"
-            else
-                echo -e "${RED}    [ERROR] Falló creación de regla CVE${NC}" | tee -a "$hardening_log"
-                return 1
-            fi
-        fi
-        
-        # Regla 2: Allowed IPs (Prioridad 100)
-        echo "[HARDENING]   • Regla 2: Allowed IPs (allow)" | tee -a "$hardening_log"
-        if gcloud compute security-policies rules describe 100 \
-            --security-policy="$security_policy_name" \
-            --project="$project_id" &>/dev/null; then
-            echo -e "${YELLOW}    [!] Regla Allowed IPs (100) ya existe${NC}" | tee -a "$hardening_log"
-        else
-            if gcloud compute security-policies rules create 100 \
-                --action=allow \
-                --security-policy="$security_policy_name" \
-                --description="Default rule, higher priority overrides it" \
-                --src-ip-ranges="34.123.202.20,34.71.3.13,0.0.0.0/0,189.240.94.226,200.188.18.65,189.240.88.116,200.188.18.66" \
-                --project="$project_id" 2>>"$hardening_log"; then
-                echo -e "${LGREEN}    [✓] Regla Allowed IPs creada${NC}" | tee -a "$hardening_log"
-            else
-                echo -e "${RED}    [ERROR] Falló creación de regla Allowed IPs${NC}" | tee -a "$hardening_log"
-                return 1
-            fi
-        fi
-        
-        # Regla 3: Default Deny - All Traffic (Prioridad 2147483647)
-        echo "[HARDENING]   • Regla 3: Default Deny - All Traffic (deny-403)" | tee -a "$hardening_log"
-        if gcloud compute security-policies rules describe 2147483647 \
-            --security-policy="$security_policy_name" \
-            --project="$project_id" &>/dev/null; then
-            echo -e "${YELLOW}    [!] Regla por defecto (2147483647) ya existe${NC}" | tee -a "$hardening_log"
-        else
-            if gcloud compute security-policies rules create 2147483647 \
-                --action=deny-403 \
-                --security-policy="$security_policy_name" \
-                --description="Default Deny - All Traffic" \
-                --src-ip-ranges='*' \
-                --project="$project_id" 2>>"$hardening_log"; then
-                echo -e "${LGREEN}    [✓] Regla por defecto creada${NC}" | tee -a "$hardening_log"
-            else
-                echo -e "${RED}    [ERROR] Falló creación de regla por defecto${NC}" | tee -a "$hardening_log"
-                return 1
-            fi
-        fi
-        
-    else
-        # === REGLAS PARA QA/UAT (5 reglas) ===
-        echo "[HARDENING] === PASO 2/6: Aplicando reglas para ambiente QA/UAT ===" | tee -a "$hardening_log"
+    # 2. Configurar reglas de Cloud Armor (5 reglas estándar para todos los ambientes)
+    echo "[HARDENING] === PASO 2/6: Aplicando reglas de Cloud Armor ===" | tee -a "$hardening_log"
         
         # Regla 1: CVE-Canary (Prioridad 1)
         echo "[HARDENING]   • Regla 1: CVE-Canary (deny-403)" | tee -a "$hardening_log"
@@ -663,7 +589,6 @@ function apply_cluster_hardening() {
                 return 1
             fi
         fi
-    fi
     
     echo "[HARDENING] === PASO 3/6: Reglas de seguridad completadas ===" | tee -a "$hardening_log"
     
