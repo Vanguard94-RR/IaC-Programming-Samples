@@ -1,17 +1,19 @@
 #!/bin/bash
 ################################################################################
 # Script: update-cloud-armor-rules.sh
-# Descripción: Actualiza reglas de Cloud Armor en proyectos QA/UAT
+# Descripción: Actualiza reglas de Cloud Armor con configuración unificada
+#              Aplica las mismas 5 reglas para todos los ambientes (PRO/QA/UAT)
 # Autor: Juan Manuel Cortes
-# Fecha: 2026-03-11
-# Versión: 2.0
+# Fecha: 2026-03-18
+# Versión: 3.0
 #
 # Características:
-# - Idempotente: Se puede ejecutar múltiples veces sin efectos secundarios
+# - Se puede ejecutar múltiples veces sin efectos secundarios
 # - Verifica estado actual antes de aplicar cambios
 # - Solo actualiza reglas que necesiten cambios
 # - Crea backup automático antes de modificaciones
 # - Logging detallado de todas las operaciones
+# - Reglas unificadas para PRO, QA y UAT
 ################################################################################
 
 # Colores
@@ -22,10 +24,18 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Variables
-PROJECT_ID="${1:-gnp-gmmeot-qa}"
+PROJECT_ID="${1}"
 POLICY_NAME="cve-canary"
 BACKUP_FILE="cloud-armor-backup-${PROJECT_ID}-$(date +%Y%m%d_%H%M%S).json"
 LOG_FILE="cloud-armor-update-${PROJECT_ID}-$(date +%Y%m%d_%H%M%S).log"
+
+# Validar que se proporcione el proyecto
+if [ -z "$PROJECT_ID" ]; then
+    echo -e "${RED}[ERROR] Debe especificar el ID del proyecto${NC}"
+    echo "Uso: $0 <PROJECT_ID>"
+    echo "Ejemplo: $0 gnp-gmmeot-qa"
+    exit 1
+fi
 
 # Contadores para resumen
 CHANGES_MADE=0
@@ -154,199 +164,247 @@ log_info "═══════════════════════�
 log_info "FASE 1: ELIMINANDO REGLAS OBSOLETAS"
 log_info "════════════════════════════════════════════════════════════════"
 
-# Eliminar regla 93
-log_info "Verificando regla 93 (VM Servicio de cuentas)..."
-if rule_exists 93; then
-    log_info "Eliminando regla 93..."
-    if gcloud compute security-policies rules delete 93 \
-        --security-policy="$POLICY_NAME" \
-        --project="$PROJECT_ID" \
-        --quiet 2>>"$LOG_FILE"; then
-        log_success "Regla 93 eliminada"
-        ((RULES_DELETED++))
-        ((CHANGES_MADE++))
+# Eliminar reglas antiguas PRO/QA (93, 95, 100 si existen)
+for old_rule in 93 95 100; do
+    log_info "Verificando regla ${old_rule}..."
+    if rule_exists "$old_rule"; then
+        log_info "Eliminando regla ${old_rule}..."
+        if gcloud compute security-policies rules delete "$old_rule" \
+            --security-policy="$POLICY_NAME" \
+            --project="$PROJECT_ID" \
+            --quiet 2>>"$LOG_FILE"; then
+            log_success "Regla ${old_rule} eliminada"
+            ((RULES_DELETED++))
+            ((CHANGES_MADE++))
+        else
+            log_warning "No se pudo eliminar regla ${old_rule} (puede que no exista)"
+        fi
     else
-        log_error "Error al eliminar regla 93"
-        exit 1
+        log_success "Regla ${old_rule} ya no existe (OK)"
+        ((RULES_ALREADY_CORRECT++))
     fi
-else
-    log_success "Regla 93 ya no existe (OK)"
-    ((RULES_ALREADY_CORRECT++))
-fi
-((RULES_VERIFIED++))
-
-# Eliminar regla 95
-log_info "Verificando regla 95 (F5 WAF duplicado)..."
-if rule_exists 95; then
-    log_info "Eliminando regla 95..."
-    if gcloud compute security-policies rules delete 95 \
-        --security-policy="$POLICY_NAME" \
-        --project="$PROJECT_ID" \
-        --quiet 2>>"$LOG_FILE"; then
-        log_success "Regla 95 eliminada"
-        ((RULES_DELETED++))
-        ((CHANGES_MADE++))
-    else
-        log_error "Error al eliminar regla 95"
-        exit 1
-    fi
-else
-    log_success "Regla 95 ya no existe (OK)"
-    ((RULES_ALREADY_CORRECT++))
-fi
-((RULES_VERIFIED++))
+    ((RULES_VERIFIED++))
+done
 
 echo ""
 log_info "════════════════════════════════════════════════════════════════"
 log_info "FASE 2: ACTUALIZANDO REGLAS EXISTENTES"
 log_info "════════════════════════════════════════════════════════════════"
 
-# Actualizar regla 1 (CVE-Canary)
+# Actualizar/Crear regla 1 (CVE-Canary)
 log_info "Verificando regla 1 (CVE-Canary)..."
-CURRENT_DESC=$(get_rule_description 1)
 EXPECTED_DESC="Default CVE Rule valuation"
 
-if [ "$CURRENT_DESC" = "$EXPECTED_DESC" ]; then
-    log_success "Regla 1 ya tiene la descripción correcta (sin cambios)"
-    ((RULES_ALREADY_CORRECT++))
+if rule_exists 1; then
+    CURRENT_DESC=$(get_rule_description 1)
+    if [ "$CURRENT_DESC" = "$EXPECTED_DESC" ]; then
+        log_success "Regla 1 ya tiene la descripción correcta (sin cambios)"
+        ((RULES_ALREADY_CORRECT++))
+    else
+        log_info "Actualizando descripción de regla 1..."
+        if gcloud compute security-policies rules update 1 \
+            --security-policy="$POLICY_NAME" \
+            --project="$PROJECT_ID" \
+            --description="$EXPECTED_DESC" \
+            2>>"$LOG_FILE"; then
+            log_success "Regla 1 actualizada"
+            ((CHANGES_MADE++))
+        else
+            log_warning "Regla 1 no pudo actualizarse"
+        fi
+    fi
 else
-    log_info "Actualizando regla 1 (agregando descripción)..."
-    if gcloud compute security-policies rules update 1 \
-        --security-policy="$POLICY_NAME" \
-        --project="$PROJECT_ID" \
+    log_info "Creando regla 1 (CVE-Canary)..."
+    if gcloud compute security-policies rules create 1 \
         --action=deny-403 \
+        --security-policy="$POLICY_NAME" \
         --description="$EXPECTED_DESC" \
         --expression="evaluatePreconfiguredExpr('cve-canary')" \
-        2>>"$LOG_FILE"; then
-        log_success "Regla 1 actualizada"
+        --project="$PROJECT_ID" 2>>"$LOG_FILE"; then
+        log_success "Regla 1 creada"
         ((CHANGES_MADE++))
     else
-        log_warning "Regla 1 no pudo actualizarse (puede que ya esté correcta)"
+        log_error "Error al crear regla 1"
+        exit 1
     fi
 fi
 ((RULES_VERIFIED++))
 
-# Actualizar regla 90
+# Actualizar/Crear regla 90
 log_info "Verificando regla 90 (NAT servicios compartidos)..."
-CURRENT_IPS=$(get_rule_ips 90)
 EXPECTED_IPS="35.223.194.216,34.121.174.67,35.194.4.57,35.223.189.203,35.194.34.199,34.41.162.56,35.225.224.36,34.55.188.137,34.16.70.194,104.197.124.115"
-CURRENT_DESC=$(get_rule_description 90)
 EXPECTED_DESC="NAT IP addressess on gnp-red-data-central for shared services (eg. Apigee, Nexus, etc.)"
 
-# Normalizar IPs para comparación (ordenar)
-CURRENT_IPS_SORTED=$(echo "$CURRENT_IPS" | tr ',' '\n' | sort | tr '\n' ',' | sed 's/,$//')
-EXPECTED_IPS_SORTED=$(echo "$EXPECTED_IPS" | tr ',' '\n' | sort | tr '\n' ',' | sed 's/,$//')
-
-if [ "$CURRENT_IPS_SORTED" = "$EXPECTED_IPS_SORTED" ] && [ "$CURRENT_DESC" = "$EXPECTED_DESC" ]; then
-    log_success "Regla 90 ya está correcta (sin cambios)"
-    ((RULES_ALREADY_CORRECT++))
+if rule_exists 90; then
+    CURRENT_IPS=$(get_rule_ips 90)
+    CURRENT_DESC=$(get_rule_description 90)
+    
+    # Normalizar IPs para comparación (ordenar)
+    CURRENT_IPS_SORTED=$(echo "$CURRENT_IPS" | tr ',' '\n' | sort | tr '\n' ',' | sed 's/,$//')
+    EXPECTED_IPS_SORTED=$(echo "$EXPECTED_IPS" | tr ',' '\n' | sort | tr '\n' ',' | sed 's/,$//')
+    
+    if [ "$CURRENT_IPS_SORTED" = "$EXPECTED_IPS_SORTED" ] && [ "$CURRENT_DESC" = "$EXPECTED_DESC" ]; then
+        log_success "Regla 90 ya está correcta (sin cambios)"
+        ((RULES_ALREADY_CORRECT++))
+    else
+        log_info "Actualizando regla 90..."
+        if gcloud compute security-policies rules update 90 \
+            --security-policy="$POLICY_NAME" \
+            --project="$PROJECT_ID" \
+            --action=allow \
+            --description="$EXPECTED_DESC" \
+            --src-ip-ranges="$EXPECTED_IPS" \
+            2>>"$LOG_FILE"; then
+            log_success "Regla 90 actualizada (10 IPs de servicios compartidos)"
+            ((CHANGES_MADE++))
+        else
+            log_error "Falló actualización de regla 90"
+            exit 1
+        fi
+    fi
 else
-    log_info "Actualizando regla 90..."
-    if gcloud compute security-policies rules update 90 \
-        --security-policy="$POLICY_NAME" \
-        --project="$PROJECT_ID" \
+    log_info "Creando regla 90 (NAT servicios compartidos)..."
+    if gcloud compute security-policies rules create 90 \
         --action=allow \
+        --security-policy="$POLICY_NAME" \
         --description="$EXPECTED_DESC" \
         --src-ip-ranges="$EXPECTED_IPS" \
-        2>>"$LOG_FILE"; then
-        log_success "Regla 90 actualizada (10 IPs de servicios compartidos)"
+        --project="$PROJECT_ID" 2>>"$LOG_FILE"; then
+        log_success "Regla 90 creada"
         ((CHANGES_MADE++))
     else
-        log_error "Falló actualización de regla 90"
-        log_error "Consulte el backup: ${BACKUP_FILE}"
+        log_error "Error al crear regla 90"
         exit 1
     fi
 fi
 ((RULES_VERIFIED++))
 
-# Actualizar regla 91
+# Actualizar/Crear regla 91
 log_info "Verificando regla 91 (F5 IPs)..."
-CURRENT_IPS=$(get_rule_ips 91)
 EXPECTED_IPS="34.123.237.82,35.184.162.71,35.238.84.248,34.121.197.40,34.71.3.13,34.123.202.20"
-CURRENT_DESC=$(get_rule_description 91)
 EXPECTED_DESC="IP addressess related to F5"
 
-CURRENT_IPS_SORTED=$(echo "$CURRENT_IPS" | tr ',' '\n' | sort | tr '\n' ',' | sed 's/,$//')
-EXPECTED_IPS_SORTED=$(echo "$EXPECTED_IPS" | tr ',' '\n' | sort | tr '\n' ',' | sed 's/,$//')
-
-if [ "$CURRENT_IPS_SORTED" = "$EXPECTED_IPS_SORTED" ] && [ "$CURRENT_DESC" = "$EXPECTED_DESC" ]; then
-    log_success "Regla 91 ya está correcta (sin cambios)"
-    ((RULES_ALREADY_CORRECT++))
+if rule_exists 91; then
+    CURRENT_IPS=$(get_rule_ips 91)
+    CURRENT_DESC=$(get_rule_description 91)
+    
+    CURRENT_IPS_SORTED=$(echo "$CURRENT_IPS" | tr ',' '\n' | sort | tr '\n' ',' | sed 's/,$//')
+    EXPECTED_IPS_SORTED=$(echo "$EXPECTED_IPS" | tr ',' '\n' | sort | tr '\n' ',' | sed 's/,$//')
+    
+    if [ "$CURRENT_IPS_SORTED" = "$EXPECTED_IPS_SORTED" ] && [ "$CURRENT_DESC" = "$EXPECTED_DESC" ]; then
+        log_success "Regla 91 ya está correcta (sin cambios)"
+        ((RULES_ALREADY_CORRECT++))
+    else
+        log_info "Actualizando regla 91..."
+        if gcloud compute security-policies rules update 91 \
+            --security-policy="$POLICY_NAME" \
+            --project="$PROJECT_ID" \
+            --action=allow \
+            --description="$EXPECTED_DESC" \
+            --src-ip-ranges="$EXPECTED_IPS" \
+            2>>"$LOG_FILE"; then
+            log_success "Regla 91 actualizada (6 IPs de F5)"
+            ((CHANGES_MADE++))
+        else
+            log_error "Falló actualización de regla 91"
+            exit 1
+        fi
+    fi
 else
-    log_info "Actualizando regla 91..."
-    if gcloud compute security-policies rules update 91 \
-        --security-policy="$POLICY_NAME" \
-        --project="$PROJECT_ID" \
+    log_info "Creando regla 91 (F5 IPs)..."
+    if gcloud compute security-policies rules create 91 \
         --action=allow \
+        --security-policy="$POLICY_NAME" \
         --description="$EXPECTED_DESC" \
         --src-ip-ranges="$EXPECTED_IPS" \
-        2>>"$LOG_FILE"; then
-        log_success "Regla 91 actualizada (6 IPs de F5)"
+        --project="$PROJECT_ID" 2>>"$LOG_FILE"; then
+        log_success "Regla 91 creada"
         ((CHANGES_MADE++))
     else
-        log_error "Falló actualización de regla 91"
-        log_error "Consulte el backup: ${BACKUP_FILE}"
+        log_error "Error al crear regla 91"
         exit 1
     fi
 fi
 ((RULES_VERIFIED++))
 
-# Actualizar regla 92
+# Actualizar/Crear regla 92
 log_info "Verificando regla 92 (ZSCaler)..."
-CURRENT_DESC=$(get_rule_description 92)
 EXPECTED_DESC="IP segment related to ZSCaler"
-CURRENT_IPS=$(get_rule_ips 92)
 EXPECTED_IPS="10.67.126.0/24"
 
-if [ "$CURRENT_DESC" = "$EXPECTED_DESC" ] && [ "$CURRENT_IPS" = "$EXPECTED_IPS" ]; then
-    log_success "Regla 92 ya está correcta (sin cambios)"
-    ((RULES_ALREADY_CORRECT++))
+if rule_exists 92; then
+    CURRENT_DESC=$(get_rule_description 92)
+    CURRENT_IPS=$(get_rule_ips 92)
+    
+    if [ "$CURRENT_DESC" = "$EXPECTED_DESC" ] && [ "$CURRENT_IPS" = "$EXPECTED_IPS" ]; then
+        log_success "Regla 92 ya está correcta (sin cambios)"
+        ((RULES_ALREADY_CORRECT++))
+    else
+        log_info "Actualizando regla 92..."
+        if gcloud compute security-policies rules update 92 \
+            --security-policy="$POLICY_NAME" \
+            --project="$PROJECT_ID" \
+            --action=allow \
+            --description="$EXPECTED_DESC" \
+            --src-ip-ranges="$EXPECTED_IPS" \
+            2>>"$LOG_FILE"; then
+            log_success "Regla 92 actualizada (ZSCaler)"
+            ((CHANGES_MADE++))
+        else
+            log_error "Falló actualización de regla 92"
+            exit 1
+        fi
+    fi
 else
-    log_info "Actualizando regla 92..."
-    if gcloud compute security-policies rules update 92 \
-        --security-policy="$POLICY_NAME" \
-        --project="$PROJECT_ID" \
+    log_info "Creando regla 92 (ZSCaler)..."
+    if gcloud compute security-policies rules create 92 \
         --action=allow \
+        --security-policy="$POLICY_NAME" \
         --description="$EXPECTED_DESC" \
         --src-ip-ranges="$EXPECTED_IPS" \
-        2>>"$LOG_FILE"; then
-        log_success "Regla 92 actualizada (ZSCaler)"
+        --project="$PROJECT_ID" 2>>"$LOG_FILE"; then
+        log_success "Regla 92 creada"
         ((CHANGES_MADE++))
     else
-        log_error "Falló actualización de regla 92"
-        log_error "Consulte el backup: ${BACKUP_FILE}"
+        log_error "Error al crear regla 92"
         exit 1
     fi
 fi
 ((RULES_VERIFIED++))
 
 # Actualizar regla default (2147483647)
+# Nota: La regla por defecto NO se puede eliminar, solo actualizar
 log_info "Verificando regla por defecto (2147483647)..."
-CURRENT_ACTION=$(get_rule_action 2147483647)
-CURRENT_DESC=$(get_rule_description 2147483647)
 EXPECTED_ACTION="deny(403)"
 EXPECTED_DESC="The Internet"
 
-if [ "$CURRENT_ACTION" = "$EXPECTED_ACTION" ] && [ "$CURRENT_DESC" = "$EXPECTED_DESC" ]; then
-    log_success "Regla por defecto ya está correcta (sin cambios)"
-    ((RULES_ALREADY_CORRECT++))
-else
-    log_info "Actualizando regla por defecto..."
-    log_warning "CRÍTICO: Cambiando de ALLOW a DENY-403"
-    if gcloud compute security-policies rules update 2147483647 \
-        --security-policy="$POLICY_NAME" \
-        --project="$PROJECT_ID" \
-        --action=deny-403 \
-        --description="$EXPECTED_DESC" \
-        --src-ip-ranges="*" \
-        2>>"$LOG_FILE"; then
-        log_success "Regla por defecto actualizada (DENY-403)"
-        ((CHANGES_MADE++))
+if rule_exists 2147483647; then
+    CURRENT_ACTION=$(get_rule_action 2147483647)
+    CURRENT_DESC=$(get_rule_description 2147483647)
+    
+    if [ "$CURRENT_ACTION" = "$EXPECTED_ACTION" ] && [ "$CURRENT_DESC" = "$EXPECTED_DESC" ]; then
+        log_success "Regla por defecto ya está correcta (sin cambios)"
+        ((RULES_ALREADY_CORRECT++))
     else
-        log_error "Falló actualización de regla por defecto"
-        log_error "Consulte el backup: ${BACKUP_FILE}"
-        exit 1
+        log_info "Actualizando regla por defecto..."
+        if [ "$CURRENT_ACTION" != "$EXPECTED_ACTION" ]; then
+            log_warning "CRÍTICO: Cambiando acción de ${CURRENT_ACTION} a DENY-403"
+        fi
+        if gcloud compute security-policies rules update 2147483647 \
+            --security-policy="$POLICY_NAME" \
+            --project="$PROJECT_ID" \
+            --action=deny-403 \
+            --description="$EXPECTED_DESC" \
+            2>>"$LOG_FILE"; then
+            log_success "Regla por defecto actualizada (DENY-403)"
+            ((CHANGES_MADE++))
+        else
+            log_error "Falló actualización de regla por defecto"
+            exit 1
+        fi
     fi
+else
+    log_warning "Regla por defecto no existe (esto no debería ocurrir)"
 fi
 ((RULES_VERIFIED++))
 
@@ -411,7 +469,7 @@ fi
 cat << EOF | tee -a "$LOG_FILE"
 ═══════════════════════════════════════════════════════════════
 
-CONFIGURACIÓN FINAL (5 reglas esperadas):
+CONFIGURACIÓN UNIFICADA (5 reglas estándar para PRO/QA/UAT):
 1. Priority 1: CVE-Canary (deny-403)
    └─ Descripción: "Default CVE Rule valuation"
    └─ Expression: evaluatePreconfiguredExpr('cve-canary')
@@ -432,8 +490,8 @@ CONFIGURACIÓN FINAL (5 reglas esperadas):
    └─ Descripción: "The Internet"
    └─ Policy: Bloquea todo el tráfico no explícitamente permitido
 
-⚠️  IMPORTANTE: La política implementa modelo de seguridad "deny by default".
-   Solo se permite tráfico desde IPs/rangos específicos configurados.
+⚠️  IMPORTANTE: Las mismas reglas se aplican a TODOS los ambientes.
+   Modelo de seguridad "deny by default" - Solo tráfico explícito permitido.
 
 EOF
 
