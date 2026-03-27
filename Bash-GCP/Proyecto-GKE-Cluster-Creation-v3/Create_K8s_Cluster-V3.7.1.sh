@@ -3,7 +3,7 @@
 # Description    : Script to create a Kubernetes Cluster in a specified project
 # Author         : Juan Manuel Cortes
 # Date           : 20250918
-# Version        : v3.6.0-dynamic-ranges (Detección dinámica de rangos secundarios)
+# Version        : v3.7.1-ssl-classic (Creación de Classic SSL Certificate en Certificate Manager)
 # Usage          : ./Create_K8s_Cluster.sh
 # Bash_version   : 5.1.16(1)-release
 # Dependencies   : gcloud, kubectl, jq
@@ -430,6 +430,7 @@ function apply_cluster_hardening() {
     local security_policy_name="cve-canary"
     local ssl_policy_name="sslsecure"
     local waf_allowed_ips="35.238.84.248,34.121.197.40"
+    local certificate_map_name="${project_id}-cert-map"
     local hardening_log="./hardening_${cluster_name}_$(date +%Y%m%d_%H%M%S).log"
     
     echo "[HARDENING] Iniciando endurecimiento de seguridad del cluster..."
@@ -450,6 +451,11 @@ function apply_cluster_hardening() {
     fi
     
     echo "[HARDENING] Todas las dependencias disponibles" | tee -a "$hardening_log"
+    
+    # Usar nombre por defecto del Certificate Map
+    echo ""
+    echo -e "${LGREEN}[✓] Certificate Map: ${LCYAN}${certificate_map_name}${NC}" | tee -a "$hardening_log"
+    echo ""
     
     # Verificar conectividad con GCP
     echo "[HARDENING] Verificando conectividad con GCP..."
@@ -641,7 +647,7 @@ function apply_cluster_hardening() {
     fi
     
     # 5. Crear política SSL (TLS 1.2+)
-    echo "[HARDENING] === PASO 5/6: Política SSL ===" | tee -a "$hardening_log"
+    echo "[HARDENING] === PASO 5/8: Política SSL ===" | tee -a "$hardening_log"
     if gcloud compute ssl-policies describe "$ssl_policy_name" --project="$project_id" &>/dev/null; then
         echo -e "${YELLOW}[!] Política SSL '$ssl_policy_name' ya existe${NC}" | tee -a "$hardening_log"
     else
@@ -657,8 +663,64 @@ function apply_cluster_hardening() {
         fi
     fi
     
-    # 6. Habilitar Container Security API
-    echo "[HARDENING] === PASO 6/6: Habilitando APIs de Seguridad ===" | tee -a "$hardening_log"
+    # 6. Crear Certificate Map
+    echo "[HARDENING] === PASO 6/8: Certificate Map ===" | tee -a "$hardening_log"
+    
+    # Habilitar API de Certificate Manager
+    echo "[HARDENING] Habilitando Certificate Manager API..." | tee -a "$hardening_log"
+    if gcloud services enable certificatemanager.googleapis.com \
+        --project="$project_id" 2>>"$hardening_log"; then
+        echo -e "${LGREEN}[✓] Certificate Manager API habilitada${NC}" | tee -a "$hardening_log"
+    else
+        echo -e "${YELLOW}[!] Certificate Manager API ya estaba habilitada${NC}" | tee -a "$hardening_log"
+    fi
+    
+    # Verificar si el Certificate Map ya existe
+    if gcloud certificate-manager maps describe "$certificate_map_name" \
+        --project="$project_id" &>/dev/null; then
+        echo -e "${YELLOW}[!] Certificate Map '$certificate_map_name' ya existe${NC}" | tee -a "$hardening_log"
+    else
+        echo "[HARDENING] Creando Certificate Map: $certificate_map_name" | tee -a "$hardening_log"
+        if gcloud certificate-manager maps create "$certificate_map_name" \
+            --project="$project_id" 2>>"$hardening_log"; then
+            echo -e "${LGREEN}[✓] Certificate Map creado: $certificate_map_name${NC}" | tee -a "$hardening_log"
+        else
+            echo -e "${RED}[ERROR] Falló creación de Certificate Map${NC}" | tee -a "$hardening_log"
+            echo -e "${YELLOW}[!] Continuando con el hardening...${NC}" | tee -a "$hardening_log"
+        fi
+    fi
+    
+    # 7. Crear Classic SSL Certificate
+    echo "[HARDENING] === PASO 7/8: Classic SSL Certificate ===" | tee -a "$hardening_log"
+    
+    if [[ -f "$cert_file" ]] && [[ -f "$key_file" ]]; then
+        echo "[HARDENING] Archivos de certificado encontrados" | tee -a "$hardening_log"
+        
+        # Verificar si el certificado ya existe
+        if gcloud compute ssl-certificates describe "$ssl_cert_name" \
+            --project="$project_id" &>/dev/null; then
+            echo -e "${YELLOW}[!] Certificado SSL '$ssl_cert_name' ya existe${NC}" | tee -a "$hardening_log"
+        else
+            echo "[HARDENING] Creando certificado SSL clásico: $ssl_cert_name" | tee -a "$hardening_log"
+            if gcloud compute ssl-certificates create "$ssl_cert_name" \
+                --certificate="$cert_file" \
+                --private-key="$key_file" \
+                --project="$project_id" 2>>"$hardening_log"; then
+                echo -e "${LGREEN}[✓] Certificado SSL creado: $ssl_cert_name${NC}" | tee -a "$hardening_log"
+            else
+                echo -e "${RED}[ERROR] Falló creación de certificado SSL${NC}" | tee -a "$hardening_log"
+                echo -e "${YELLOW}[!] Continuando con el hardening...${NC}" | tee -a "$hardening_log"
+            fi
+        fi
+    else
+        echo -e "${YELLOW}[!] Archivos de certificado no encontrados${NC}" | tee -a "$hardening_log"
+        echo -e "${YELLOW}    Esperados:${NC}" | tee -a "$hardening_log"
+        echo -e "${YELLOW}    • Certificado: $cert_file${NC}" | tee -a "$hardening_log"
+        echo -e "${YELLOW}    • Clave privada: $key_file${NC}" | tee -a "$hardening_log"
+    fi
+    
+    # 8. Habilitar Container Security API
+    echo "[HARDENING] === PASO 8/8: Habilitando APIs de Seguridad ===" | tee -a "$hardening_log"
     if gcloud services enable containersecurity.googleapis.com \
         --project="$project_id" 2>>"$hardening_log"; then
         echo -e "${LGREEN}[✓] Container Security API habilitada${NC}" | tee -a "$hardening_log"
@@ -687,6 +749,8 @@ function apply_cluster_hardening() {
     echo "[HARDENING] Proyecto: $project_id" | tee -a "$hardening_log"
     echo "[HARDENING] Política de Seguridad: $security_policy_name" | tee -a "$hardening_log"
     echo "[HARDENING] Política SSL: $ssl_policy_name" | tee -a "$hardening_log"
+    echo "[HARDENING] Certificate Map: $certificate_map_name" | tee -a "$hardening_log"
+    echo "[HARDENING] SSL Certificate: $ssl_cert_name" | tee -a "$hardening_log"
     echo "[HARDENING] Log completo: $hardening_log" | tee -a "$hardening_log"
     echo "[HARDENING] ==========================================" | tee -a "$hardening_log"
     
@@ -696,7 +760,7 @@ function apply_cluster_hardening() {
 # 1. Recopilación de Parámetros
 echo -e "${LGREEN}========================================${NC}"
 echo -e "${LGREEN}  GNP Cloud Infrastructure Team${NC}"
-echo -e "${LGREEN}  Standard Cluster Creation v3.6.0${NC}"
+echo -e "${LGREEN}  Standard Cluster Creation v3.7.1${NC}"
 echo -e "${LGREEN}  Dynamic Secondary Range Detection${NC}"
 echo -e "${LGREEN}========================================${NC}"
 echo ""
@@ -1207,11 +1271,10 @@ fi
 
 # 3.7 Creación de Assets
 echo -e "${LGREEN}Creando Assets de Infraestructura...${NC}"
+echo -e "${LGREEN}  [→] Creando assets con valores por defecto...${NC}"
 
-echo -ne "${YELLOW}>> ¿Desea crear los assets de infraestructura? (Y/N): ${NC}"
-read create_assets_confirm
-
-if [[ $create_assets_confirm =~ ^[Yy]$ ]]; then
+# Crear assets automáticamente con valores por defecto
+if true; then
     # Obtener credenciales del cluster
     echo -e "${LGREEN}  • Configurando credenciales de cluster...${NC}"
     gcloud container clusters get-credentials "$cluster_name" \
@@ -1220,63 +1283,49 @@ if [[ $create_assets_confirm =~ ^[Yy]$ ]]; then
         --quiet 2>/dev/null
     
     # Crear namespace (siempre 'apps')
-    echo -ne "${YELLOW}  >> ¿Crear namespace 'apps'? (Y/N): ${NC}"
-    read create_namespace_confirm
-    if [[ $create_namespace_confirm =~ ^[Yy]$ ]]; then
-        kubectl create namespace apps 2>/dev/null || \
-            echo -e "${YELLOW}    [!] Namespace apps ya existe${NC}"
-        echo -e "[DONE] Namespace 'apps' creado o ya existe"
-    fi
+    echo -e "${LGREEN}  • Creando namespace 'apps'...${NC}"
+    kubectl create namespace apps 2>/dev/null || \
+        echo -e "${YELLOW}    [!] Namespace apps ya existe${NC}"
+    echo -e "[DONE] Namespace 'apps' creado o ya existe"
     
-    # Solicitar nombres de cuentas de servicio
+    # Usar nombres por defecto para cuentas de servicio
     echo -e "${LGREEN}  • Configurando cuentas de servicio...${NC}"
-    prompt_input "Nombre de Kubernetes Service Account" "apps-gke" k8s_sa_name
-    prompt_input "Nombre de IAM Service Account" "apps-sa" iam_sa_name
+    local k8s_sa_name="apps-gke"
+    local iam_sa_name="apps-sa"
     
     # Crear cuenta de servicio en Kubernetes
-    echo -ne "${YELLOW}  >> ¿Crear Kubernetes Service Account '${k8s_sa_name}'? (Y/N): ${NC}"
-    read create_k8s_sa_confirm
-    if [[ $create_k8s_sa_confirm =~ ^[Yy]$ ]]; then
-        kubectl create serviceaccount "$k8s_sa_name" -n apps 2>/dev/null || \
-            echo -e "${YELLOW}    [!] Service account ${k8s_sa_name} ya existe${NC}"
-        echo -e "[DONE] Kubernetes Service Account '${k8s_sa_name}' creado."
-    fi
+    echo -e "${LGREEN}  • Creando Kubernetes Service Account '${k8s_sa_name}'...${NC}"
+    kubectl create serviceaccount "$k8s_sa_name" -n apps 2>/dev/null || \
+        echo -e "${YELLOW}    [!] Service account ${k8s_sa_name} ya existe${NC}"
+    echo -e "[DONE] Kubernetes Service Account '${k8s_sa_name}' creado."
     
     # Crear cuenta de servicio en IAM
-    echo -ne "${YELLOW}  >> ¿Crear IAM Service Account '${iam_sa_name}'? (Y/N): ${NC}"
-    read create_iam_sa_confirm
-    if [[ $create_iam_sa_confirm =~ ^[Yy]$ ]]; then
-        gcloud iam service-accounts create "$iam_sa_name" \
-            --project="$project_id" \
-            --display-name="Workload Identity" \
-            --description="Workload Identity service account for GKE cluster $cluster_name" 2>/dev/null || \
-            echo -e "${YELLOW}    [!] Service account ${iam_sa_name} ya existe${NC}"
-        echo -e "[DONE] IAM Service Account '${iam_sa_name}' creado."
-    fi
+    echo -e "${LGREEN}  • Creando IAM Service Account '${iam_sa_name}'...${NC}"
+    gcloud iam service-accounts create "$iam_sa_name" \
+        --project="$project_id" \
+        --display-name="Workload Identity" \
+        --description="Workload Identity service account for GKE cluster $cluster_name" 2>/dev/null || \
+        echo -e "${YELLOW}    [!] Service account ${iam_sa_name} ya existe${NC}"
+    echo -e "[DONE] IAM Service Account '${iam_sa_name}' creado."
     
     # Configurar Workload Identity
-    echo -ne "${YELLOW}  >> ¿Configurar Workload Identity? (Y/N): ${NC}"
-    read configure_wi_confirm
-    if [[ $configure_wi_confirm =~ ^[Yy]$ ]]; then
-        # Crear binding entre K8s SA y IAM SA
-        gcloud iam service-accounts add-iam-policy-binding "${iam_sa_name}@${project_id}.iam.gserviceaccount.com" \
-            --project="$project_id" \
-            --role="roles/iam.workloadIdentityUser" \
-            --member="serviceAccount:${project_id}.svc.id.goog[apps/${k8s_sa_name}]" 2>/dev/null || \
-            echo -e "${YELLOW}    [!] Binding ya existe${NC}"
-        
-        # Anotar la cuenta de servicio de Kubernetes
-        kubectl annotate serviceaccount "$k8s_sa_name" \
-            -n apps \
-            "iam.gke.io/gcp-service-account=${iam_sa_name}@${project_id}.iam.gserviceaccount.com" \
-            --overwrite 2>/dev/null
-        
-        echo -e "[DONE] Workload Identity configurado."
-    fi
+    echo -e "${LGREEN}  • Configurando Workload Identity...${NC}"
+    # Crear binding entre K8s SA y IAM SA
+    gcloud iam service-accounts add-iam-policy-binding "${iam_sa_name}@${project_id}.iam.gserviceaccount.com" \
+        --project="$project_id" \
+        --role="roles/iam.workloadIdentityUser" \
+        --member="serviceAccount:${project_id}.svc.id.goog[apps/${k8s_sa_name}]" 2>/dev/null || \
+        echo -e "${YELLOW}    [!] Binding ya existe${NC}"
+    
+    # Anotar la cuenta de servicio de Kubernetes
+    kubectl annotate serviceaccount "$k8s_sa_name" \
+        -n apps \
+        "iam.gke.io/gcp-service-account=${iam_sa_name}@${project_id}.iam.gserviceaccount.com" \
+        --overwrite 2>/dev/null
+    
+    echo -e "[DONE] Workload Identity configurado."
     
     echo -e "${LGREEN}[✓] Assets de infraestructura completados${NC}"
-else
-    echo -e "${YELLOW}[!] Creación de assets omitida${NC}"
 fi
 
 # 4. Resumen Final
