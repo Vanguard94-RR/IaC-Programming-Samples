@@ -431,6 +431,10 @@ function apply_cluster_hardening() {
     local ssl_policy_name="sslsecure"
     local waf_allowed_ips="35.238.84.248,34.121.197.40"
     local certificate_map_name="${project_id}-cert-map"
+    local ssl_cert_name="${project_id}-ssl-cert"
+    local script_dir="$(dirname "$0")"
+    local cert_file="${script_dir}/bundle.cer"
+    local key_file="${script_dir}/KEY_gnp.com.mx_Marzo_2024.key"
     local hardening_log="./hardening_${cluster_name}_$(date +%Y%m%d_%H%M%S).log"
     
     echo "[HARDENING] Iniciando endurecimiento de seguridad del cluster..."
@@ -714,9 +718,9 @@ function apply_cluster_hardening() {
         fi
     else
         echo -e "${YELLOW}[!] Archivos de certificado no encontrados${NC}" | tee -a "$hardening_log"
-        echo -e "${YELLOW}    Esperados:${NC}" | tee -a "$hardening_log"
-        echo -e "${YELLOW}    • Certificado: $cert_file${NC}" | tee -a "$hardening_log"
-        echo -e "${YELLOW}    • Clave privada: $key_file${NC}" | tee -a "$hardening_log"
+        echo -e "${YELLOW}    Esperados en carpeta del script:${NC}" | tee -a "$hardening_log"
+        echo -e "${YELLOW}    • Certificado: bundle.cer${NC}" | tee -a "$hardening_log"
+        echo -e "${YELLOW}    • Clave privada: KEY_gnp.com.mx_Marzo_2024.key${NC}" | tee -a "$hardening_log"
     fi
     
     # 8. Habilitar Container Security API
@@ -1290,8 +1294,8 @@ if true; then
     
     # Usar nombres por defecto para cuentas de servicio
     echo -e "${LGREEN}  • Configurando cuentas de servicio...${NC}"
-    local k8s_sa_name="apps-gke"
-    local iam_sa_name="apps-sa"
+    k8s_sa_name="apps-gke"
+    iam_sa_name="apps-sa"
     
     # Crear cuenta de servicio en Kubernetes
     echo -e "${LGREEN}  • Creando Kubernetes Service Account '${k8s_sa_name}'...${NC}"
