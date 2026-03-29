@@ -17,6 +17,7 @@ Uso:
 Autor: GNP Infrastructure Team
 """
 
+import subprocess
 import sys
 import os
 from pathlib import Path
@@ -224,44 +225,45 @@ def step_4_preview(gitlab_source: dict, gcp_target: dict, options: dict) -> bool
     else:
         return False  # Cancelar
 
-def build_command(gitlab_source: dict, gcp_target: dict, options: dict) -> str:
-    """Construye el comando a ejecutar."""
-    cmd_parts = ["python3", "workflow-deploy.py"]
-    
-    # Fuente GitLab
+def build_command(gitlab_source: dict, gcp_target: dict, options: dict) -> list:
+    """Construye el comando a ejecutar como lista de argumentos (sin shell)."""
+    script_path = str(Path(__file__).parent / "workflow-deploy.py")
+    cmd_parts = [sys.executable, script_path]
+
+    # Fuente GitLab — cada valor como argumento separado, nunca interpolado en string
     if gitlab_source["type"] == "url":
-        cmd_parts.append(f"--url '{gitlab_source['url']}'")
+        cmd_parts.extend(["--url", gitlab_source["url"]])
     else:
-        cmd_parts.append(f"--gitlab-project '{gitlab_source['project']}'")
-        cmd_parts.append(f"--branch '{gitlab_source['branch']}'")
-        cmd_parts.append(f"--path '{gitlab_source['file_path']}'")
-    
+        cmd_parts.extend(["--gitlab-project", gitlab_source["project"]])
+        cmd_parts.extend(["--branch", gitlab_source["branch"]])
+        cmd_parts.extend(["--path", gitlab_source["file_path"]])
+
     # Destino GCP
-    cmd_parts.append(f"--name '{gcp_target['workflow_name']}'")
-    cmd_parts.append(f"--project '{gcp_target['project_id']}'")
-    cmd_parts.append(f"--location '{gcp_target['location']}'")
-    
+    cmd_parts.extend(["--name", gcp_target["workflow_name"]])
+    cmd_parts.extend(["--project", gcp_target["project_id"]])
+    cmd_parts.extend(["--location", gcp_target["location"]])
+
     # Opciones
     if options["dry_run"]:
         cmd_parts.append("--dry-run")
     if options["skip_validation"]:
         cmd_parts.append("--skip-validation")
-    
-    return " ".join(cmd_parts)
 
-def execute_deployment(cmd: str) -> int:
-    """Ejecuta el comando de despliegue."""
+    return cmd_parts
+
+def execute_deployment(cmd: list) -> int:
+    """Ejecuta el comando de despliegue sin invocar shell."""
     print_header("Ejecutando Despliegue")
     print(f"{Colors.GRAY}Comando:{Colors.NC}")
-    print(f"  {cmd}\n")
-    
+    print(f"  {' '.join(cmd)}\n")
+
     print(f"{Colors.GRAY}{'─' * 70}{Colors.NC}\n")
-    
-    result = os.system(cmd)
-    
+
+    result = subprocess.run(cmd)
+
     print(f"\n{Colors.GRAY}{'─' * 70}{Colors.NC}\n")
-    
-    if result == 0:
+
+    if result.returncode == 0:
         print(f"{Colors.GREEN}✓ Despliegue completado exitosamente{Colors.NC}\n")
         return 0
     else:
