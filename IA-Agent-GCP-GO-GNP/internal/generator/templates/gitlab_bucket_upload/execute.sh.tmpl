@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# execute.sh — {{.TicketID}} | gitlab_bucket_upload
+# Descarga archivo de GitLab y lo sube a GCS
+# GENERADO AUTOMÁTICAMENTE
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=config.env
+source "${SCRIPT_DIR}/config.env"
+
+log()  { echo "[EXEC] $*"; }
+fail() { echo "[FAIL] $*" >&2; exit 1; }
+
+TOKEN_FILE="/home/admin/Documents/GNP/PersonalGitLabToken"
+GITLAB_TOKEN=$(cat "${TOKEN_FILE}")
+GITLAB_REPO="{{.GitLabRepo}}"
+GITLAB_BRANCH="{{or .GitLabBranch "main"}}"
+GITLAB_PATH="{{.GitLabPath}}"
+
+# URL-encode: reemplazar / por %2F en repo y path
+ENCODED_REPO="${GITLAB_REPO//\//%2F}"
+ENCODED_PATH="${GITLAB_PATH//\//%2F}"
+
+GITLAB_API_URL="https://gitlab.com/api/v4/projects/${ENCODED_REPO}/repository/files/${ENCODED_PATH}/raw?ref=${GITLAB_BRANCH}"
+
+log "=== EJECUCIÓN: ${TICKET_ID} — gitlab_bucket_upload ==="
+log "  Proyecto: ${PROJECT_ID}"
+log "  Repo    : ${GITLAB_REPO}"
+log "  Branch  : ${GITLAB_BRANCH}"
+log "  Path    : ${GITLAB_PATH}"
+
+# Descargar archivo de GitLab API v4
+TMP_FILE=$(mktemp)
+trap 'rm -f "${TMP_FILE}"' EXIT
+
+log "  Descargando desde GitLab..."
+HTTP_CODE=$(curl -fsSL \
+  -H "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
+  -o "${TMP_FILE}" \
+  -w "%{http_code}" \
+  "${GITLAB_API_URL}" || true)
+
+if [[ "${HTTP_CODE}" != "200" ]]; then
+  fail "GitLab API devolvió HTTP ${HTTP_CODE} para '${GITLAB_PATH}' en '${GITLAB_REPO}@${GITLAB_BRANCH}'"
+fi
+
+FILENAME=$(basename "${GITLAB_PATH}")
+FILE_SIZE=$(wc -c < "${TMP_FILE}")
+log "  Archivo: ${FILENAME} (${FILE_SIZE} bytes)"
+
+# Subir a cada bucket destino
+for BUCKET in "${BUCKETS[@]}"; do
+  log "  Subiendo a gs://${BUCKET}/${FILENAME}..."
+  gcloud storage cp "${TMP_FILE}" "gs://${BUCKET}/${FILENAME}" \
+    --project="${PROJECT_ID}"
+  log "  OK: gs://${BUCKET}/${FILENAME}"
+done
+
+log "=== gitlab_bucket_upload COMPLETADO: ${TICKET_ID} ==="

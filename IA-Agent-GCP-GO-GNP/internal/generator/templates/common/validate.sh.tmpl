@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+# validate.sh — {{.TicketID}} | {{.TaskType}}
+# Verificación post-ejecución
+# GENERADO AUTOMÁTICAMENTE
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=config.env
+source "${SCRIPT_DIR}/config.env"
+
+log()  { echo "[VAL]  $*"; }
+warn() { echo "[WARN] $*" >&2; ERRORS=$((ERRORS+1)); }
+fail() { echo "[FAIL] $*" >&2; exit 1; }
+ERRORS=0
+
+log "=== POST-VALIDACIÓN: ${TICKET_ID} — ${TASK_TYPE} ==="
+{{- if eq .TaskType "iam_project"}}
+
+log "Verificando IAM bindings a nivel proyecto ${PROJECT_ID}..."
+for ROLE in "${PROJECT_ROLES[@]}"; do
+  for MEMBER in "${PRINCIPALS[@]}"; do
+    FOUND=$(gcloud projects get-iam-policy "${PROJECT_ID}" \
+      --flatten="bindings[].members" \
+      --filter="bindings.role=${ROLE} AND bindings.members=${MEMBER}" \
+      --format="value(bindings.members)" 2>/dev/null || true)
+    if [[ -n "${FOUND}" ]]; then
+      log "  OK: ${MEMBER} → ${ROLE}"
+    else
+      warn "No verificado: ${MEMBER} → ${ROLE} en ${PROJECT_ID}"
+    fi
+  done
+done
+{{- end}}
+{{- if eq .TaskType "secret_manager_iam"}}
+
+log "Verificando IAM bindings en secretos..."
+for SECRET in "${SECRETS[@]}"; do
+  for MEMBER in "${PRINCIPALS[@]}"; do
+    for ROLE in "${SECRET_ROLES[@]}"; do
+      FOUND=$(gcloud secrets get-iam-policy "${SECRET}" \
+        --project="${PROJECT_ID}" \
+        --flatten="bindings[].members" \
+        --filter="bindings.role=${ROLE} AND bindings.members=${MEMBER}" \
+        --format="value(bindings.members)" 2>/dev/null || true)
+      if [[ -n "${FOUND}" ]]; then
+        log "  OK: ${MEMBER} → ${ROLE} en secreto ${SECRET}"
+      else
+        warn "No verificado: ${MEMBER} → ${ROLE} en secreto ${SECRET}"
+      fi
+    done
+  done
+done
+{{- end}}
+{{- if eq .TaskType "iam_bucket"}}
+
+log "Verificando IAM bindings en buckets..."
+for BUCKET in "${BUCKETS[@]}"; do
+  for MEMBER in "${PRINCIPALS[@]}"; do
+    FOUND=$(gcloud storage buckets get-iam-policy "gs://${BUCKET}" \
+      --project="${PROJECT_ID}" 2>/dev/null | grep -c "${MEMBER}" || true)
+    if [[ "${FOUND}" -gt 0 ]]; then
+      log "  OK: ${MEMBER} en gs://${BUCKET}"
+    else
+      warn "No verificado: ${MEMBER} en gs://${BUCKET}"
+    fi
+  done
+done
+{{- end}}
+{{- if eq .TaskType "gke_secret"}}
+
+log "Verificando secreto Kubernetes ${KUBE_SECRET_NAME} en namespace ${NAMESPACE}..."
+ZONE=$(gcloud container clusters list \
+  --project="${PROJECT_ID}" \
+  --filter="name=${CLUSTER}" \
+  --format="value(zone)" 2>/dev/null || true)
+if [[ -z "${ZONE}" ]]; then
+  fail "Cluster '${CLUSTER}' no encontrado"
+fi
+gcloud container clusters get-credentials "${CLUSTER}" \
+  --zone="${ZONE}" \
+  --project="${PROJECT_ID}" &>/dev/null
+if kubectl get secret "${KUBE_SECRET_NAME}" -n "${NAMESPACE}" &>/dev/null; then
+  log "  OK: secreto '${KUBE_SECRET_NAME}' existe en namespace '${NAMESPACE}'"
+else
+  fail "Secreto '${KUBE_SECRET_NAME}' NO encontrado en namespace '${NAMESPACE}'"
+fi
+{{- end}}
+{{- if eq .TaskType "pubsub_create"}}
+
+log "Verificando topics Pub/Sub..."
+for TOPIC in "${TOPICS[@]}"; do
+  if gcloud pubsub topics describe "${TOPIC}" --project="${PROJECT_ID}" &>/dev/null; then
+    log "  OK topic: ${TOPIC}"
+  else
+    warn "Topic '${TOPIC}' no encontrado"
+  fi
+done
+log "Verificando suscripciones Pub/Sub..."
+{{- range .Subscriptions}}
+if gcloud pubsub subscriptions describe "{{.Name}}" --project="${PROJECT_ID}" &>/dev/null; then
+  log "  OK suscripción: {{.Name}}"
+else
+  warn "Suscripción '{{.Name}}' no encontrada"
+fi
+{{- end}}
+{{- end}}
+{{- if eq .TaskType "iam_bigquery"}}
+
+log "Verificando IAM bindings en datasets BigQuery..."
+for DATASET in "${DATASETS[@]}"; do
+  for MEMBER in "${PRINCIPALS[@]}"; do
+    FOUND=$(bq get-iam-policy "${PROJECT_ID}:${DATASET}" 2>/dev/null \
+      | grep -c "${MEMBER}" || true)
+    if [[ "${FOUND}" -gt 0 ]]; then
+      log "  OK: ${MEMBER} en dataset ${DATASET}"
+    else
+      warn "No verificado: ${MEMBER} en dataset ${DATASET}"
+    fi
+  done
+done
+{{- end}}
+{{- if eq .TaskType "cloud_scheduler"}}
+
+{{- $region := or .SchedulerJob.Region .Region}}
+log "Verificando job Cloud Scheduler '{{.SchedulerJob.Name}}'..."
+if gcloud scheduler jobs describe "{{.SchedulerJob.Name}}" \
+  --location="{{$region}}" \
+  --project="${PROJECT_ID}" &>/dev/null; then
+  log "  OK: job '{{.SchedulerJob.Name}}' existe en {{$region}}"
+else
+  warn "Job '{{.SchedulerJob.Name}}' no encontrado en {{$region}}"
+fi
+{{- end}}
+{{- if eq .TaskType "enable_apis"}}
+
+log "Verificando APIs habilitadas..."
+for API in "${APIS[@]}"; do
+  if gcloud services list --project="${PROJECT_ID}" \
+    --filter="config.name=${API}" \
+    --format="value(config.name)" 2>/dev/null | grep -q .; then
+    log "  OK habilitada: ${API}"
+  else
+    warn "API '${API}' puede no estar habilitada aún en ${PROJECT_ID}"
+  fi
+done
+{{- end}}
+{{- if eq .TaskType "gitlab_bucket_upload"}}
+
+log "Verificando archivo subido a GCS..."
+GITLAB_FILENAME=$(basename "{{.GitLabPath}}")
+for BUCKET in "${BUCKETS[@]}"; do
+  if gcloud storage ls "gs://${BUCKET}/${GITLAB_FILENAME}" --project="${PROJECT_ID}" &>/dev/null; then
+    log "  OK: gs://${BUCKET}/${GITLAB_FILENAME}"
+  else
+    warn "Archivo '${GITLAB_FILENAME}' no encontrado en gs://${BUCKET}"
+  fi
+done
+{{- end}}
+
+if [[ ${ERRORS} -gt 0 ]]; then
+  echo "[WARN] Post-validación con ${ERRORS} advertencia(s) — revisar manualmente" >&2
+  exit 0  # Warnings no son fatales; el executor decide si bloquear
+else
+  log "=== POST-VALIDACIÓN OK ==="
+fi

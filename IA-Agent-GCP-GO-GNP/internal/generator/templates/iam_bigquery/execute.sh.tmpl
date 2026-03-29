@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# execute.sh — {{.TicketID}} | iam_bigquery
+# Agrega IAM bindings a nivel dataset en BigQuery
+# GENERADO AUTOMÁTICAMENTE
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=config.env
+source "${SCRIPT_DIR}/config.env"
+
+log()  { echo "[EXEC] $*"; }
+fail() { echo "[FAIL] $*" >&2; exit 1; }
+
+log "=== EJECUCIÓN: ${TICKET_ID} — iam_bigquery ==="
+log "  Proyecto: ${PROJECT_ID}"
+log "  Datasets: ${DATASETS[*]}"
+log "  Roles   : ${BIGQUERY_ROLES[*]}"
+
+# add_bq_binding agrega un miembro+rol al IAM policy de un dataset BigQuery.
+# Usa get-iam-policy + python3 merge + set-iam-policy (idempotente).
+add_bq_binding() {
+  local dataset="$1" member="$2" role="$3"
+  local policy_file updated_file
+  policy_file=$(mktemp)
+  updated_file=$(mktemp)
+  # shellcheck disable=SC2064
+  trap "rm -f '${policy_file}' '${updated_file}'" RETURN
+
+  bq get-iam-policy "${PROJECT_ID}:${dataset}" > "${policy_file}"
+
+  python3 - "${policy_file}" "${updated_file}" "${role}" "${member}" <<'PYEOF'
+import json, sys
+policy_path, out_path, role, member = sys.argv[1:]
+with open(policy_path) as f:
+    policy = json.load(f)
+bindings = policy.setdefault('bindings', [])
+for b in bindings:
+    if b['role'] == role:
+        if member not in b['members']:
+            b['members'].append(member)
+        break
+else:
+    bindings.append({'role': role, 'members': [member]})
+with open(out_path, 'w') as f:
+    json.dump(policy, f)
+PYEOF
+
+  bq set-iam-policy "${PROJECT_ID}:${dataset}" "${updated_file}"
+}
+
+for DATASET in "${DATASETS[@]}"; do
+  log "  Dataset: ${DATASET}"
+  for MEMBER in "${PRINCIPALS[@]}"; do
+    for ROLE in "${BIGQUERY_ROLES[@]}"; do
+      log "    ${MEMBER} → ${ROLE}"
+      add_bq_binding "${DATASET}" "${MEMBER}" "${ROLE}"
+    done
+  done
+done
+
+log "=== iam_bigquery COMPLETADO: ${TICKET_ID} ==="

@@ -15,6 +15,9 @@ build:
 ## test-unit: Corre solo tests unitarios (sin API key)
 test-unit:
 	go test ./internal/state/... ./internal/parser/... -run "TestValidate|TestMember|TestSchema|TestManager|TestSessionProgress|TestMark" -v
+	go test ./internal/generator/... -v
+	go test ./internal/gate/... -v
+	go test ./internal/executor/... -v
 
 ## test-integration: Corre todos los tests incluyendo llamadas a Claude API
 test-integration:

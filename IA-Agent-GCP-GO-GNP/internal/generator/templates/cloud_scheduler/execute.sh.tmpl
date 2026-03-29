@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# execute.sh — {{.TicketID}} | cloud_scheduler
+# Crea o actualiza un job de Cloud Scheduler
+# GENERADO AUTOMÁTICAMENTE
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=config.env
+source "${SCRIPT_DIR}/config.env"
+
+log()  { echo "[EXEC] $*"; }
+fail() { echo "[FAIL] $*" >&2; exit 1; }
+
+{{- $region := or .SchedulerJob.Region .Region}}
+
+JOB_NAME="{{.SchedulerJob.Name}}"
+REGION="{{$region}}"
+SCHEDULE="{{.SchedulerJob.Schedule}}"
+TIMEZONE="{{.SchedulerJob.Timezone}}"
+
+log "=== EJECUCIÓN: ${TICKET_ID} — cloud_scheduler ==="
+log "  Proyecto: ${PROJECT_ID}"
+log "  Job     : ${JOB_NAME}"
+log "  Región  : ${REGION}"
+log "  Schedule: ${SCHEDULE}"
+
+# Verificar si el job ya existe (create vs update)
+JOB_EXISTS=$(gcloud scheduler jobs describe "${JOB_NAME}" \
+  --location="${REGION}" \
+  --project="${PROJECT_ID}" \
+  --format="value(name)" 2>/dev/null || true)
+
+if [[ -n "${JOB_EXISTS}" ]]; then
+  log "  Job ya existe — actualizando..."
+  ACTION="update"
+else
+  log "  Job nuevo — creando..."
+  ACTION="create"
+fi
+{{- if eq .SchedulerJob.TargetType "pubsub"}}
+
+# Target: Pub/Sub
+gcloud scheduler jobs "${ACTION}" pubsub "${JOB_NAME}" \
+  --location="${REGION}" \
+  --schedule="${SCHEDULE}" \
+  --time-zone="${TIMEZONE}" \
+  --topic="{{.SchedulerJob.TargetTopic}}" \
+  {{- if .SchedulerJob.Body}}
+  --message-body="{{.SchedulerJob.Body}}" \
+  {{- end}}
+  {{- if gt .SchedulerJob.MaxRetries 0}}
+  --max-retry-attempts={{.SchedulerJob.MaxRetries}} \
+  {{- end}}
+  --project="${PROJECT_ID}" \
+  --quiet
+{{- else}}
+
+# Target: HTTP
+gcloud scheduler jobs "${ACTION}" http "${JOB_NAME}" \
+  --location="${REGION}" \
+  --schedule="${SCHEDULE}" \
+  --time-zone="${TIMEZONE}" \
+  --uri="{{.SchedulerJob.TargetURL}}" \
+  --http-method="{{or .SchedulerJob.HTTPMethod "POST"}}" \
+  {{- if .SchedulerJob.Body}}
+  --message-body="{{.SchedulerJob.Body}}" \
+  {{- end}}
+  {{- if gt .SchedulerJob.MaxRetries 0}}
+  --max-retry-attempts={{.SchedulerJob.MaxRetries}} \
+  {{- end}}
+  --project="${PROJECT_ID}" \
+  --quiet
+{{- end}}
+
+log "=== cloud_scheduler COMPLETADO: ${TICKET_ID} ==="

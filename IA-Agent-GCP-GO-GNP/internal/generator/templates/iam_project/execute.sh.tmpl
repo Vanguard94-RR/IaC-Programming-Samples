@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# execute.sh — {{.TicketID}} | iam_project
+# GENERADO AUTOMÁTICAMENTE
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=config.env
+source "${SCRIPT_DIR}/config.env"
+
+log()  { echo "[EXEC] $*"; }
+fail() { echo "[FAIL] $*" >&2; exit 1; }
+
+log "=== EJECUCIÓN: ${TICKET_ID} — iam_project ==="
+log "  Proyecto : ${PROJECT_ID}"
+log "  Roles    : ${PROJECT_ROLES[*]}"
+log "  Principals: ${#PRINCIPALS[@]}"
+
+for ROLE in "${PROJECT_ROLES[@]}"; do
+  for MEMBER in "${PRINCIPALS[@]}"; do
+    log "Agregando ${ROLE} → ${MEMBER}..."
+    gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+      --member="${MEMBER}" \
+      --role="${ROLE}" \
+      --condition=None \
+      --quiet
+    log "  OK"
+  done
+done
+
+log "=== EJECUCIÓN COMPLETADA: ${TICKET_ID} ==="
