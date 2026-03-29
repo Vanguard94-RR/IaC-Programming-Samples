@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# execute.sh — {{.TicketID}} | gke_secret
+# GENERADO AUTOMÁTICAMENTE
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=config.env
+source "${SCRIPT_DIR}/config.env"
+
+log()  { echo "[EXEC] $*"; }
+fail() { echo "[FAIL] $*" >&2; exit 1; }
+
+log "=== EJECUCIÓN: ${TICKET_ID} — gke_secret ==="
+log "  Proyecto  : ${PROJECT_ID}"
+log "  Cluster   : ${CLUSTER}"
+log "  Namespace : ${NAMESPACE}"
+log "  Secreto K8s: ${KUBE_SECRET_NAME}"
+
+# Resolver zona del cluster dinámicamente (nunca hardcodear zona)
+log "Resolviendo zona del cluster ${CLUSTER}..."
+ZONE=$(gcloud container clusters list \
+  --project="${PROJECT_ID}" \
+  --filter="name=${CLUSTER}" \
+  --format="value(zone)")
+if [[ -z "${ZONE}" ]]; then
+  fail "Cluster '${CLUSTER}' no encontrado en proyecto '${PROJECT_ID}'"
+fi
+log "  Zona: ${ZONE}"
+
+# Obtener credenciales kubectl
+log "Obteniendo credenciales del cluster..."
+gcloud container clusters get-credentials "${CLUSTER}" \
+  --zone="${ZONE}" \
+  --project="${PROJECT_ID}"
+
+# Construir args --from-literal para kubectl
+KUBE_ARGS=(
+{{- range .KubeFromLiterals}}
+  "{{.}}"
+{{- end}}
+)
+
+# Crear o actualizar el secreto (idempotente: dry-run + apply)
+log "Creando/actualizando secreto Kubernetes '${KUBE_SECRET_NAME}'..."
+kubectl create secret generic "${KUBE_SECRET_NAME}" \
+  --namespace="${NAMESPACE}" \
+  "${KUBE_ARGS[@]}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+log "  Secreto '${KUBE_SECRET_NAME}' creado/actualizado en namespace '${NAMESPACE}'"
+log "=== EJECUCIÓN COMPLETADA: ${TICKET_ID} ==="

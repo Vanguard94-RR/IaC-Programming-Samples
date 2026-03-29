@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# execute.sh — {{.TicketID}} | enable_apis
+# Habilita APIs de GCP en el proyecto
+# GENERADO AUTOMÁTICAMENTE
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=config.env
+source "${SCRIPT_DIR}/config.env"
+
+log()  { echo "[EXEC] $*"; }
+fail() { echo "[FAIL] $*" >&2; exit 1; }
+
+log "=== EJECUCIÓN: ${TICKET_ID} — enable_apis ==="
+log "  Proyecto: ${PROJECT_ID}"
+log "  APIs    : ${APIS[*]}"
+
+# gcloud services enable es idempotente: habilitar una API ya habilitada es no-op.
+gcloud services enable "${APIS[@]}" --project="${PROJECT_ID}"
+
+log "=== enable_apis COMPLETADO: ${TICKET_ID} ==="

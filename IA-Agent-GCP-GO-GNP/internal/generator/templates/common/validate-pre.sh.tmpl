@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+# validate-pre.sh — {{.TicketID}} | {{.TaskType}}
+# GENERADO AUTOMÁTICAMENTE
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=config.env
+source "${SCRIPT_DIR}/config.env"
+
+log()  { echo "[PRE]  $*"; }
+fail() { echo "[FAIL] $*" >&2; exit 1; }
+
+log "=== PRE-VALIDACIÓN: ${TICKET_ID} — ${TASK_TYPE} ==="
+
+# 1. Verificar autenticación gcloud
+log "Verificando autenticación gcloud..."
+ACTIVE_ACCOUNT=$(gcloud auth list --filter=status:ACTIVE --format="value(account)" 2>/dev/null || true)
+if [[ -z "${ACTIVE_ACCOUNT}" ]]; then
+  fail "No hay cuenta gcloud activa. Ejecuta: gcloud auth login"
+fi
+log "  Cuenta activa: ${ACTIVE_ACCOUNT}"
+
+# 2. Verificar acceso al proyecto
+log "Verificando acceso al proyecto ${PROJECT_ID}..."
+if ! gcloud projects describe "${PROJECT_ID}" --format="value(projectId)" &>/dev/null; then
+  fail "Proyecto '${PROJECT_ID}' no accesible. Verifica permisos o el ID."
+fi
+log "  Proyecto OK: ${PROJECT_ID}"
+
+# 3. Verificar principals definidos
+if [[ ${#PRINCIPALS[@]} -eq 0 ]]; then
+  fail "No hay principals definidos en config.env"
+fi
+for MEMBER in "${PRINCIPALS[@]}"; do
+  log "  Principal: ${MEMBER}"
+done
+{{- if eq .TaskType "secret_manager_iam"}}
+
+# 4. Verificar existencia de secretos en Secret Manager
+log "Verificando secretos en Secret Manager..."
+for SECRET in "${SECRETS[@]}"; do
+  if gcloud secrets describe "${SECRET}" --project="${PROJECT_ID}" &>/dev/null; then
+    log "  Secreto OK: ${SECRET}"
+  else
+    fail "Secreto '${SECRET}' no encontrado en proyecto '${PROJECT_ID}'. secret_manager_iam requiere que el secreto exista."
+  fi
+done
+{{- end}}
+{{- if eq .TaskType "iam_bucket"}}
+
+# 4. Verificar existencia de buckets GCS
+log "Verificando buckets GCS..."
+for BUCKET in "${BUCKETS[@]}"; do
+  if gcloud storage buckets describe "gs://${BUCKET}" --project="${PROJECT_ID}" &>/dev/null; then
+    log "  Bucket OK: gs://${BUCKET}"
+  else
+    echo "[WARN]  Bucket 'gs://${BUCKET}' no encontrado" >&2
+  fi
+done
+{{- end}}
+{{- if eq .TaskType "gke_secret"}}
+
+# 4. Verificar cluster GKE
+log "Verificando cluster GKE: ${CLUSTER}..."
+ZONE=$(gcloud container clusters list \
+  --project="${PROJECT_ID}" \
+  --filter="name=${CLUSTER}" \
+  --format="value(zone)" 2>/dev/null || true)
+if [[ -z "${ZONE}" ]]; then
+  fail "Cluster '${CLUSTER}' no encontrado en proyecto '${PROJECT_ID}'"
+fi
+log "  Cluster ${CLUSTER} encontrado en zona: ${ZONE}"
+# Verificar que kubectl está disponible
+if ! command -v kubectl &>/dev/null; then
+  fail "kubectl no encontrado en PATH"
+fi
+{{- end}}
+{{- if eq .TaskType "pubsub_create"}}
+
+# 4. Verificar que la API de Pub/Sub está habilitada
+log "Verificando API pubsub.googleapis.com..."
+if ! gcloud services list --project="${PROJECT_ID}" \
+  --filter="config.name=pubsub.googleapis.com" \
+  --format="value(config.name)" 2>/dev/null | grep -q .; then
+  echo "[WARN]  pubsub.googleapis.com puede no estar habilitada en ${PROJECT_ID}" >&2
+fi
+{{- end}}
+{{- if eq .TaskType "iam_bigquery"}}
+
+# 4. Verificar bq CLI y existencia de datasets BigQuery
+log "Verificando bq CLI..."
+if ! command -v bq &>/dev/null; then
+  fail "bq CLI no encontrado en PATH. Instala Google Cloud SDK: https://cloud.google.com/sdk"
+fi
+log "Verificando datasets BigQuery..."
+for DATASET in "${DATASETS[@]}"; do
+  if bq show --project_id="${PROJECT_ID}" "${PROJECT_ID}:${DATASET}" &>/dev/null; then
+    log "  Dataset OK: ${DATASET}"
+  else
+    fail "Dataset '${DATASET}' no encontrado en proyecto '${PROJECT_ID}'"
+  fi
+done
+{{- end}}
+{{- if eq .TaskType "cloud_scheduler"}}
+
+# 4. Verificar API Cloud Scheduler habilitada
+log "Verificando API cloudscheduler.googleapis.com..."
+if ! gcloud services list --project="${PROJECT_ID}" \
+  --filter="config.name=cloudscheduler.googleapis.com" \
+  --format="value(config.name)" 2>/dev/null | grep -q .; then
+  echo "[WARN]  cloudscheduler.googleapis.com puede no estar habilitada en ${PROJECT_ID}" >&2
+fi
+{{- end}}
+{{- if eq .TaskType "enable_apis"}}
+
+# 4. Verificar que serviceusage.googleapis.com está habilitada (requerida para habilitar otras APIs)
+log "Verificando API serviceusage.googleapis.com..."
+if ! gcloud services list --project="${PROJECT_ID}" \
+  --filter="config.name=serviceusage.googleapis.com" \
+  --format="value(config.name)" 2>/dev/null | grep -q .; then
+  echo "[WARN]  serviceusage.googleapis.com puede no estar habilitada — habilítala manualmente si el comando falla" >&2
+fi
+{{- end}}
+{{- if eq .TaskType "gitlab_bucket_upload"}}
+
+# 4. Verificar bucket GCS destino y token GitLab
+log "Verificando buckets GCS destino..."
+for BUCKET in "${BUCKETS[@]}"; do
+  if gcloud storage buckets describe "gs://${BUCKET}" --project="${PROJECT_ID}" &>/dev/null; then
+    log "  Bucket OK: gs://${BUCKET}"
+  else
+    fail "Bucket 'gs://${BUCKET}' no encontrado en proyecto '${PROJECT_ID}'"
+  fi
+done
+TOKEN_FILE="/home/admin/Documents/GNP/PersonalGitLabToken"
+log "Verificando token GitLab: ${TOKEN_FILE}..."
+if [[ ! -f "${TOKEN_FILE}" ]]; then
+  fail "Token GitLab no encontrado: ${TOKEN_FILE}"
+fi
+if [[ ! -s "${TOKEN_FILE}" ]]; then
+  fail "Token GitLab vacío: ${TOKEN_FILE}"
+fi
+log "  Token GitLab OK"
+{{- end}}
+
+log "=== PRE-VALIDACIÓN COMPLETADA ==="

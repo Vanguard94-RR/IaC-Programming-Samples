@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# execute.sh — {{.TicketID}} | secret_manager_iam
+# GENERADO AUTOMÁTICAMENTE
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=config.env
+source "${SCRIPT_DIR}/config.env"
+
+log()  { echo "[EXEC] $*"; }
+fail() { echo "[FAIL] $*" >&2; exit 1; }
+
+log "=== EJECUCIÓN: ${TICKET_ID} — secret_manager_iam ==="
+log "  Proyecto: ${PROJECT_ID}"
+log "  Secretos: ${SECRETS[*]}"
+log "  Roles   : ${SECRET_ROLES[*]}"
+
+for SECRET in "${SECRETS[@]}"; do
+  # Verificar que el secreto existe antes de modificar IAM
+  if ! gcloud secrets describe "${SECRET}" --project="${PROJECT_ID}" &>/dev/null; then
+    fail "Secreto '${SECRET}' no existe en proyecto '${PROJECT_ID}'. Crear primero con secret_manager_create."
+  fi
+  for MEMBER in "${PRINCIPALS[@]}"; do
+    for ROLE in "${SECRET_ROLES[@]}"; do
+      log "Otorgando ${ROLE} en secreto '${SECRET}' → ${MEMBER}..."
+      gcloud secrets add-iam-policy-binding "${SECRET}" \
+        --project="${PROJECT_ID}" \
+        --member="${MEMBER}" \
+        --role="${ROLE}" \
+        --quiet
+      log "  OK"
+    done
+  done
+done
+
+log "=== EJECUCIÓN COMPLETADA: ${TICKET_ID} ==="

@@ -10,6 +10,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -17,31 +18,33 @@ import (
 	"strings"
 	"time"
 
+	"gnp-agent/internal/executor"
+	"gnp-agent/internal/gate"
+	"gnp-agent/internal/generator"
 	"gnp-agent/internal/parser"
 	"gnp-agent/internal/state"
 )
 
 // Paths de configuración del entorno GNP
 const (
-	ticketsDir   = "/home/admin/Documents/GNP/Tickets"
-	stateDir     = "/home/admin/Documents/GNP/Repos/IaC-Programming-Samples/IA-Agent-GCP-GO-GNP/state"
-	gitlabToken  = "/home/admin/Documents/GNP/PersonalGitLabToken"
-	iamXLSXPath  = "/home/admin/Documents/GNP/Proyecto-Permisos-IAM/Plantilla de Permisos IAM.xlsx"
-	dlkXLSXPath  = "/home/admin/Documents/GNP/Proyecto-Permisos-IAM/Plantilla Permisos DLK V3.0.xlsx"
+	ticketsDir    = "/home/admin/Documents/GNP/Tickets"
+	stateDir      = "/home/admin/Documents/GNP/Repos/IaC-Programming-Samples/IA-Agent-GCP-GO-GNP/state"
+	gitlabToken   = "/home/admin/Documents/GNP/PersonalGitLabToken"
+	iamXLSXPath   = "/home/admin/Documents/GNP/Proyecto-Permisos-IAM/Plantilla de Permisos IAM.xlsx"
+	dlkXLSXPath   = "/home/admin/Documents/GNP/Proyecto-Permisos-IAM/Plantilla Permisos DLK V3.0.xlsx"
 	sessionMDPath = "/home/admin/Documents/GNP/Tickets/SESSION_PROGRESS.md"
 )
 
 func main() {
 	// Flags
-	ticketFile := flag.String("ticket", "", "archivo de texto con el ticket (default: stdin)")
-	dryRun     := flag.Bool("dry-run", false, "parsear y generar scripts sin ejecutar")
-	showStatus := flag.Bool("status", false, "mostrar estado de tickets de la sesión")
-	skipDLK    := flag.Bool("skip-dlk", false, "omitir DLK gate (solo para pruebas)")
+	ticketFile   := flag.String("ticket", "", "archivo de texto con el ticket (default: stdin)")
+	dryRun       := flag.Bool("dry-run", false, "parsear y generar scripts sin ejecutar")
+	showStatus   := flag.Bool("status", false, "mostrar estado de tickets de la sesión")
+	skipDLK      := flag.Bool("skip-dlk", false, "omitir DLK gate (solo para pruebas)")
+	phaseTimeout := flag.Duration("phase-timeout", executor.DefaultTimeout, "timeout por fase de ejecución")
 	flag.Parse()
-	_ = skipDLK // usado en Sprint 3 cuando se implemente gate/dlk.go
 
-	// Resolver ANTHROPIC_API_KEY: variable de entorno tiene prioridad,
-	// si no está definida busca en ~/.config/gnp-agent/api_key o ~/.anthropic_api_key
+	// Resolver ANTHROPIC_API_KEY
 	if os.Getenv("ANTHROPIC_API_KEY") == "" {
 		for _, candidate := range []string{
 			os.Getenv("HOME") + "/.config/gnp-agent/api_key",
@@ -116,59 +119,156 @@ func main() {
 	}
 
 	// ─── FASE 2: DLK GATE ─────────────────────────────────────────────────────
-	// Implementado en Sprint 3 (gate/dlk.go)
-	// Por ahora: placeholder que siempre pasa
 	printSection("DLK GATE")
-	dlkStatus := state.DLKGateNA
-	dlkApplies := isDLKProject(ticket.ProjectID)
-	if dlkApplies {
-		fmt.Printf("  ⚠  Proyecto DLK detectado — gate pendiente de implementación (Sprint 3)\n")
-		fmt.Printf("  %s Para continuar manualmente, agrega -skip-dlk\n", warn())
-		dlkStatus = state.DLKGatePassed // placeholder
+	var dlkStatus state.DLKGateStatus
+
+	if *skipDLK {
+		fmt.Printf("  ⚠  DLK gate omitido por -skip-dlk\n")
+		dlkStatus = state.DLKGatePassed
 	} else {
-		fmt.Printf("  ✓ N/A — proyecto no DLK\n")
+		dlkResult := gate.Check(ticket)
+		dlkStatus = dlkResult.Status
+		switch dlkResult.Status {
+		case state.DLKGateNA:
+			fmt.Printf("  ✓ N/A — proyecto no DLK\n")
+		case state.DLKGatePassed:
+			fmt.Printf("  ✓ PASSED — %s\n", dlkResult.Reason)
+		case state.DLKGateBlocked:
+			fmt.Printf("  ✗ BLOQUEADO — %s\n", dlkResult.Reason)
+			if err := mgr.Save(ticket.TicketID, ticket.ProjectID, string(ticket.TaskType),
+				state.StateBlocked, dlkStatus, dlkResult.Reason, nil); err != nil {
+				fmt.Fprintf(os.Stderr, "WARN: no se pudo guardar estado: %v\n", err)
+			}
+			if err := mgr.WriteSessionProgress(sessionMDPath); err != nil {
+				fmt.Fprintf(os.Stderr, "WARN: no se pudo escribir SESSION_PROGRESS.md: %v\n", err)
+			}
+			printFinalBox(ticket, "BLOCKED", dlkStatus, false)
+			return
+		}
 	}
 
 	// ─── FASE 3: GENERATE SCRIPTS ─────────────────────────────────────────────
-	// Implementado en Sprint 2 (generator/)
-	// Por ahora: informar qué se generaría
 	printSection("SCRIPT GENERATION")
-	fmt.Printf("  Destino: %s/%s/scripts/\n", ticketsDir, ticket.TicketID)
-	fmt.Printf("  Archivos: config.env, validate-pre.sh, execute.sh, validate.sh\n")
-	fmt.Printf("  Template: %s\n", ticket.TaskType)
-	fmt.Printf("  ⚠  Generador pendiente de implementación (Sprint 2)\n")
+	scriptsDir := fmt.Sprintf("%s/%s/scripts", ticketsDir, ticket.TicketID)
+	fmt.Printf("  Destino  : %s\n", scriptsDir)
+	fmt.Printf("  Template : %s\n", ticket.TaskType)
+
+	genErr := generator.Generate(ticket, scriptsDir)
+	if genErr != nil {
+		if errors.Is(genErr, generator.ErrUnsupportedTask) {
+			fmt.Printf("  ⚠  %v\n", genErr)
+			fmt.Printf("  Archivos NO generados — task_type no soportado aún\n")
+		} else {
+			fatalf("Error generando scripts: %v", genErr)
+		}
+	} else {
+		fmt.Printf("  Archivos: config.env, validate-pre.sh, execute.sh, validate.sh\n")
+		fmt.Printf("  OK — scripts generados en %s\n", scriptsDir)
+	}
 
 	if *dryRun {
 		fmt.Println()
 		fmt.Println("  [DRY-RUN] Detenido antes de ejecutar.")
+		dryState := state.StatePending
+		if genErr == nil {
+			dryState = state.StateValidated
+		}
 		if err := mgr.Save(ticket.TicketID, ticket.ProjectID, string(ticket.TaskType),
-			state.StatePending, dlkStatus, "dry-run", nil); err != nil {
+			dryState, dlkStatus, "dry-run", nil); err != nil {
 			fmt.Fprintf(os.Stderr, "WARN: no se pudo guardar estado: %v\n", err)
 		}
 		printFinalBox(ticket, "DRY-RUN", dlkStatus, false)
 		return
 	}
 
+	// Si los scripts no existen (task type no soportado), guardar PENDING y salir
+	if genErr != nil {
+		if err := mgr.Save(ticket.TicketID, ticket.ProjectID, string(ticket.TaskType),
+			state.StatePending, dlkStatus, "task_type sin template", nil); err != nil {
+			fmt.Fprintf(os.Stderr, "WARN: no se pudo guardar estado: %v\n", err)
+		}
+		if err := mgr.WriteSessionProgress(sessionMDPath); err != nil {
+			fmt.Fprintf(os.Stderr, "WARN: no se pudo escribir SESSION_PROGRESS.md: %v\n", err)
+		}
+		printFinalBox(ticket, "PENDING", dlkStatus, false)
+		return
+	}
+
 	// ─── FASE 4: EXECUTE ──────────────────────────────────────────────────────
-	// Implementado en Sprint 3 (executor/)
 	printSection("EXECUTION")
-	fmt.Printf("  ⚠  Executor pendiente de implementación (Sprint 3)\n")
+
+	// Marcar EXECUTING antes de correr los scripts
+	if err := mgr.Save(ticket.TicketID, ticket.ProjectID, string(ticket.TaskType),
+		state.StateExecuting, dlkStatus, "en ejecución", nil); err != nil {
+		fmt.Fprintf(os.Stderr, "WARN: no se pudo guardar estado: %v\n", err)
+	}
+
+	fmt.Printf("  Timeout por fase: %s\n", *phaseTimeout)
+	execResult, execErr := executor.Run(ticket.TicketID, scriptsDir, *phaseTimeout)
+
+	// Print phase-by-phase output
+	for _, phase := range execResult.Phases {
+		status := "OK  "
+		if !phase.OK() {
+			status = "FAIL"
+		}
+		fmt.Printf("  [%s] %-14s exit=%d  %s\n",
+			status, phase.Phase, phase.ExitCode, phase.Duration.Round(time.Millisecond))
+		if phase.Stdout != "" {
+			for _, line := range strings.Split(strings.TrimRight(phase.Stdout, "\n"), "\n") {
+				fmt.Printf("        %s\n", line)
+			}
+		}
+		if phase.Stderr != "" && !phase.OK() {
+			for _, line := range strings.Split(strings.TrimRight(phase.Stderr, "\n"), "\n") {
+				fmt.Printf("        STDERR: %s\n", line)
+			}
+		}
+	}
+
+	if execErr != nil {
+		// OS-level error (script missing mid-run, permission denied, etc.)
+		fmt.Fprintf(os.Stderr, "\nERROR en ejecución: %v\n", execErr)
+		if err := mgr.Save(ticket.TicketID, ticket.ProjectID, string(ticket.TaskType),
+			state.StateBlocked, dlkStatus, "error de ejecución: "+execErr.Error(), nil); err != nil {
+			fmt.Fprintf(os.Stderr, "WARN: no se pudo guardar estado: %v\n", err)
+		}
+		if err := mgr.WriteSessionProgress(sessionMDPath); err != nil {
+			fmt.Fprintf(os.Stderr, "WARN: no se pudo escribir SESSION_PROGRESS.md: %v\n", err)
+		}
+		printFinalBox(ticket, "BLOCKED", dlkStatus, false)
+		return
+	}
+
+	if !execResult.Success {
+		reason := fmt.Sprintf("fase '%s' falló (exit %d)",
+			execResult.FailedPhase,
+			execResult.Phases[len(execResult.Phases)-1].ExitCode)
+		if err := mgr.Save(ticket.TicketID, ticket.ProjectID, string(ticket.TaskType),
+			state.StateBlocked, dlkStatus, reason, nil); err != nil {
+			fmt.Fprintf(os.Stderr, "WARN: no se pudo guardar estado: %v\n", err)
+		}
+		if err := mgr.WriteSessionProgress(sessionMDPath); err != nil {
+			fmt.Fprintf(os.Stderr, "WARN: no se pudo escribir SESSION_PROGRESS.md: %v\n", err)
+		}
+		printFinalBox(ticket, "BLOCKED", dlkStatus, false)
+		return
+	}
 
 	// ─── FASE 5: GOVERNANCE ───────────────────────────────────────────────────
 	// Implementado en Sprint 5 (governance/)
 	printSection("GOVERNANCE")
 	fmt.Printf("  ⚠  Governance pendiente de implementación (Sprint 5)\n")
 
-	// Estado final placeholder — FIX BUG-10: propagar errores
+	// Ticket completado
 	if err := mgr.Save(ticket.TicketID, ticket.ProjectID, string(ticket.TaskType),
-		state.StatePending, dlkStatus, "Sprints 2-5 pendientes", nil); err != nil {
+		state.StateCompleted, dlkStatus, "completado", nil); err != nil {
 		fmt.Fprintf(os.Stderr, "WARN: no se pudo guardar estado: %v\n", err)
 	}
 	if err := mgr.WriteSessionProgress(sessionMDPath); err != nil {
 		fmt.Fprintf(os.Stderr, "WARN: no se pudo escribir SESSION_PROGRESS.md: %v\n", err)
 	}
-
-	printFinalBox(ticket, "PENDING", dlkStatus, false)
+	printFinalBox(ticket, "COMPLETED", dlkStatus, false)
 }
 
 // ─── Helpers de I/O ──────────────────────────────────────────────────────────
@@ -182,7 +282,6 @@ func readInput(filePath string) (string, error) {
 		return string(data), nil
 	}
 
-	// Leer desde stdin
 	fmt.Fprintln(os.Stderr, "Pega el texto del ticket y presiona Ctrl+D cuando termines:")
 	var sb strings.Builder
 	scanner := bufio.NewScanner(os.Stdin)
@@ -255,24 +354,7 @@ func printSessionStatus(mgr *state.Manager) {
 	}
 }
 
-// isDLKProject detecta si un proyecto está sujeto al gate DLK.
-// FIX BUG-09: agrega "data" como keyword según especificación del chatmode.
-func isDLKProject(projectID string) bool {
-	lower := strings.ToLower(projectID)
-	for _, kw := range []string{"dlk", "datalake", "datapond", "data"} {
-		if strings.Contains(lower, kw) {
-			return true
-		}
-	}
-	return false
-}
-
-func warn() string { return "⚠ " }
-
 func fatalf(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "ERROR: "+format+"\n", args...)
 	os.Exit(1)
 }
-
-// FIX BUG-11: eliminada función max() — en Go 1.21+ es built-in.
-// La función printSection usará el built-in directamente.

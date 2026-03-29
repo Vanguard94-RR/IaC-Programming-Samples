@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# execute.sh — {{.TicketID}} | pubsub_create
+# GENERADO AUTOMÁTICAMENTE
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=config.env
+source "${SCRIPT_DIR}/config.env"
+
+log()  { echo "[EXEC] $*"; }
+fail() { echo "[FAIL] $*" >&2; exit 1; }
+
+log "=== EJECUCIÓN: ${TICKET_ID} — pubsub_create ==="
+log "  Proyecto: ${PROJECT_ID}"
+log "  Topics  : ${TOPICS[*]}"
+
+# ── Crear topics ──────────────────────────────────────────────────────────────
+for TOPIC in "${TOPICS[@]}"; do
+  if gcloud pubsub topics describe "${TOPIC}" --project="${PROJECT_ID}" &>/dev/null; then
+    log "  Topic ya existe (omitiendo): ${TOPIC}"
+  else
+    log "  Creando topic: ${TOPIC}..."
+    gcloud pubsub topics create "${TOPIC}" --project="${PROJECT_ID}"
+    log "    OK: ${TOPIC}"
+  fi
+done
+
+# ── Crear suscripciones ───────────────────────────────────────────────────────
+{{- range .Subscriptions}}
+log "Procesando suscripción: {{.Name}} → topic {{.Topic}}..."
+if gcloud pubsub subscriptions describe "{{.Name}}" --project="${PROJECT_ID}" &>/dev/null; then
+  log "  Suscripción ya existe (omitiendo): {{.Name}}"
+else
+  gcloud pubsub subscriptions create "{{.Name}}" \
+    --project="${PROJECT_ID}" \
+    --topic="{{.Topic}}" \
+    --ack-deadline={{.AckDeadline}} \
+    --message-retention-duration={{retentionDuration .RetentionDays}}{{if eq .ExpirationPolicy "never"}} \
+    --expiration-period=never{{else if .ExpirationPolicy}} \
+    --expiration-period="{{.ExpirationPolicy}}"{{end}}{{if eq .DeliveryType "push"}} \
+    --push-endpoint="{{.PushEndpoint}}"{{end}}
+  log "  OK: suscripción {{.Name}} creada"
+fi
+{{- end}}
+
+log "=== EJECUCIÓN COMPLETADA: ${TICKET_ID} ==="
