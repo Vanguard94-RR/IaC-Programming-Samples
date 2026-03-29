@@ -102,7 +102,7 @@ prompt_input() {
         input_value="$default"
     fi
     
-    eval "$var_name='$input_value'"
+    printf -v "$var_name" '%s' "$input_value"
 }
 
 validate_url() {
@@ -325,11 +325,21 @@ download_workflow() {
     print_info "Rama: $branch"
     print_info "Archivo: $file_path"
     
-    local gitlab_api_url="https://gitlab.com/api/v4/projects/$(echo "$project" | sed 's|/|%2F|g')/repository/files/$(echo "$file_path" | sed 's|/|%2F|g')/raw"
-    
-    if ! curl -s -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+    local gitlab_api_url
+    gitlab_api_url="https://gitlab.com/api/v4/projects/${project//\//%2F}/repository/files/${file_path//\//%2F}/raw"
+
+    # Write token to a temp curl config file to avoid exposure in process list
+    local curl_config
+    curl_config=$(mktemp)
+    printf 'header = "PRIVATE-TOKEN: %s"\n' "$GITLAB_TOKEN" > "$curl_config"
+
+    local curl_exit=0
+    curl -s -K "$curl_config" \
         -o "$output_file" \
-        "$gitlab_api_url?ref=$branch" 2>/dev/null; then
+        "$gitlab_api_url?ref=$branch" 2>/dev/null || curl_exit=$?
+    rm -f "$curl_config"
+
+    if [ "$curl_exit" -ne 0 ]; then
         print_error "No se pudo descargar el archivo"
         return 1
     fi
@@ -397,7 +407,7 @@ execute_deployment() {
     
     local temp_file
     temp_file=$(mktemp /tmp/workflow-XXXXXX.yaml)
-    trap "rm -f $temp_file" RETURN
+    trap 'rm -f "$temp_file"' RETURN
     
     echo ""
     

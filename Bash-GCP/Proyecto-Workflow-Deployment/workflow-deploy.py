@@ -682,27 +682,46 @@ Variables de entorno:
 
 def get_gitlab_token() -> str:
     """
-    Obtiene el token de GitLab de las variables de entorno.
-    
+    Obtiene el token de GitLab.
+
+    Prioridad:
+      1. Variable de entorno GITLAB_TOKEN (valor directo)
+      2. Variable de entorno GITLAB_TOKEN_PATH → lee el archivo indicado
+
     Returns:
         Token de GitLab
-        
+
     Raises:
-        SystemExit: Si el token no está definido
+        SystemExit: Si el token no está disponible por ninguna vía
     """
+    # Prioridad 1: valor directo en variable de entorno
     token = os.environ.get("GITLAB_TOKEN", "").strip()
-    
+
+    if not token:
+        # Prioridad 2: ruta al archivo que contiene el token
+        token_path = os.environ.get("GITLAB_TOKEN_PATH", "").strip()
+        if token_path:
+            token_file = Path(token_path)
+            if not token_file.is_absolute():
+                token_file = Path(__file__).parent / token_path
+            try:
+                token = token_file.read_text(encoding="utf-8").strip()
+            except OSError as e:
+                logger.error(f"No se pudo leer el token desde {token_file}: {e}")
+
     if not token:
         logger.error(
-            "Variable GITLAB_TOKEN no definida.\n"
-            "Configúrala con: export GITLAB_TOKEN='tu-token'"
+            "Token de GitLab no disponible.\n"
+            "Opciones:\n"
+            "  export GITLAB_TOKEN='tu-token'\n"
+            "  export GITLAB_TOKEN_PATH='/ruta/al/archivo/token'"
         )
         sys.exit(1)
-    
+
     # Validación básica de seguridad
     if len(token) < 20:
         logger.warning("El token parece muy corto, podría ser inválido")
-    
+
     return token
 
 
