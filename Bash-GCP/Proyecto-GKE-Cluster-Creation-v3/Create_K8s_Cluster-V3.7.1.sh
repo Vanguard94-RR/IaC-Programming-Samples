@@ -651,7 +651,7 @@ function apply_cluster_hardening() {
     fi
     
     # 5. Crear política SSL (TLS 1.2+)
-    echo "[HARDENING] === PASO 5/8: Política SSL ===" | tee -a "$hardening_log"
+    echo "[HARDENING] === PASO 5/9: Política SSL ===" | tee -a "$hardening_log"
     if gcloud compute ssl-policies describe "$ssl_policy_name" --project="$project_id" &>/dev/null; then
         echo -e "${YELLOW}[!] Política SSL '$ssl_policy_name' ya existe${NC}" | tee -a "$hardening_log"
     else
@@ -667,10 +667,8 @@ function apply_cluster_hardening() {
         fi
     fi
     
-    # 6. Crear Certificate Map
-    echo "[HARDENING] === PASO 6/8: Certificate Map ===" | tee -a "$hardening_log"
-    
-    # Habilitar API de Certificate Manager
+    # 6. Habilitar APIs de Seguridad
+    echo "[HARDENING] === PASO 6/9: Habilitando APIs de Seguridad ===" | tee -a "$hardening_log"
     echo "[HARDENING] Habilitando Certificate Manager API..." | tee -a "$hardening_log"
     if gcloud services enable certificatemanager.googleapis.com \
         --project="$project_id" 2>>"$hardening_log"; then
@@ -678,11 +676,21 @@ function apply_cluster_hardening() {
     else
         echo -e "${YELLOW}[!] Certificate Manager API ya estaba habilitada${NC}" | tee -a "$hardening_log"
     fi
+    echo "[HARDENING] Habilitando Container Security API..." | tee -a "$hardening_log"
+    if gcloud services enable containersecurity.googleapis.com \
+        --project="$project_id" 2>>"$hardening_log"; then
+        echo -e "${LGREEN}[✓] Container Security API habilitada${NC}" | tee -a "$hardening_log"
+    else
+        echo -e "${YELLOW}[!] Container Security API ya estaba habilitada${NC}" | tee -a "$hardening_log"
+    fi
+    
+    # 7. Crear Certificate Map
+    echo "[HARDENING] === PASO 7/9: Certificate Map ===" | tee -a "$hardening_log"
     
     # Verificar si el Certificate Map ya existe
     if gcloud certificate-manager maps describe "$certificate_map_name" \
         --project="$project_id" &>/dev/null; then
-        echo -e "${YELLOW}[!] Certificate Map '$certificate_map_name' ya existe${NC}" | tee -a "$hardening_log"
+        echo -e "${LGREEN}[✓] Certificate Map '$certificate_map_name' ya existe${NC}" | tee -a "$hardening_log"
     else
         echo "[HARDENING] Creando Certificate Map: $certificate_map_name" | tee -a "$hardening_log"
         if gcloud certificate-manager maps create "$certificate_map_name" \
@@ -694,8 +702,8 @@ function apply_cluster_hardening() {
         fi
     fi
     
-    # 7. Crear Classic SSL Certificate
-    echo "[HARDENING] === PASO 7/8: Classic SSL Certificate ===" | tee -a "$hardening_log"
+    # 8. Crear Classic SSL Certificate
+    echo "[HARDENING] === PASO 8/9: Classic SSL Certificate ===" | tee -a "$hardening_log"
     
     if [[ -f "$cert_file" ]] && [[ -f "$key_file" ]]; then
         echo "[HARDENING] Archivos de certificado encontrados" | tee -a "$hardening_log"
@@ -723,16 +731,29 @@ function apply_cluster_hardening() {
         echo -e "${YELLOW}    • Clave privada: KEY_gnp.com.mx_Marzo_2024.key${NC}" | tee -a "$hardening_log"
     fi
     
-    # 8. Habilitar Container Security API
-    echo "[HARDENING] === PASO 8/8: Habilitando APIs de Seguridad ===" | tee -a "$hardening_log"
-    if gcloud services enable containersecurity.googleapis.com \
-        --project="$project_id" 2>>"$hardening_log"; then
-        echo -e "${LGREEN}[✓] Container Security API habilitada${NC}" | tee -a "$hardening_log"
+    # 8.5 Vincular Certificate Map Entry con el SSL Certificate
+    echo "[HARDENING] === PASO 8.5/9: Vinculando Certificate Map con SSL Certificate ===" | tee -a "$hardening_log"
+    
+    certificate_map_entry="${ssl_cert_name}-entry"
+    
+    # Verificar si la entrada ya existe
+    if gcloud certificate-manager maps entries describe "$certificate_map_entry" \
+        --map="$certificate_map_name" \
+        --project="$project_id" &>/dev/null; then
+        echo -e "${YELLOW}[!] Certificate Map Entry '$certificate_map_entry' ya existe${NC}" | tee -a "$hardening_log"
     else
-        echo -e "${YELLOW}[!] Container Security API ya estaba habilitada${NC}" | tee -a "$hardening_log"
+        echo "[HARDENING] Creando Certificate Map Entry: $certificate_map_entry" | tee -a "$hardening_log"
+        if gcloud certificate-manager maps entries create "$certificate_map_entry" \
+            --map="$certificate_map_name" \
+            --certificate="$ssl_cert_name" \
+            --project="$project_id" 2>>"$hardening_log"; then
+            echo -e "${LGREEN}[✓] Certificate Map Entry vinculado${NC}" | tee -a "$hardening_log"
+        else
+            echo -e "${YELLOW}[!] No se pudo crear Certificate Map Entry (puede ya estar vinculado)${NC}" | tee -a "$hardening_log"
+        fi
     fi
     
-    # 7. Desplegar Twistlock (solo en PRO)
+    # 9. Desplegar Twistlock (solo en PRO)
     if [[ "$is_production" == true ]]; then
         echo "[HARDENING] === Desplegando Twistlock (ambiente PRO) ===" | tee -a "$hardening_log"
         if deploy_twistlock; then

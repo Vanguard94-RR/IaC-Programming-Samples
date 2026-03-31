@@ -27,13 +27,17 @@ if ! gcloud projects describe "${PROJECT_ID}" --format="value(projectId)" &>/dev
 fi
 log "  Proyecto OK: ${PROJECT_ID}"
 
-# 3. Verificar principals definidos
+# 3. Verificar principals definidos (solo task types IAM)
+{{- if or (eq .TaskType "iam_project") (eq .TaskType "iam_bucket") (eq .TaskType "iam_pubsub") (eq .TaskType "iam_bigquery") (eq .TaskType "secret_manager_iam")}}
 if [[ ${#PRINCIPALS[@]} -eq 0 ]]; then
   fail "No hay principals definidos en config.env"
 fi
 for MEMBER in "${PRINCIPALS[@]}"; do
   log "  Principal: ${MEMBER}"
 done
+{{- else}}
+log "  Principals: N/A (${TASK_TYPE} no requiere principals)"
+{{- end}}
 {{- if eq .TaskType "secret_manager_iam"}}
 
 # 4. Verificar existencia de secretos en Secret Manager

@@ -65,6 +65,16 @@ type KubeSecretEntry struct {
 	Value string `json:"value"`
 }
 
+// IsIAMTask returns true for task types that perform IAM role assignments
+// and therefore require updating the Plantilla de Permisos IAM.xlsx.
+func IsIAMTask(t TaskType) bool {
+	switch t {
+	case TaskIAMProject, TaskIAMBucket, TaskIAMPubSub, TaskIAMBigQuery, TaskSecretManagerIAM:
+		return true
+	}
+	return false
+}
+
 // TicketRequest es la representación estructurada de un ticket parseado.
 type TicketRequest struct {
 	TicketID  string    `json:"ticket_id"`
