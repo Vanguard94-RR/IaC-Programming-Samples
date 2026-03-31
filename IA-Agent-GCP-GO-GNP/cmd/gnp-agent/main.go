@@ -21,6 +21,7 @@ import (
 	"gnp-agent/internal/executor"
 	"gnp-agent/internal/gate"
 	"gnp-agent/internal/generator"
+	"gnp-agent/internal/governance"
 	"gnp-agent/internal/parser"
 	"gnp-agent/internal/state"
 )
@@ -256,9 +257,21 @@ func main() {
 	}
 
 	// ─── FASE 5: GOVERNANCE ───────────────────────────────────────────────────
-	// Implementado en Sprint 5 (governance/)
 	printSection("GOVERNANCE")
-	fmt.Printf("  ⚠  Governance pendiente de implementación (Sprint 5)\n")
+	iamSheetUpdated := false
+
+	updated, govErr := governance.Update(ticket, iamXLSXPath)
+	if govErr != nil {
+		fmt.Fprintf(os.Stderr, "  WARN: no se pudo actualizar Plantilla IAM: %v\n", govErr)
+	} else if updated {
+		iamSheetUpdated = true
+		fmt.Printf("  ✓ Plantilla de Permisos IAM actualizada\n")
+		if err := mgr.MarkIAMSheetUpdated(ticket.TicketID); err != nil {
+			fmt.Fprintf(os.Stderr, "  WARN: no se pudo marcar IAM sheet: %v\n", err)
+		}
+	} else {
+		fmt.Printf("  N/A — %s no requiere actualización de plantilla IAM\n", ticket.TaskType)
+	}
 
 	// Ticket completado
 	if err := mgr.Save(ticket.TicketID, ticket.ProjectID, string(ticket.TaskType),
@@ -268,7 +281,7 @@ func main() {
 	if err := mgr.WriteSessionProgress(sessionMDPath); err != nil {
 		fmt.Fprintf(os.Stderr, "WARN: no se pudo escribir SESSION_PROGRESS.md: %v\n", err)
 	}
-	printFinalBox(ticket, "COMPLETED", dlkStatus, false)
+	printFinalBox(ticket, "COMPLETED", dlkStatus, iamSheetUpdated)
 }
 
 // ─── Helpers de I/O ──────────────────────────────────────────────────────────

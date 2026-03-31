@@ -174,5 +174,13 @@ func (m *Manager) WriteSessionProgress(outputPath string) error {
 			r.TicketID, r.ProjectID, r.Reason))...)
 	}
 
-	return os.WriteFile(outputPath, buf, 0644)
+	tmp := outputPath + ".tmp"
+	if err := os.WriteFile(tmp, buf, 0644); err != nil {
+		return fmt.Errorf("escribir progress temporal: %w", err)
+	}
+	if err := os.Rename(tmp, outputPath); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("renombrar progress: %w", err)
+	}
+	return nil
 }
