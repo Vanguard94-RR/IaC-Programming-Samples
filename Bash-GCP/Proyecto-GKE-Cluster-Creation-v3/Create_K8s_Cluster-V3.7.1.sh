@@ -47,22 +47,45 @@ function ask() {
     [[ $confirm =~ ^[Yy]$ ]] || exit 1
 }
 
+function get_node_subnet_cidr() {
+    # Devuelve el bloque primario /26 (64 IPs) para los nodos
+    # Ej: 10.100.6.0/24 → 10.100.6.0/26
+    local base_ip
+    base_ip=$(echo "$1" | cut -d'/' -f1)
+    echo "${base_ip}/26"
+}
+
 function calculate_secondary_ranges() {
-    local primary_cidr="$1"
-    
-    # Extraer octetos de la CIDR (ej: 10.100.0 de 10.100.0.0/16)
-    local first_octet=$(echo "$primary_cidr" | cut -d'/' -f1 | cut -d'.' -f1)
-    local second_octet=$(echo "$primary_cidr" | cut -d'/' -f1 | cut -d'.' -f2)
-    
-    # Generar rangos secundarios dentro del espacio de la VPC
-    # Tenemos que mantener primeros dos octetos iguales (10.100.x.x)
-    # Pods: Usar tercer octeto = 1, rango /21
-    local pods_range="${first_octet}.${second_octet}.1.0/21"
-    
-    # Servicios: Usar tercer octeto = 2, rango /27
-    local services_range="${first_octet}.${second_octet}.2.0/27"
-    
-    echo "pods=${pods_range},servicios=${services_range}"
+    # Subdivide el /24 en tres bloques no solapados:
+    #   Nodos    (primario):  o1.o2.o3.(o4+0)/26   IPs  0- 63
+    #   Svc  (secundario):   o1.o2.o3.(o4+64)/27   IPs 64- 95
+    #   Pods (secundario):   o1.o2.o3.(o4+128)/25  IPs 128-255 → 64 pods/nodo
+    local base_ip
+    base_ip=$(echo "$1" | cut -d'/' -f1)
+    local o1 o2 o3 o4
+    o1=$(echo "$base_ip" | cut -d'.' -f1)
+    o2=$(echo "$base_ip" | cut -d'.' -f2)
+    o3=$(echo "$base_ip" | cut -d'.' -f3)
+    o4=$(echo "$base_ip" | cut -d'.' -f4)
+    echo "servicios=${o1}.${o2}.${o3}.$(( o4 + 64 ))/26,pods=${o1}.${o2}.${o3}.$(( o4 + 128 ))/25"
+}
+
+function validate_secondary_ranges() {
+    local subnet="$1"
+    if [[ -z "$subnet" ]]; then
+        echo -e "${RED}[ERROR] Nombre de subred no especificado para validacion${NC}" >&2
+        return 1
+    fi
+    local ranges
+    ranges=$(gcloud compute networks subnets describe "$subnet" \
+        --project="$project_id" --region="$region" \
+        --format="json" 2>/dev/null | jq -r '.secondaryIpRanges[]?.rangeName' 2>/dev/null)
+    if [[ -z "$ranges" ]]; then
+        echo -e "${RED}[ERROR] No se encontraron rangos secundarios en '$subnet'${NC}" >&2
+        return 1
+    fi
+    echo -e "${LGREEN}[✓] Rangos secundarios validados en '$subnet': $(echo "$ranges" | tr '\n' ' ')${NC}"
+    return 0
 }
 
 function prompt_input() {
@@ -927,9 +950,10 @@ case "$vpc_choice" in
                 echo -e "${YELLOW}[!] VPC ya existe${NC}"
             
             secondary_ranges_new=$(calculate_secondary_ranges "$vpc_ip")
+            node_cidr=$(get_node_subnet_cidr "$vpc_ip")
             gcloud compute networks subnets create "$project_id" \
                 --project="$project_id" \
-                --range="$vpc_ip" \
+                --range="$node_cidr" \
                 --stack-type=IPV4_ONLY \
                 --network="$project_id" \
                 --region="$region" \
@@ -962,7 +986,7 @@ case "$vpc_choice" in
             
             gcloud compute networks subnets create "$project_id" \
                 --project="$project_id" \
-                --range="$vpc_ip" \
+                --range="$(get_node_subnet_cidr "$vpc_ip")" \
                 --stack-type=IPV4_ONLY \
                 --network="$project_id" \
                 --region="$region" \
@@ -1197,6 +1221,7 @@ else
             --scopes="$cluster_access_scope" \
             --no-enable-intra-node-visibility \
             --enable-ip-alias \
+            --max-pods-per-node=64 \
             --cluster-secondary-range-name="$PODS_RANGE_NAME" \
             --services-secondary-range-name="$SERVICES_RANGE_NAME" \
             --security-posture=standard \
@@ -1244,6 +1269,7 @@ else
             --scopes="$cluster_access_scope" \
             --no-enable-intra-node-visibility \
             --enable-ip-alias \
+            --max-pods-per-node=64 \
             --cluster-secondary-range-name="$PODS_RANGE_NAME" \
             --services-secondary-range-name="$SERVICES_RANGE_NAME" \
             --security-posture=standard \
@@ -1265,7 +1291,7 @@ else
             $PRIVATE_FLAGS
     fi
 
-    ! gcloud container clusters describe "$cluster_name" --project="$PROJECT_ID" --region="$region" &>/dev/null && \
+    ! gcloud container clusters describe "$cluster_name" --project="$project_id" --region="$region" &>/dev/null && \
         echo -e "${RED}[ERROR] Fallo al crear clúster${NC}" && exit 1
 fi
 
