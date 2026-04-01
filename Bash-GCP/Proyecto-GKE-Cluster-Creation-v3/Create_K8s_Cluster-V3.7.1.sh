@@ -37,11 +37,32 @@ SERVICES_RANGE_NAME=""
 cluster_access_scope=""
 fleet_id=""
 cluster_version=""
+control_plane_ip=""  # SC2034: Variable reservada para uso externo
+waf_allowed_ips=""   # SC2034: Variable reservada para uso externo
 
 # --- Funciones de Utilidad ---
 function ask() {
     echo -ne "${YELLOW}¿Desea continuar? (Y/N): ${NC}"
-    read confirm && [[ $confirm =~ ^[Yy]$ ]] || exit 1
+    read -r confirm
+    [[ $confirm =~ ^[Yy]$ ]] || exit 1
+}
+
+function calculate_secondary_ranges() {
+    local primary_cidr="$1"
+    
+    # Extraer octetos de la CIDR (ej: 10.100.0 de 10.100.0.0/16)
+    local first_octet=$(echo "$primary_cidr" | cut -d'/' -f1 | cut -d'.' -f1)
+    local second_octet=$(echo "$primary_cidr" | cut -d'/' -f1 | cut -d'.' -f2)
+    
+    # Generar rangos secundarios dentro del espacio de la VPC
+    # Tenemos que mantener primeros dos octetos iguales (10.100.x.x)
+    # Pods: Usar tercer octeto = 1, rango /21
+    local pods_range="${first_octet}.${second_octet}.1.0/21"
+    
+    # Servicios: Usar tercer octeto = 2, rango /27
+    local services_range="${first_octet}.${second_octet}.2.0/27"
+    
+    echo "pods=${pods_range},servicios=${services_range}"
 }
 
 function prompt_input() {
@@ -134,7 +155,8 @@ function deploy_twistlock() {
     echo "[TWISTLOCK] Conexión al cluster verificada"
     
     # Verificar si el namespace existe en el daemonset.yaml
-    local detected_namespace=$(grep -E "^\s*namespace:" "$daemonset_file" | head -1 | awk '{print $2}')
+    local detected_namespace
+    detected_namespace=$(grep -E "^\s*namespace:" "$daemonset_file" | head -1 | awk '{print $2}')
     if [[ -n "$detected_namespace" ]]; then
         twistlock_namespace="$detected_namespace"
         echo "[TWISTLOCK] Namespace detectado en archivo: $twistlock_namespace"
@@ -151,11 +173,12 @@ function deploy_twistlock() {
     fi
     
     # Verificar si Twistlock ya está desplegado
-    local existing_daemonset=$(kubectl get daemonset -n "$twistlock_namespace" 2>/dev/null | grep -i twistlock | awk '{print $1}' | head -1)
+    local existing_daemonset
+    existing_daemonset=$(kubectl get daemonset -n "$twistlock_namespace" 2>/dev/null | grep -i twistlock | awk '{print $1}' | head -1)
     if [[ -n "$existing_daemonset" ]]; then
         echo -e "${YELLOW}[!] Twistlock DaemonSet ya existe: $existing_daemonset${NC}"
         echo -ne "${YELLOW}>> ¿Desea actualizar el despliegue existente? (Y/N): ${NC}"
-        read update_confirm
+        read -r update_confirm
         if [[ ! $update_confirm =~ ^[Yy]$ ]]; then
             echo -e "${YELLOW}[!] Actualización de Twistlock omitida${NC}"
             return 0
@@ -192,7 +215,8 @@ function deploy_twistlock() {
     echo "[TWISTLOCK] Verificando estado del DaemonSet..."
     sleep 5
     
-    local daemonset_name=$(kubectl get daemonset -n "$twistlock_namespace" 2>/dev/null | grep -i twistlock | awk '{print $1}' | head -1)
+    local daemonset_name
+    daemonset_name=$(kubectl get daemonset -n "$twistlock_namespace" 2>/dev/null | grep -i twistlock | awk '{print $1}' | head -1)
     
     if [[ -z "$daemonset_name" ]]; then
         echo -e "${RED}[ERROR] No se encontró DaemonSet de Twistlock después del despliegue${NC}"
@@ -208,8 +232,10 @@ function deploy_twistlock() {
     local check_interval=10
     
     while [[ $elapsed -lt $timeout ]]; do
-        local desired=$(kubectl get daemonset "$daemonset_name" -n "$twistlock_namespace" -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null)
-        local ready=$(kubectl get daemonset "$daemonset_name" -n "$twistlock_namespace" -o jsonpath='{.status.numberReady}' 2>/dev/null)
+        local desired
+        desired=$(kubectl get daemonset "$daemonset_name" -n "$twistlock_namespace" -o jsonpath='{.status.desiredNumberScheduled}' 2>/dev/null)
+        local ready
+        ready=$(kubectl get daemonset "$daemonset_name" -n "$twistlock_namespace" -o jsonpath='{.status.numberReady}' 2>/dev/null)
         
         if [[ -n "$desired" ]] && [[ -n "$ready" ]] && [[ "$desired" -eq "$ready" ]] && [[ "$ready" -gt 0 ]]; then
             echo -e "${LGREEN}[✓] Twistlock desplegado exitosamente: $ready/$desired pods listos${NC}"
@@ -883,10 +909,12 @@ case "$vpc_choice" in
             
             # Verificar y agregar rangos secundarios si no existen
             echo -e "${LGREEN}Verificando rangos secundarios...${NC}"
+            local secondary_ranges
+            secondary_ranges=$(calculate_secondary_ranges "$vpc_exists_range")
             gcloud compute networks subnets update "$project_id" \
                 --project="$project_id" \
                 --region="$region" \
-                --add-secondary-ranges pods=10.88.8.0/21,servicios=10.82.4.64/27 2>/dev/null || \
+                --add-secondary-ranges "$secondary_ranges" 2>/dev/null || \
                 echo -e "${YELLOW}[!] Rangos secundarios ya existen o subnet no encontrada${NC}"
         else
             echo -e "${LGREEN}Creando VPC nueva...${NC}"
@@ -899,19 +927,23 @@ case "$vpc_choice" in
                 --bgp-routing-mode=regional 2>/dev/null || \
                 echo -e "${YELLOW}[!] VPC ya existe${NC}"
             
+            local secondary_ranges_new
+            secondary_ranges_new=$(calculate_secondary_ranges "$vpc_ip")
             gcloud compute networks subnets create "$project_id" \
                 --project="$project_id" \
                 --range="$vpc_ip" \
                 --stack-type=IPV4_ONLY \
                 --network="$project_id" \
                 --region="$region" \
-                --secondary-range pods=10.88.8.0/21,servicios=10.82.4.64/27 \
+                --secondary-range "$secondary_ranges_new" \
                 --enable-private-ip-google-access 2>/dev/null || {
                 echo -e "${YELLOW}[!] Subred ya existe, actualizando rangos secundarios...${NC}"
+                local secondary_ranges_update
+                secondary_ranges_update=$(calculate_secondary_ranges "$vpc_ip")
                 gcloud compute networks subnets update "$project_id" \
                     --project="$project_id" \
                     --region="$region" \
-                    --add-secondary-ranges pods=10.88.8.0/21,servicios=10.82.4.64/27 2>/dev/null || \
+                    --add-secondary-ranges "$secondary_ranges_update" 2>/dev/null || \
                     echo -e "${YELLOW}[!] Rangos secundarios ya existen${NC}"
             }
             
@@ -937,13 +969,13 @@ case "$vpc_choice" in
                 --stack-type=IPV4_ONLY \
                 --network="$project_id" \
                 --region="$region" \
-                --secondary-range pods=10.88.8.0/21,servicios=10.82.4.64/27 \
+                --secondary-range "$(calculate_secondary_ranges "$vpc_ip")" \
                 --enable-private-ip-google-access 2>/dev/null || {
                 echo -e "${YELLOW}[!] Subred ya existe, actualizando rangos secundarios...${NC}"
                 gcloud compute networks subnets update "$project_id" \
                     --project="$project_id" \
                     --region="$region" \
-                    --add-secondary-ranges pods=10.88.8.0/21,servicios=10.82.4.64/27 2>/dev/null || \
+                    --add-secondary-ranges "$(calculate_secondary_ranges "$vpc_ip")" 2>/dev/null || \
                     echo -e "${YELLOW}[!] Rangos secundarios ya existen${NC}"
             }
             
