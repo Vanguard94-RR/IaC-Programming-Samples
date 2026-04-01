@@ -70,7 +70,7 @@ function prompt_input() {
     local default_value="$2"
     local variable_name="$3"
     echo -ne "${WHITE}>> ${prompt_text} (Por defecto: ${LCYAN}${default_value}${NC}): "
-    read input_value
+    read -r input_value
     eval "$variable_name=${input_value:-$default_value}"
 }
 
@@ -909,7 +909,6 @@ case "$vpc_choice" in
             
             # Verificar y agregar rangos secundarios si no existen
             echo -e "${LGREEN}Verificando rangos secundarios...${NC}"
-            local secondary_ranges
             secondary_ranges=$(calculate_secondary_ranges "$vpc_exists_range")
             gcloud compute networks subnets update "$project_id" \
                 --project="$project_id" \
@@ -927,7 +926,6 @@ case "$vpc_choice" in
                 --bgp-routing-mode=regional 2>/dev/null || \
                 echo -e "${YELLOW}[!] VPC ya existe${NC}"
             
-            local secondary_ranges_new
             secondary_ranges_new=$(calculate_secondary_ranges "$vpc_ip")
             gcloud compute networks subnets create "$project_id" \
                 --project="$project_id" \
@@ -938,7 +936,6 @@ case "$vpc_choice" in
                 --secondary-range "$secondary_ranges_new" \
                 --enable-private-ip-google-access 2>/dev/null || {
                 echo -e "${YELLOW}[!] Subred ya existe, actualizando rangos secundarios...${NC}"
-                local secondary_ranges_update
                 secondary_ranges_update=$(calculate_secondary_ranges "$vpc_ip")
                 gcloud compute networks subnets update "$project_id" \
                     --project="$project_id" \
@@ -1268,7 +1265,8 @@ else
             $PRIVATE_FLAGS
     fi
 
-    [[ $? -ne 0 ]] && echo -e "${RED}[ERROR] Fallo al crear clúster${NC}" && exit 1
+    ! gcloud container clusters describe "$cluster_name" --project="$PROJECT_ID" --region="$region" &>/dev/null && \
+        echo -e "${RED}[ERROR] Fallo al crear clúster${NC}" && exit 1
 fi
 
 echo -e "${LGREEN}[✓] Clúster creado: $cluster_name${NC}"
@@ -1313,7 +1311,7 @@ echo -e "${LGREEN}[✓] Clúster registrado en la flota: $fleet_id${NC}"
 echo -e "${LGREEN}Aplicando Cluster Hardening...${NC}"
 
 echo -ne "${YELLOW}>> ¿Ejecutar hardening? (Y/N): ${NC}"
-read confirm_hardening
+read -r confirm_hardening
 
 if [[ $confirm_hardening =~ ^[Yy]$ ]]; then
     if apply_cluster_hardening; then
