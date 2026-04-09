@@ -483,7 +483,7 @@ function apply_cluster_hardening() {
     local ssl_cert_name="${project_id}-ssl-cert"
     local script_dir="$(dirname "$0")"
     local cert_file="${script_dir}/bundle.cer"
-    local key_file="${script_dir}/KEY_gnp.com.mx_Marzo_2024.key"
+    local key_file="${script_dir}/KEY_gnp.com.mx_2026"
     local hardening_log="./hardening_${cluster_name}_$(date +%Y%m%d_%H%M%S).log"
     
     echo "[HARDENING] Iniciando endurecimiento de seguridad del cluster..."
@@ -738,12 +738,12 @@ function apply_cluster_hardening() {
     
     # Verificar si el Certificate Map ya existe
     if gcloud certificate-manager maps describe "$certificate_map_name" \
-        --project="$project_id" &>/dev/null; then
+        --project="$project_id" --quiet &>/dev/null; then
         echo -e "${LGREEN}[✓] Certificate Map '$certificate_map_name' ya existe${NC}" | tee -a "$hardening_log"
     else
         echo "[HARDENING] Creando Certificate Map: $certificate_map_name" | tee -a "$hardening_log"
         if gcloud certificate-manager maps create "$certificate_map_name" \
-            --project="$project_id" 2>>"$hardening_log"; then
+            --project="$project_id" --quiet 2>>"$hardening_log"; then
             echo -e "${LGREEN}[✓] Certificate Map creado: $certificate_map_name${NC}" | tee -a "$hardening_log"
         else
             echo -e "${RED}[ERROR] Falló creación de Certificate Map${NC}" | tee -a "$hardening_log"
@@ -759,14 +759,14 @@ function apply_cluster_hardening() {
         
         # Verificar si el certificado ya existe
         if gcloud compute ssl-certificates describe "$ssl_cert_name" \
-            --project="$project_id" &>/dev/null; then
+            --project="$project_id" --quiet &>/dev/null; then
             echo -e "${YELLOW}[!] Certificado SSL '$ssl_cert_name' ya existe${NC}" | tee -a "$hardening_log"
         else
             echo "[HARDENING] Creando certificado SSL clásico: $ssl_cert_name" | tee -a "$hardening_log"
             if gcloud compute ssl-certificates create "$ssl_cert_name" \
                 --certificate="$cert_file" \
                 --private-key="$key_file" \
-                --project="$project_id" 2>>"$hardening_log"; then
+                --project="$project_id" --quiet 2>>"$hardening_log"; then
                 echo -e "${LGREEN}[✓] Certificado SSL creado: $ssl_cert_name${NC}" | tee -a "$hardening_log"
             else
                 echo -e "${RED}[ERROR] Falló creación de certificado SSL${NC}" | tee -a "$hardening_log"
@@ -777,7 +777,7 @@ function apply_cluster_hardening() {
         echo -e "${YELLOW}[!] Archivos de certificado no encontrados${NC}" | tee -a "$hardening_log"
         echo -e "${YELLOW}    Esperados en carpeta del script:${NC}" | tee -a "$hardening_log"
         echo -e "${YELLOW}    • Certificado: bundle.cer${NC}" | tee -a "$hardening_log"
-        echo -e "${YELLOW}    • Clave privada: KEY_gnp.com.mx_Marzo_2024.key${NC}" | tee -a "$hardening_log"
+        echo -e "${YELLOW}    • Clave privada: KEY_gnp.com.mx_2026${NC}" | tee -a "$hardening_log"
     fi
     
     # 8.5 Vincular Certificate Map Entry con el SSL Certificate
@@ -788,14 +788,14 @@ function apply_cluster_hardening() {
     # Verificar si la entrada ya existe
     if gcloud certificate-manager maps entries describe "$certificate_map_entry" \
         --map="$certificate_map_name" \
-        --project="$project_id" &>/dev/null; then
+        --project="$project_id" --quiet &>/dev/null; then
         echo -e "${YELLOW}[!] Certificate Map Entry '$certificate_map_entry' ya existe${NC}" | tee -a "$hardening_log"
     else
         echo "[HARDENING] Creando Certificate Map Entry: $certificate_map_entry" | tee -a "$hardening_log"
         if gcloud certificate-manager maps entries create "$certificate_map_entry" \
             --map="$certificate_map_name" \
             --certificate="$ssl_cert_name" \
-            --project="$project_id" 2>>"$hardening_log"; then
+            --project="$project_id" --quiet 2>>"$hardening_log"; then
             echo -e "${LGREEN}[✓] Certificate Map Entry vinculado${NC}" | tee -a "$hardening_log"
         else
             echo -e "${YELLOW}[!] No se pudo crear Certificate Map Entry (puede ya estar vinculado)${NC}" | tee -a "$hardening_log"
