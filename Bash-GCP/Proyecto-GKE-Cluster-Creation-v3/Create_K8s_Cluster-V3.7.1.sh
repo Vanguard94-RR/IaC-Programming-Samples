@@ -480,13 +480,18 @@ function define_secondary_ranges_manual() {
     local subnet="${1:-$SUBNET_NAME}"
     local host_project="${2:-$SHARED_HOST}"
 
-    echo "[SHARED-VPC] Definición manual de rangos secundarios..."
-    prompt_input "Nombre del rango secundario para Pods" "pods" pods_range_input
-    PODS_RANGE_NAME="$pods_range_input"
-    prompt_input "Nombre del rango secundario para Servicios" "servicios" services_range_input
-    SERVICES_RANGE_NAME="$services_range_input"
+    echo "[SHARED-VPC] Definición manual de rangos secundarios por CIDR asignado..."
 
-    # Verificar rangos contra la subred si es accesible
+    prompt_input "CIDR asignado para Pods     (ej: 10.83.16.0/21)" "" pods_cidr_input
+    prompt_input "CIDR asignado para Servicios (ej: 10.82.224.0/21)" "" services_cidr_input
+
+    if [[ -z "$pods_cidr_input" || -z "$services_cidr_input" ]]; then
+        echo -e "${RED}[ERROR] Los CIDRs de Pods y Servicios son obligatorios${NC}" >&2
+        return 1
+    fi
+
+    # Consultar la subred en el proyecto host para resolver nombres de rangos
+    echo "[SHARED-VPC] Consultando subred '$subnet' en '$host_project'..."
     local subnet_details
     subnet_details=$(gcloud compute networks subnets describe "$subnet" \
         --project="$host_project" \
@@ -494,30 +499,42 @@ function define_secondary_ranges_manual() {
         --format="json" 2>/dev/null)
 
     if [[ -n "$subnet_details" ]]; then
-        local pods_cidr services_cidr available
-        pods_cidr=$(echo "$subnet_details" | jq -r \
-            ".secondaryIpRanges[] | select(.rangeName==\"$PODS_RANGE_NAME\") | .ipCidrRange" 2>/dev/null)
-        services_cidr=$(echo "$subnet_details" | jq -r \
-            ".secondaryIpRanges[] | select(.rangeName==\"$SERVICES_RANGE_NAME\") | .ipCidrRange" 2>/dev/null)
+        local available
+        available=$(echo "$subnet_details" | jq -r '.secondaryIpRanges[]? | "\(.rangeName) → \(.ipCidrRange)"' 2>/dev/null)
 
-        if [[ -z "$pods_cidr" ]]; then
-            available=$(echo "$subnet_details" | jq -r '.secondaryIpRanges[]?.rangeName' 2>/dev/null | tr '\n' ' ')
-            echo -e "${RED}[ERROR] Rango '${PODS_RANGE_NAME}' no encontrado en la subred '${subnet}'${NC}" >&2
-            echo -e "${YELLOW}[!] Rangos disponibles: ${available}${NC}" >&2
+        echo "[SHARED-VPC] Rangos secundarios en la subred:"
+        echo "$available" | while IFS= read -r r; do echo "  • $r"; done
+
+        # Resolver nombre de rango a partir del CIDR ingresado
+        PODS_RANGE_NAME=$(echo "$subnet_details" | jq -r \
+            ".secondaryIpRanges[] | select(.ipCidrRange==\"$pods_cidr_input\") | .rangeName" 2>/dev/null)
+        SERVICES_RANGE_NAME=$(echo "$subnet_details" | jq -r \
+            ".secondaryIpRanges[] | select(.ipCidrRange==\"$services_cidr_input\") | .rangeName" 2>/dev/null)
+
+        if [[ -z "$PODS_RANGE_NAME" ]]; then
+            echo -e "${RED}[ERROR] No se encontró ningún rango con CIDR '${pods_cidr_input}' en la subred '${subnet}'${NC}" >&2
+            echo -e "${YELLOW}[!] Verifique el CIDR o consulte con el equipo de redes${NC}" >&2
             return 1
         fi
-        if [[ -z "$services_cidr" ]]; then
-            available=$(echo "$subnet_details" | jq -r '.secondaryIpRanges[]?.rangeName' 2>/dev/null | tr '\n' ' ')
-            echo -e "${RED}[ERROR] Rango '${SERVICES_RANGE_NAME}' no encontrado en la subred '${subnet}'${NC}" >&2
-            echo -e "${YELLOW}[!] Rangos disponibles: ${available}${NC}" >&2
+        if [[ -z "$SERVICES_RANGE_NAME" ]]; then
+            echo -e "${RED}[ERROR] No se encontró ningún rango con CIDR '${services_cidr_input}' en la subred '${subnet}'${NC}" >&2
+            echo -e "${YELLOW}[!] Verifique el CIDR o consulte con el equipo de redes${NC}" >&2
             return 1
         fi
-        echo -e "${LGREEN}[✓] Pods:      ${LCYAN}${PODS_RANGE_NAME}${NC} ${WHITE}(${pods_cidr})${NC}"
-        echo -e "${LGREEN}[✓] Servicios: ${LCYAN}${SERVICES_RANGE_NAME}${NC} ${WHITE}(${services_cidr})${NC}"
+
+        echo -e "${LGREEN}[✓] Pods:      ${LCYAN}${PODS_RANGE_NAME}${NC} ${WHITE}(${pods_cidr_input})${NC}"
+        echo -e "${LGREEN}[✓] Servicios: ${LCYAN}${SERVICES_RANGE_NAME}${NC} ${WHITE}(${services_cidr_input})${NC}"
     else
-        echo -e "${YELLOW}[!] No se pudo verificar la subred — usando nombres tal como se ingresaron${NC}"
-        echo -e "  Pods:      ${LCYAN}${PODS_RANGE_NAME}${NC}"
-        echo -e "  Servicios: ${LCYAN}${SERVICES_RANGE_NAME}${NC}"
+        # Fallback: la subred no es accesible, pedir nombres directamente
+        echo -e "${YELLOW}[!] No se pudo consultar la subred — ingrese los nombres de los rangos manualmente${NC}"
+        echo -e "${YELLOW}    (Solicítelos al equipo de redes junto con los CIDRs asignados)${NC}"
+        prompt_input "Nombre del rango para Pods     (CIDR: ${pods_cidr_input})" "pods" pods_range_input
+        PODS_RANGE_NAME="$pods_range_input"
+        prompt_input "Nombre del rango para Servicios (CIDR: ${services_cidr_input})" "servicios" services_range_input
+        SERVICES_RANGE_NAME="$services_range_input"
+        echo -e "${YELLOW}[!] Rangos aceptados sin verificación:${NC}"
+        echo -e "  Pods:      ${LCYAN}${PODS_RANGE_NAME}${NC} ${WHITE}(${pods_cidr_input})${NC}"
+        echo -e "  Servicios: ${LCYAN}${SERVICES_RANGE_NAME}${NC} ${WHITE}(${services_cidr_input})${NC}"
     fi
     return 0
 }
