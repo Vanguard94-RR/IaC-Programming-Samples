@@ -32,6 +32,7 @@ VPC_NAME=""
 SUBNET_NAME=""
 SHARED_HOST=""
 IS_SHARED_VPC="false"
+RANGES_MANUAL="false"
 PODS_RANGE_NAME=""
 SERVICES_RANGE_NAME=""
 cluster_access_scope=""
@@ -472,6 +473,52 @@ function detect_secondary_ranges() {
     echo -e "${LGREEN}[✓] Rango de Pods detectado: ${LCYAN}${PODS_RANGE_NAME}${NC} ${WHITE}(${pods_cidr})${NC}"
     echo -e "${LGREEN}[✓] Rango de Servicios detectado: ${LCYAN}${SERVICES_RANGE_NAME}${NC} ${WHITE}(${services_cidr})${NC}"
     
+    return 0
+}
+
+function define_secondary_ranges_manual() {
+    local subnet="${1:-$SUBNET_NAME}"
+    local host_project="${2:-$SHARED_HOST}"
+
+    echo "[SHARED-VPC] Definición manual de rangos secundarios..."
+    prompt_input "Nombre del rango secundario para Pods" "pods" pods_range_input
+    PODS_RANGE_NAME="$pods_range_input"
+    prompt_input "Nombre del rango secundario para Servicios" "servicios" services_range_input
+    SERVICES_RANGE_NAME="$services_range_input"
+
+    # Verificar rangos contra la subred si es accesible
+    local subnet_details
+    subnet_details=$(gcloud compute networks subnets describe "$subnet" \
+        --project="$host_project" \
+        --region="$region" \
+        --format="json" 2>/dev/null)
+
+    if [[ -n "$subnet_details" ]]; then
+        local pods_cidr services_cidr available
+        pods_cidr=$(echo "$subnet_details" | jq -r \
+            ".secondaryIpRanges[] | select(.rangeName==\"$PODS_RANGE_NAME\") | .ipCidrRange" 2>/dev/null)
+        services_cidr=$(echo "$subnet_details" | jq -r \
+            ".secondaryIpRanges[] | select(.rangeName==\"$SERVICES_RANGE_NAME\") | .ipCidrRange" 2>/dev/null)
+
+        if [[ -z "$pods_cidr" ]]; then
+            available=$(echo "$subnet_details" | jq -r '.secondaryIpRanges[]?.rangeName' 2>/dev/null | tr '\n' ' ')
+            echo -e "${RED}[ERROR] Rango '${PODS_RANGE_NAME}' no encontrado en la subred '${subnet}'${NC}" >&2
+            echo -e "${YELLOW}[!] Rangos disponibles: ${available}${NC}" >&2
+            return 1
+        fi
+        if [[ -z "$services_cidr" ]]; then
+            available=$(echo "$subnet_details" | jq -r '.secondaryIpRanges[]?.rangeName' 2>/dev/null | tr '\n' ' ')
+            echo -e "${RED}[ERROR] Rango '${SERVICES_RANGE_NAME}' no encontrado en la subred '${subnet}'${NC}" >&2
+            echo -e "${YELLOW}[!] Rangos disponibles: ${available}${NC}" >&2
+            return 1
+        fi
+        echo -e "${LGREEN}[✓] Pods:      ${LCYAN}${PODS_RANGE_NAME}${NC} ${WHITE}(${pods_cidr})${NC}"
+        echo -e "${LGREEN}[✓] Servicios: ${LCYAN}${SERVICES_RANGE_NAME}${NC} ${WHITE}(${services_cidr})${NC}"
+    else
+        echo -e "${YELLOW}[!] No se pudo verificar la subred — usando nombres tal como se ingresaron${NC}"
+        echo -e "  Pods:      ${LCYAN}${PODS_RANGE_NAME}${NC}"
+        echo -e "  Servicios: ${LCYAN}${SERVICES_RANGE_NAME}${NC}"
+    fi
     return 0
 }
 
@@ -1011,6 +1058,14 @@ case "$vpc_choice" in
             prompt_input "Nombre de subnet compartida" "$project_id" subnet_name
             SUBNET_NAME="$subnet_name"
             IS_SHARED_VPC="true"
+            prompt_input "Rangos secundarios ([1] Auto-detectar, [2] Definir manualmente)" "1" ranges_mode
+            if [[ "$ranges_mode" == "2" ]]; then
+                RANGES_MANUAL="true"
+                if ! define_secondary_ranges_manual "$SUBNET_NAME" "$SHARED_HOST"; then
+                    echo -e "${RED}[ERROR] Rangos secundarios inválidos. Abortando.${NC}"
+                    exit 1
+                fi
+            fi
         fi
         ;;
     3)
@@ -1022,6 +1077,14 @@ case "$vpc_choice" in
         prompt_input "Nombre de subnet compartida del proyecto anfitrión" "$project_id" subnet_name
         SUBNET_NAME="$subnet_name"
         IS_SHARED_VPC="true"
+        prompt_input "Rangos secundarios ([1] Auto-detectar, [2] Definir manualmente)" "1" ranges_mode
+        if [[ "$ranges_mode" == "2" ]]; then
+            RANGES_MANUAL="true"
+            if ! define_secondary_ranges_manual "$SUBNET_NAME" "$SHARED_HOST"; then
+                echo -e "${RED}[ERROR] Rangos secundarios inválidos. Abortando.${NC}"
+                exit 1
+            fi
+        fi
         ;;
     *)
         echo -e "${RED}[ERROR] Opción inválida. Abortando.${NC}"
@@ -1189,9 +1252,13 @@ else
 
     # Construir comando basado en tipo de VPC
     if [[ "$IS_SHARED_VPC" == "true" ]]; then
-        # Detectar rangos dinámicamente ANTES de configurar permisos
+        # Detectar o usar rangos definidos manualmente
         echo -e "${LGREEN}Validando configuración de Shared VPC...${NC}"
-        if ! detect_secondary_ranges "$SUBNET_NAME" "$SHARED_HOST"; then
+        if [[ "$RANGES_MANUAL" == "true" ]]; then
+            echo -e "${LGREEN}[✓] Usando rangos definidos manualmente:${NC}"
+            echo -e "  Pods:      ${LCYAN}${PODS_RANGE_NAME}${NC}"
+            echo -e "  Servicios: ${LCYAN}${SERVICES_RANGE_NAME}${NC}"
+        elif ! detect_secondary_ranges "$SUBNET_NAME" "$SHARED_HOST"; then
             echo -e "${RED}[ERROR] Falló la detección de rangos secundarios. Abortando.${NC}"
             exit 1
         fi
