@@ -348,11 +348,8 @@ function configure_shared_vpc_permissions() {
 
     # Verificar si el proyecto servicio ya está asociado
     echo "[SHARED-VPC] Verificando asociación Shared VPC..."
-    local is_associated
-    is_associated=$(gcloud compute shared-vpc associated-projects list "$host_project" \
-        --format="value(id)" 2>/dev/null | grep -c "^${service_project}$" || echo "0")
-    
-    if [[ "$is_associated" == "0" ]]; then
+    if ! gcloud compute shared-vpc associated-projects list "$host_project" \
+        --format="value(id)" 2>/dev/null | grep -q "^${service_project}$"; then
         echo "[SHARED-VPC] Asociando proyecto al Shared VPC host..."
         local associate_output
         associate_output=$(gcloud compute shared-vpc associated-projects add "$service_project" \
@@ -380,11 +377,9 @@ function configure_shared_vpc_permissions() {
         fi
         
         # Verificar que la asociación fue exitosa
-        sleep 2
-        is_associated=$(gcloud compute shared-vpc associated-projects list "$host_project" \
-            --format="value(id)" 2>/dev/null | grep -c "^${service_project}$" || echo "0")
-        
-        if [[ "$is_associated" == "0" ]]; then
+        sleep 5
+        if ! gcloud compute shared-vpc associated-projects list "$host_project" \
+            --format="value(id)" 2>/dev/null | grep -q "^${service_project}$"; then
             echo -e "${RED}[ERROR] La asociación no se completó correctamente${NC}"
             return 1
         fi
