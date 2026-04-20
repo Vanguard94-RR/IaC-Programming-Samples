@@ -316,7 +316,36 @@ function configure_shared_vpc_permissions() {
     
     echo "[SHARED-VPC] Cuenta de servicio GKE: $gke_service_account"
     echo "[SHARED-VPC] Cuenta de servicio API: $gke_api_account"
-    
+
+    # Verificar y habilitar el proyecto host como Shared VPC host
+    echo "[SHARED-VPC] Verificando que '${host_project}' esté habilitado como Shared VPC host..."
+    local xpn_status
+    xpn_status=$(gcloud compute project-info describe \
+        --project="$host_project" \
+        --format="value(xpnProjectStatus)" 2>/dev/null)
+
+    if [[ "$xpn_status" != "HOST" ]]; then
+        echo "[SHARED-VPC] Habilitando '${host_project}' como Shared VPC host..."
+        local enable_output
+        enable_output=$(gcloud compute shared-vpc enable "$host_project" 2>&1)
+        local enable_status=$?
+
+        if [[ $enable_status -eq 0 ]]; then
+            echo -e "${LGREEN}[✓] Proyecto host habilitado como Shared VPC host${NC}"
+            sleep 3
+        else
+            echo -e "${RED}[ERROR] No se pudo habilitar el proyecto como Shared VPC host${NC}"
+            echo "$enable_output"
+            echo ""
+            echo -e "${YELLOW}[ACCIÓN REQUERIDA] Ejecute manualmente:${NC}"
+            echo -e "${LCYAN}gcloud compute shared-vpc enable ${host_project}${NC}"
+            echo -e "${YELLOW}Requiere roles/compute.xpnAdmin u roles/owner en: ${host_project}${NC}"
+            return 1
+        fi
+    else
+        echo -e "${LGREEN}[✓] Proyecto '${host_project}' ya es Shared VPC host${NC}"
+    fi
+
     # Verificar si el proyecto servicio ya está asociado
     echo "[SHARED-VPC] Verificando asociación Shared VPC..."
     local is_associated
