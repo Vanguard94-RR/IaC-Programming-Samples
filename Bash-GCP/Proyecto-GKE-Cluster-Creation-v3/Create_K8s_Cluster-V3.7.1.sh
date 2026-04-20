@@ -525,16 +525,49 @@ function define_secondary_ranges_manual() {
         echo -e "${LGREEN}[✓] Pods:      ${LCYAN}${PODS_RANGE_NAME}${NC} ${WHITE}(${pods_cidr_input})${NC}"
         echo -e "${LGREEN}[✓] Servicios: ${LCYAN}${SERVICES_RANGE_NAME}${NC} ${WHITE}(${services_cidr_input})${NC}"
     else
-        # Fallback: la subred no es accesible, pedir nombres directamente
-        echo -e "${YELLOW}[!] No se pudo consultar la subred — ingrese los nombres de los rangos manualmente${NC}"
-        echo -e "${YELLOW}    (Solicítelos al equipo de redes junto con los CIDRs asignados)${NC}"
-        prompt_input "Nombre del rango para Pods     (CIDR: ${pods_cidr_input})" "pods" pods_range_input
-        PODS_RANGE_NAME="$pods_range_input"
-        prompt_input "Nombre del rango para Servicios (CIDR: ${services_cidr_input})" "servicios" services_range_input
-        SERVICES_RANGE_NAME="$services_range_input"
-        echo -e "${YELLOW}[!] Rangos aceptados sin verificación:${NC}"
-        echo -e "  Pods:      ${LCYAN}${PODS_RANGE_NAME}${NC} ${WHITE}(${pods_cidr_input})${NC}"
-        echo -e "  Servicios: ${LCYAN}${SERVICES_RANGE_NAME}${NC} ${WHITE}(${services_cidr_input})${NC}"
+        # Subred no encontrada — ofrecer crearla en el proyecto host
+        echo -e "${YELLOW}[!] La subred '${subnet}' no existe en '${host_project}'${NC}"
+        echo -ne "${YELLOW}>> ¿Crear la subred ahora en el proyecto host? (Y/N): ${NC}"
+        read -r create_subnet_confirm
+
+        if [[ ! $create_subnet_confirm =~ ^[Yy]$ ]]; then
+            echo -e "${RED}[ERROR] No se puede continuar sin la subred. Abortando.${NC}" >&2
+            return 1
+        fi
+
+        prompt_input "CIDR primario para nodos (ej: 10.97.231.0/24)" "" primary_cidr_input
+        if [[ -z "$primary_cidr_input" ]]; then
+            echo -e "${RED}[ERROR] El CIDR primario (nodos/segmento) es obligatorio${NC}" >&2
+            return 1
+        fi
+
+        local pods_range_name="pods"
+        local svcs_range_name="servicios"
+
+        echo "[SHARED-VPC] Creando subred '${subnet}' en proyecto host '${host_project}'..."
+        echo "  Red:        ${VPC_NAME}"
+        echo "  Región:     ${region}"
+        echo "  Nodos:      ${primary_cidr_input}"
+        echo "  Pods:       ${pods_range_name}=${pods_cidr_input}"
+        echo "  Servicios:  ${svcs_range_name}=${services_cidr_input}"
+
+        if gcloud compute networks subnets create "$subnet" \
+            --project="$host_project" \
+            --network="$VPC_NAME" \
+            --region="$region" \
+            --range="$primary_cidr_input" \
+            --secondary-range="${pods_range_name}=${pods_cidr_input},${svcs_range_name}=${services_cidr_input}" \
+            --enable-private-ip-google-access 2>&1; then
+            PODS_RANGE_NAME="$pods_range_name"
+            SERVICES_RANGE_NAME="$svcs_range_name"
+            echo -e "${LGREEN}[✓] Subred creada exitosamente${NC}"
+            echo -e "${LGREEN}[✓] Pods:      ${LCYAN}${PODS_RANGE_NAME}${NC} ${WHITE}(${pods_cidr_input})${NC}"
+            echo -e "${LGREEN}[✓] Servicios: ${LCYAN}${SERVICES_RANGE_NAME}${NC} ${WHITE}(${services_cidr_input})${NC}"
+        else
+            echo -e "${RED}[ERROR] No se pudo crear la subred '${subnet}'${NC}" >&2
+            echo -e "${YELLOW}[!] Verifique permisos en el proyecto host o solicite la creación al equipo de redes${NC}" >&2
+            return 1
+        fi
     fi
     return 0
 }
