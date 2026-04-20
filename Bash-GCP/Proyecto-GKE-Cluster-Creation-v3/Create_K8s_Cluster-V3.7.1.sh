@@ -411,7 +411,7 @@ function configure_shared_vpc_permissions() {
         --role="roles/container.hostServiceAgentUser" \
         --condition=None \
         --quiet 2>/dev/null || echo -e "${YELLOW}    [!] Rol ya asignado${NC}"
-    
+
     # Esperar propagación de permisos
     echo "[SHARED-VPC] Esperando propagación de permisos (10s)..."
     sleep 10
