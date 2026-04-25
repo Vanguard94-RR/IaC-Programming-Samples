@@ -100,14 +100,21 @@ cmd_vpc_select() {
             gcloud compute networks list --project="${project_id}" --format="table(name,subnetworkMode)"
             prompt_or_arg VPC_NAME "" "VPC name" "$vpc_exists"
             prompt_or_arg SUBNET_NAME "" "Subnet name" "$vpc_exists"
-            validate_secondary_ranges "$SUBNET_NAME"
             local ranges
             ranges=$(gcloud compute networks subnets describe "$SUBNET_NAME" \
                 --project="${project_id}" --region="${region}" \
                 --format="json" 2>/dev/null \
                 | jq -r '.secondaryIpRanges[]?.rangeName' 2>/dev/null || true)
-            PODS_RANGE_NAME=$(echo "$ranges" | grep -E '^pods?$' | head -1 || echo "pods")
-            SERVICES_RANGE_NAME=$(echo "$ranges" | grep -E '^servicios?$|^services?$' | head -1 || echo "servicios")
+            if [ -z "$ranges" ]; then
+                warn "No secondary ranges found in subnet '$SUBNET_NAME'"
+                read_input PODS_RANGE_NAME "${CYAN}Enter pods range name (e.g. pods): ${NC}"
+                read_input SERVICES_RANGE_NAME "${CYAN}Enter services range name (e.g. servicios): ${NC}"
+                PODS_RANGE_NAME="${PODS_RANGE_NAME:-pods}"
+                SERVICES_RANGE_NAME="${SERVICES_RANGE_NAME:-servicios}"
+            else
+                PODS_RANGE_NAME=$(echo "$ranges" | grep -E '^pods?$' | head -1 || echo "pods")
+                SERVICES_RANGE_NAME=$(echo "$ranges" | grep -E '^servicios?$|^services?$' | head -1 || echo "servicios")
+            fi
             ;;
         2)
             local vpc_ip
