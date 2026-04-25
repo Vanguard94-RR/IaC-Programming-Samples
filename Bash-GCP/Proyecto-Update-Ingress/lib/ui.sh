@@ -177,8 +177,16 @@ print_command_box() {
     local bar=""
     for ((i=1; i<=width; i++)); do bar+="═"; done
     printf '%b\n' "${CYAN}╔${bar}╗${NC}"
-    printf '%b\n' "${CYAN}║${NC}  ${WHITE}${BOLD}${title}${NC}$(printf '%*s' $(( width - ${#title} - 2 )) "")${CYAN}║${NC}"
-    printf '%b\n' "${CYAN}║${NC}  ${WHITE}${cmd}${NC}$(printf '%*s' $(( width - ${#cmd} - 2 )) "")${CYAN}║${NC}"
+    printf '%b' "${CYAN}║${NC}  ${WHITE}${BOLD}"
+    printf '%s' "${title}"
+    printf '%b' "${NC}"
+    printf '%*s' $(( width - ${#title} - 2 )) ""
+    printf '%b\n' "${CYAN}║${NC}"
+    printf '%b' "${CYAN}║${NC}  ${WHITE}"
+    printf '%s' "${cmd}"
+    printf '%b' "${NC}"
+    printf '%*s' $(( width - ${#cmd} - 2 )) ""
+    printf '%b\n' "${CYAN}║${NC}"
     printf '%b\n' "${CYAN}╚${bar}╝${NC}"
 }
 
@@ -207,10 +215,18 @@ print_summary_box() {
     local bar="" title="DEPLOYMENT SUMMARY"
     for ((i=1; i<=width; i++)); do bar+="═"; done
     printf '%b\n' "${CYAN}╔${bar}╗${NC}"
-    printf '%b\n' "${CYAN}║${NC}  ${WHITE}${BOLD}${title}${NC}$(printf '%*s' $(( width - ${#title} - 2 )) "")${CYAN}║${NC}"
+    printf '%b' "${CYAN}║${NC}  ${WHITE}${BOLD}"
+    printf '%s' "${title}"
+    printf '%b' "${NC}"
+    printf '%*s' $(( width - ${#title} - 2 )) ""
+    printf '%b\n' "${CYAN}║${NC}"
     printf '%b\n' "${CYAN}╠${bar}╣${NC}"
     for row in "${rows[@]}"; do
-        printf '%b\n' "${CYAN}║${NC}  ${WHITE}${row}${NC}$(printf '%*s' $(( width - ${#row} - 2 )) "")${CYAN}║${NC}"
+        printf '%b' "${CYAN}║${NC}  ${WHITE}"
+        printf '%s' "${row}"
+        printf '%b' "${NC}"
+        printf '%*s' $(( width - ${#row} - 2 )) ""
+        printf '%b\n' "${CYAN}║${NC}"
     done
     printf '%b\n' "${CYAN}╚${bar}╝${NC}"
 }
