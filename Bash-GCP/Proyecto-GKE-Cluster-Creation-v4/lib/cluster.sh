@@ -35,7 +35,7 @@ get_cluster_versions() {
     local target_region="${1:-us-central1}"
     local target_channel="${2:-regular}"
 
-    vprint "Fetching GKE versions for region $target_region, channel $target_channel"
+    vprint "Fetching GKE versions for region $target_region, channel $target_channel" >&2
 
     if [ "${NO_CLUSTER:-0}" = "1" ]; then
         echo "1.31.0-gke.1000000"
@@ -47,7 +47,7 @@ get_cluster_versions() {
         --region="$target_region" --format="json" 2>/dev/null || true)
 
     if [ -z "$server_config" ]; then
-        warn "Could not fetch GKE server config — using default version"
+        warn "Could not fetch GKE server config — using default version" >&2
         echo "1.31.0-gke.1000000"
         return 0
     fi
@@ -57,16 +57,16 @@ get_cluster_versions() {
         rapid)   version=$(printf '%s' "$server_config" | jq -r '.channels[] | select(.channel=="RAPID") | .validVersions[0]') ;;
         regular) version=$(printf '%s' "$server_config" | jq -r '.channels[] | select(.channel=="REGULAR") | .validVersions[0]') ;;
         stable)  version=$(printf '%s' "$server_config" | jq -r '.channels[] | select(.channel=="STABLE") | .validVersions[0]') ;;
-        *) error "Invalid channel: $target_channel"; return 1 ;;
+        *) error "Invalid channel: $target_channel" >&2; return 1 ;;
     esac
 
     if [ -z "$version" ]; then
-        warn "Could not parse version for channel $target_channel — using default"
+        warn "Could not parse version for channel $target_channel — using default" >&2
         echo "1.31.0-gke.1000000"
         return 0
     fi
 
-    success "GKE version for $target_channel: $version"
+    success "GKE version for $target_channel: $version" >&2
     echo "$version"
 }
 
