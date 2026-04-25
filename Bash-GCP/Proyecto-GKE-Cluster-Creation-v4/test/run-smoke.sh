@@ -19,10 +19,10 @@ run_test() {
     printf "  %-50s" "$name"
     if "$@" >/dev/null 2>&1; then
         printf "PASS\n"
-        ((PASS++))
+        PASS=$((PASS+1))
     else
         printf "FAIL\n"
-        ((FAIL++))
+        FAIL=$((FAIL+1))
     fi
 }
 
@@ -32,10 +32,10 @@ run_test_fail() {
     printf "  %-50s" "$name"
     if ! "$@" >/dev/null 2>&1; then
         printf "PASS\n"
-        ((PASS++))
+        PASS=$((PASS+1))
     else
         printf "FAIL (expected non-zero exit)\n"
-        ((FAIL++))
+        FAIL=$((FAIL+1))
     fi
 }
 
