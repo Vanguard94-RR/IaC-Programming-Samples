@@ -15,8 +15,8 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 # shellcheck source=/dev/null
 . "$SCRIPT_DIR/lib/kube.sh"
 
-print_banner_box "GNP Cloud Infrastructure Team"
 print_banner_box "Kubernetes Ingress Updater — v2"
+info "GNP Cloud Infrastructure Team"
 
 # Flags: --dry-run and --verbose (positional URL allowed)
 VERBOSE=false
@@ -39,25 +39,25 @@ done
 
 # Solicitar Ticket ID y cambiar al directorio del ticket
 if [ "${NO_CLUSTER:-0}" != "1" ]; then
-    step "Configuración de Ticket"
+    step "Ticket configuration"
     
     # Verificar si ya estamos en un directorio de ticket
     if [[ "$PWD" =~ /Tickets/(CTASK[0-9]+|TASK[0-9]+) ]]; then
         TICKET_ID="${BASH_REMATCH[1]}"
-        info "Ticket detectado desde directorio actual: $TICKET_ID"
+        info "Ticket detected from current directory: $TICKET_ID"
     else
         # Solicitar ticket ID
-        read_input TICKET_ID "${CYAN}Ingrese el ID del Ticket (ej: CTASK0337281): ${WHITE}${BOLD}"
+        read_input TICKET_ID "${CYAN}Enter Ticket ID (e.g. CTASK0337281): ${WHITE}${BOLD}"
         printf '%b' "${NC}"
         
         if [ -z "$TICKET_ID" ]; then
-            error "El ID del ticket no puede estar vacío"
+            error "Ticket ID cannot be empty"
             exit 1
         fi
         
         # Validar formato del ticket
         if ! [[ "$TICKET_ID" =~ ^(CTASK|TASK)[0-9]+$ ]]; then
-            error "Formato de ticket inválido. Use CTASK######## o TASK#######"
+            error "Invalid ticket format. Use CTASK######## or TASK########"
             exit 1
         fi
     fi
@@ -68,30 +68,30 @@ if [ "${NO_CLUSTER:-0}" != "1" ]; then
     
     # Verificar si el directorio del ticket existe
     if [ ! -d "$TICKET_DIR" ]; then
-        warn "El directorio del ticket no existe: $TICKET_DIR"
-        read_input CREATE_DIR "${CYAN}¿Desea crear el directorio? (Y/N): ${NC}"
+        warn "Ticket directory not found: $TICKET_DIR"
+        read_input CREATE_DIR "${CYAN}Create it? (Y/N): ${NC}"
         CREATE_DIR_LOWER=$(printf "%s" "$CREATE_DIR" | tr '[:upper:]' '[:lower:]')
         
         if [ "$CREATE_DIR_LOWER" = "yes" ] || [ "$CREATE_DIR_LOWER" = "y" ]; then
             if mkdir -p "$TICKET_DIR"; then
-                success "Directorio creado: $TICKET_DIR"
+                success "Directory created: $TICKET_DIR"
             else
-                error "No se pudo crear el directorio"
+                error "Failed to create directory"
                 exit 1
             fi
         else
-            error "Operación cancelada: El directorio del ticket es necesario"
+            error "Cancelled: ticket directory is required"
             exit 1
         fi
     fi
     
     # Cambiar al directorio del ticket
     if cd "$TICKET_DIR"; then
-        success "Trabajando en: $TICKET_DIR"
+        success "Working in: $TICKET_DIR"
         export TICKET_ID
         export TICKET_DIR
     else
-        error "No se pudo cambiar al directorio: $TICKET_DIR"
+        error "Failed to change to directory: $TICKET_DIR"
         exit 1
     fi
 fi
@@ -151,4 +151,4 @@ namespace_and_ingress_name
 backup_current_ingress
 apply_new_ingress
 
-echo -e "${CYAN}Script finished.${NC}"
+print_summary_box
