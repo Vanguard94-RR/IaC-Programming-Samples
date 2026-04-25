@@ -19,7 +19,7 @@ select_gcp_project() {
         read_input PROJECT_ID "${CYAN}Enter your project ID:${NC} ${WHITE}${BOLD}"
         printf '%b' "${NC}"
         if [ -z "$PROJECT_ID" ]; then
-            echo -e "${RED}Project ID cannot be empty. Please try again.${NC}"
+            error "Project ID cannot be empty. Please try again."
             continue
         fi
         info "Setting project to: $PROJECT_ID"
@@ -27,7 +27,7 @@ select_gcp_project() {
             success "Project set successfully."
             break
         else
-            echo -e "${RED}Failed to set project. Please check the project ID and try again.${NC}"
+            error "Failed to set project. Check the project ID and try again."
         fi
     done
 }
@@ -35,11 +35,11 @@ select_gcp_project() {
 select_cluster() {
     step "Step 2: Select your Kubernetes cluster"
     if ! CLUSTERS_INFO=$(gcloud container clusters list --format="value(name,zone)" 2>/dev/null); then
-        echo -e "${RED}Failed to list clusters. Exiting.${NC}"
+        error "Failed to list clusters. Exiting."
         exit 1
     fi
     if [ -z "$CLUSTERS_INFO" ]; then
-        echo -e "${RED}No clusters found in project. Exiting.${NC}"
+        error "No clusters found in project. Exiting."
         exit 1
     fi
 
@@ -66,7 +66,7 @@ select_cluster() {
 
     local max_clusters=$((INDEX-1))
     if [ $max_clusters -eq 0 ]; then
-        echo -e "${RED}No clusters found in project. Exiting.${NC}"
+        error "No clusters found in project. Exiting."
         exit 1
     fi
 
@@ -84,9 +84,9 @@ select_cluster() {
 }
 
 connect_to_cluster() {
-    echo -e "\n${YELLOW}Step 3: Connect to cluster${NC}"
+    step "Step 3: Connect to cluster"
     if ! gcloud container clusters get-credentials "$CLUSTER_NAME" --zone "$CLUSTER_ZONE" --project "$PROJECT_ID"; then
-        echo -e "${RED}Failed to connect to cluster. Exiting.${NC}"
+        error "Failed to connect to cluster. Exiting."
         exit 1
     fi
 }
@@ -94,11 +94,11 @@ connect_to_cluster() {
 namespace_and_ingress_name() {
     step "Step 4: Select the Ingress to update"
     if ! INGRESS_LIST=$(kubectl get ingress --all-namespaces -o custom-columns=NS:metadata.namespace,NAME:metadata.name --no-headers 2>/dev/null); then
-        echo -e "${RED}Failed to list Ingress resources. Exiting.${NC}"
+        error "Failed to list Ingress resources. Exiting."
         exit 1
     fi
     if [ -z "$INGRESS_LIST" ]; then
-        echo -e "${RED}No Ingress resources found in any namespace. Exiting.${NC}"
+        error "No Ingress resources found in any namespace. Exiting."
         exit 1
     fi
 
@@ -125,7 +125,7 @@ namespace_and_ingress_name() {
 
     local max_ingress=$((INDEX-1))
     if [ $max_ingress -eq 0 ]; then
-        echo -e "${RED}No Ingress resources found. Exiting.${NC}"
+        error "No Ingress resources found. Exiting."
         exit 1
     fi
 
@@ -140,5 +140,5 @@ namespace_and_ingress_name() {
     INGRESS_IDX=$((INGRESS_NUM-1))
     INGRESS_NAME=${INGRESS_NAMES[$INGRESS_IDX]}
     NAMESPACE=${INGRESS_NAMESPACES[$INGRESS_IDX]}
-    echo -e "${YELLOW}Selected ingress: ${CYAN}$INGRESS_NAME${NC} in namespace: ${CYAN}$NAMESPACE${NC}"
+    info "Selected: $INGRESS_NAME  [namespace: $NAMESPACE]"
 }
