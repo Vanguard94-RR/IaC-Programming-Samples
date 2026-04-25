@@ -17,5 +17,7 @@ set -o pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/apply_new_ingress.sh"
 # shellcheck source=/dev/null
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/post_apply_validation.sh"
+# shellcheck source=/dev/null
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/cloud_armor.sh"
 
 ## The actual functions now live in their own files and are sourced above.
