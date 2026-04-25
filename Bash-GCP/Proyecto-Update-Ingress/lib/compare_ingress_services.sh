@@ -39,7 +39,8 @@ compare_ingress_services() {
     sort "$new_services" > "$new_list"
 
     local added removed unchanged
-    added=$(comm -13 "$old_list" "$new_list" | wc -l | tr -d ' ')
+    comm -13 "$old_list" "$new_list" > "${TMP_PREFIX}_new_services_armor.txt"
+    added=$(wc -l < "${TMP_PREFIX}_new_services_armor.txt" | tr -d ' ')
     removed=$(comm -23 "$old_list" "$new_list" | wc -l | tr -d ' ')
     unchanged=$(comm -12 "$old_list" "$new_list" | wc -l | tr -d ' ')
 
