@@ -98,8 +98,8 @@ cmd_vpc_select() {
         1)
             info "Available VPCs:"
             gcloud compute networks list --project="${project_id}" --format="table(name,subnetworkMode)"
-            read_input VPC_NAME "${CYAN}Enter VPC name: ${NC}"
-            read_input SUBNET_NAME "${CYAN}Enter subnet name: ${NC}"
+            prompt_or_arg VPC_NAME "" "VPC name" "$vpc_exists"
+            prompt_or_arg SUBNET_NAME "" "Subnet name" "$vpc_exists"
             validate_secondary_ranges "$SUBNET_NAME"
             local ranges
             ranges=$(gcloud compute networks subnets describe "$SUBNET_NAME" \
