@@ -31,7 +31,11 @@ run_test() {
     local stub_bin="$TMP/bin_$RANDOM"
 
     mkdir -p "$stub_bin"
-    printf '%s' "$armor_content" > "${prefix}_new_services_armor.txt"
+    if [ -n "$armor_content" ]; then
+        printf '%s\n' "$armor_content" > "${prefix}_new_services_armor.txt"
+    else
+        touch "${prefix}_new_services_armor.txt"
+    fi
     printf '#!/usr/bin/env bash\n%s\n' "$gcloud_body" > "$stub_bin/gcloud"
     chmod +x "$stub_bin/gcloud"
 
@@ -77,11 +81,13 @@ out=$(
         printf 'svc-a\n' > "${TMP_PREFIX}_new_services_armor.txt"
         export NAMESPACE="test-ns"
         export CLOUD_ARMOR_POLICY="cve-canary"
-        export PATH=""
         sleep() { :; }
         export -f sleep
+        # Source with normal PATH so dirname/pwd work at source time
         # shellcheck source=/dev/null
         . "$ROOT/lib/cloud_armor.sh"
+        # Clear PATH after sourcing so command -v gcloud fails
+        export PATH=""
         sync_cloud_armor
     ) 2>&1
 )
@@ -105,7 +111,7 @@ case "$*" in
   *"backend-services update"*)    exit 0 ;;
 esac
 ')
-assert_contains "new service → output has attached"    "attached"             "$out"
+assert_contains "new service → 1 attached in summary"  "1 attached"           "$out"
 assert_contains "new service → output has backend"     "k8s-be-8080--abc123"  "$out"
 assert_contains "new service → output has svc name"    "svc-b"                "$out"
 
