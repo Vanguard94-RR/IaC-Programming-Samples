@@ -15,7 +15,7 @@ post_apply_validation() {
     : ${HEALTHCHECK_TIMEOUT:=300}
     : ${HEALTHCHECK_INTERVAL:=60}
 
-    echo -e "${YELLOW}Post-apply validation: waiting for LoadBalancer IP (timeout ${LB_TIMEOUT}s)...${NC}"
+    step "Post-apply validation: waiting for LoadBalancer IP (timeout ${LB_TIMEOUT}s)..."
     local interval=5
     local elapsed=0
     local ip=""
@@ -33,19 +33,19 @@ post_apply_validation() {
     done
     progress_bar_stop
     if [ -z "$ip" ]; then
-        echo -e "${RED}Timeout waiting for LoadBalancer IP${NC}"
+        error "Timeout waiting for LoadBalancer IP"
     else
-        echo -e "${YELLOW}Performing basic HTTP HEAD request to the LB IP...${NC}"
+        info "Performing basic HTTP HEAD request to the LB IP..."
         if command -v curl &> /dev/null; then
             local http_code
             http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "http://$ip/" 2>/dev/null || true)
             if [ -n "$http_code" ]; then
-                echo -e "${CYAN}HTTP status: ${http_code}${NC}"
+                info "HTTP status: ${http_code}"
             else
-                echo -e "${RED}HTTP check failed or timed out${NC}"
+                warn "HTTP check failed or timed out"
             fi
         else
-            echo -e "${YELLOW}curl not available; skipping HTTP check.${NC}"
+            warn "curl not available; skipping HTTP check."
         fi
     fi
 
@@ -77,9 +77,9 @@ post_apply_validation() {
             fi
         done
     else
-        echo -e "${YELLOW}curl not available; skipping per-backend health check validation.${NC}"
+        warn "curl not available; skipping per-backend health check validation."
     fi
 
-    echo -e "${CYAN}Recent events in namespace $NAMESPACE (last 3):${NC}"
+    info "Recent events in namespace $NAMESPACE (last 3):"
     kubectl get events -n "$NAMESPACE" --sort-by=.lastTimestamp | tail -n 3 || true
 }
