@@ -37,14 +37,20 @@ post_apply_validation() {
     else
         echo -e "${YELLOW}Performing basic HTTP HEAD request to the LB IP...${NC}"
         if command -v curl &> /dev/null; then
-            curl -I --max-time 10 "http://$ip/" || echo -e "${RED}HTTP check failed or timed out${NC}"
+            local http_code
+            http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "http://$ip/" 2>/dev/null || true)
+            if [ -n "$http_code" ]; then
+                echo -e "${CYAN}HTTP status: ${http_code}${NC}"
+            else
+                echo -e "${RED}HTTP check failed or timed out${NC}"
+            fi
         else
             echo -e "${YELLOW}curl not available; skipping HTTP check.${NC}"
         fi
     fi
 
     if command -v curl &> /dev/null; then
-        echo -e "${YELLOW}Waiting for all backend health checks to return 2xx/3xx. Re-checking every ${HEALTHCHECK_INTERVAL}s. Press Ctrl+C to abort.${NC}"
+        info "Waiting for backend health checks (timeout: ${HEALTHCHECK_TIMEOUT}s, interval: ${HEALTHCHECK_INTERVAL}s)"
         local start_time
         start_time=$(date +%s)
         while true; do
@@ -61,8 +67,13 @@ post_apply_validation() {
                         return 1
                     fi
                 fi
-                warn "Some backend health checks are failing. Rechecking in ${HEALTHCHECK_INTERVAL}s..."
-                sleep $HEALTHCHECK_INTERVAL
+                warn "Some checks failing."
+                local j
+                for ((j=HEALTHCHECK_INTERVAL; j>0; j--)); do
+                    printf "\r  ${CYAN}Next check in: %ds  [Ctrl+C to abort]${NC}  " "$j"
+                    sleep 1
+                done
+                printf "\r%-60s\r" ""
             fi
         done
     else
