@@ -42,12 +42,13 @@ compare_ingress_services() {
     comm -13 "$old_list" "$new_list" > "${TMP_PREFIX}_new_services_armor.txt"
     added=$(wc -l < "${TMP_PREFIX}_new_services_armor.txt" | tr -d ' ')
     removed=$(comm -23 "$old_list" "$new_list" | wc -l | tr -d ' ')
-    unchanged=$(comm -12 "$old_list" "$new_list" | wc -l | tr -d ' ')
+    comm -12 "$old_list" "$new_list" > "${TMP_PREFIX}_existing_services_armor.txt"
+    unchanged=$(wc -l < "${TMP_PREFIX}_existing_services_armor.txt" | tr -d ' ')
 
     # Unchanged: inline names when ≤3, count-only when >3
     local unchanged_inline=""
     if [ "$unchanged" -gt 0 ] && [ "$unchanged" -le 3 ]; then
-        unchanged_inline="  ($(comm -12 "$old_list" "$new_list" | tr '\n' ',' | sed 's/,$//') )"
+        unchanged_inline="  ($(tr '\n' ',' < "${TMP_PREFIX}_existing_services_armor.txt" | sed 's/,$//') )"
     fi
 
     printf "  ${GREEN}✚ New:      %s${NC}\n" "$added"

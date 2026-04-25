@@ -22,20 +22,28 @@ assert_contains() {
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-# run_test <armor_file_content> <gcloud_script_body>
-# Runs sync_cloud_armor in an isolated subshell with a stub gcloud.
-run_test() {
-    local armor_content="$1"
-    local gcloud_body="$2"
+# run_test_full <new_content> <existing_content> <gcloud_script_body>
+run_test_full() {
+    local new_content="$1"
+    local existing_content="$2"
+    local gcloud_body="$3"
     local prefix="$TMP/t_$$_$RANDOM"
     local stub_bin="$TMP/bin_$RANDOM"
 
     mkdir -p "$stub_bin"
-    if [ -n "$armor_content" ]; then
-        printf '%s\n' "$armor_content" > "${prefix}_new_services_armor.txt"
+
+    if [ -n "$new_content" ]; then
+        printf '%s\n' "$new_content" > "${prefix}_new_services_armor.txt"
     else
         touch "${prefix}_new_services_armor.txt"
     fi
+
+    if [ -n "$existing_content" ]; then
+        printf '%s\n' "$existing_content" > "${prefix}_existing_services_armor.txt"
+    else
+        touch "${prefix}_existing_services_armor.txt"
+    fi
+
     printf '#!/usr/bin/env bash\n%s\n' "$gcloud_body" > "$stub_bin/gcloud"
     chmod +x "$stub_bin/gcloud"
 
@@ -50,6 +58,11 @@ run_test() {
         . "$ROOT/lib/cloud_armor.sh"
         sync_cloud_armor
     ) 2>&1
+}
+
+# run_test <new_content> <gcloud_script_body>  (no existing services file)
+run_test() {
+    run_test_full "$1" "" "$2"
 }
 
 echo "=== cloud_armor.sh unit tests ==="
@@ -68,11 +81,11 @@ out=$(
         sync_cloud_armor
     ) 2>&1
 )
-assert_contains "no armor file → skip" "No new services" "$out"
+assert_contains "no armor file → skip" "no services to check" "$out"
 
 echo "--- 2: empty armor file → skip ---"
 out=$(run_test "" 'exit 1')
-assert_contains "empty armor file → skip" "No new services" "$out"
+assert_contains "empty armor file → skip" "no services to check" "$out"
 
 echo "--- 3: gcloud unavailable → warn ---"
 out=$(
@@ -134,6 +147,28 @@ esac
 ')
 assert_contains "not found → warn message"  "not found after 3 retries" "$out"
 assert_contains "not found → skipped label" "skipped"                    "$out"
+
+echo "--- 8: existing service → policy attached → all OK ---"
+out=$(run_test_full "" "svc-x" '
+case "$*" in
+  *"security-policies describe"*) exit 0 ;;
+  *"backend-services list"*)      printf "k8s-be-8080--ghi789\n" ;;
+  *"backend-services describe"*)  printf "https://googleapis.com/compute/v1/projects/p/global/securityPolicies/cve-canary\n" ;;
+esac
+')
+assert_contains "existing attached → ✔ line"      "svc-x"      "$out"
+assert_contains "existing attached → all OK msg"  "all 1"      "$out"
+
+echo "--- 9: existing service → policy NOT attached → warning ---"
+out=$(run_test_full "" "svc-y" '
+case "$*" in
+  *"security-policies describe"*) exit 0 ;;
+  *"backend-services list"*)      printf "k8s-be-9090--jkl012\n" ;;
+  *"backend-services describe"*)  printf "\n" ;;
+esac
+')
+assert_contains "existing not attached → NOT attached line"  "NOT attached"   "$out"
+assert_contains "existing not attached → summary warning"    "without policy" "$out"
 
 echo ""
 printf "Results: %d passed, %d failed\n" "$PASS" "$FAIL"
