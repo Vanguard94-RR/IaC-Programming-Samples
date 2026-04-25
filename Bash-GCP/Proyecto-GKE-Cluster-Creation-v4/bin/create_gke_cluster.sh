@@ -49,7 +49,8 @@ mkdir -p "$SCRIPT_DIR/logs"
 LOG_FILE="$SCRIPT_DIR/logs/$(date +%Y%m%d_%H%M%S)-${SUBCOMMAND}.log"
 export LOG_FILE
 
-trap 'error "Aborted. See log: $LOG_FILE"' ERR INT TERM
+trap 'error "Aborted. See log: $LOG_FILE"' ERR
+trap 'error "Interrupted. See log: $LOG_FILE"; exit 130' INT TERM
 
 print_banner_box "GKE Cluster Creation — GNP"
 
