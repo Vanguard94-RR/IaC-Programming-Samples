@@ -76,8 +76,7 @@ backup_current_ingress() {
             # Avoid embedding literal \n sequences which can be interpreted as text by yq.
             yq eval 'del(.metadata.creationTimestamp, .metadata.resourceVersion, .metadata.uid, .metadata.generation, .metadata.finalizers, .metadata.managedFields, .status, .metadata.annotations."ingress.kubernetes.io/backends", .metadata.annotations."ingress.kubernetes.io/forwarding-rule", .metadata.annotations."ingress.kubernetes.io/target-proxy", .metadata.annotations."ingress.kubernetes.io/url-map", .metadata.annotations."kubectl.kubernetes.io/last-applied-configuration")' "$BACKUP_FILE" > "$CLEAN_FILE"
             success "Rollback-ready backup saved as $CLEAN_FILE"
-            info "To rollback, run:"
-            info "kubectl apply -f $CLEAN_FILE -n $NAMESPACE"
+            print_command_box "ROLLBACK COMMAND (save this)" "kubectl apply -f $CLEAN_FILE -n $NAMESPACE"
         else
             warn "yq not available. Only the original backup will be created."
             error "The original backup cannot be applied directly. You must clean it first using yq or manually before rollback."
