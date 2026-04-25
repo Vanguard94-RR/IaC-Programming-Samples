@@ -47,6 +47,7 @@ post_apply_validation() {
         else
             warn "curl not available; skipping HTTP check."
         fi
+        sync_cloud_armor
     fi
 
     if command -v curl &> /dev/null; then
