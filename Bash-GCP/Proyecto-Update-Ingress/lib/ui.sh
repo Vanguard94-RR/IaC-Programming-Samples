@@ -165,3 +165,52 @@ read_input() {
     fi
     printf -v "$__var" '%s' "$input_val"
 }
+
+# print_command_box <title> <cmd>
+print_command_box() {
+    local title="$1"
+    local cmd="$2"
+    local min_width=44
+    local content_len=${#title}
+    [ ${#cmd} -gt $content_len ] && content_len=${#cmd}
+    local width=$(( content_len + 4 > min_width ? content_len + 4 : min_width ))
+    local bar=""
+    for ((i=1; i<=width; i++)); do bar+="═"; done
+    printf '%b\n' "${CYAN}╔${bar}╗${NC}"
+    printf '%b\n' "${CYAN}║${NC}  ${WHITE}${BOLD}${title}${NC}$(printf '%*s' $(( width - ${#title} - 2 )) "")${CYAN}║${NC}"
+    printf '%b\n' "${CYAN}║${NC}  ${WHITE}${cmd}${NC}$(printf '%*s' $(( width - ${#cmd} - 2 )) "")${CYAN}║${NC}"
+    printf '%b\n' "${CYAN}╚${bar}╝${NC}"
+}
+
+# print_summary_box
+# Uses globals: TICKET_ID, PROJECT_ID, CLUSTER_NAME, NAMESPACE,
+#               INGRESS_NAME, CLEAN_FILE, DEPLOY_RESULT
+print_summary_box() {
+    local result="${DEPLOY_RESULT:-UNKNOWN}"
+    local rollback_file
+    rollback_file=$(basename "${CLEAN_FILE:-N/A}")
+    local rollback_cmd="kubectl apply -f ${rollback_file} -n ${NAMESPACE:-N/A}"
+    local rows=(
+        "Ticket:   ${TICKET_ID:-N/A}"
+        "Project:  ${PROJECT_ID:-N/A}"
+        "Cluster:  ${CLUSTER_NAME:-N/A}"
+        "Ingress:  ${INGRESS_NAME:-N/A}  [${NAMESPACE:-N/A}]"
+        "Result:   ${result}"
+        "Rollback: ${rollback_cmd}"
+    )
+    local width=52
+    local row
+    for row in "${rows[@]}"; do
+        local row_len=$(( ${#row} + 4 ))
+        [ $row_len -gt $width ] && width=$row_len
+    done
+    local bar="" title="DEPLOYMENT SUMMARY"
+    for ((i=1; i<=width; i++)); do bar+="═"; done
+    printf '%b\n' "${CYAN}╔${bar}╗${NC}"
+    printf '%b\n' "${CYAN}║${NC}  ${WHITE}${BOLD}${title}${NC}$(printf '%*s' $(( width - ${#title} - 2 )) "")${CYAN}║${NC}"
+    printf '%b\n' "${CYAN}╠${bar}╣${NC}"
+    for row in "${rows[@]}"; do
+        printf '%b\n' "${CYAN}║${NC}  ${WHITE}${row}${NC}$(printf '%*s' $(( width - ${#row} - 2 )) "")${CYAN}║${NC}"
+    done
+    printf '%b\n' "${CYAN}╚${bar}╝${NC}"
+}
