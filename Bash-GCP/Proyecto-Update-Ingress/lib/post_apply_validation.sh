@@ -35,12 +35,16 @@ post_apply_validation() {
     if [ -z "$ip" ]; then
         error "Timeout waiting for LoadBalancer IP"
     else
-        info "Performing basic HTTP HEAD request to the LB IP..."
+        info "Performing basic HTTP check to the LB IP..."
         if command -v curl &> /dev/null; then
             local http_code
             http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "http://$ip/" 2>/dev/null || true)
             if [ -n "$http_code" ]; then
-                info "HTTP status: ${http_code}"
+                if [[ "$http_code" =~ ^5 ]]; then
+                    warn "HTTP status: ${http_code} (server error)"
+                else
+                    success "HTTP status: ${http_code} — LB responding"
+                fi
             else
                 warn "HTTP check failed or timed out"
             fi
