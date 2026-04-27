@@ -180,7 +180,7 @@ cmd_vpc_select() {
     _setup_cloud_nat
 }
 
-# _setup_cloud_nat: creates Cloud Router + NAT if needed
+# _setup_cloud_nat: creates Cloud Router + NAT if needed (mandatory for all envs)
 _setup_cloud_nat() {
     step "Cloud NAT Configuration"
 
@@ -192,48 +192,26 @@ _setup_cloud_nat() {
     local router_name="${project_id}-router"
     local nat_name="${project_id}-nat"
 
-    local router_exists=false
     if gcloud compute routers describe "$router_name" \
         --region="${region}" --project="${project_id}" &>/dev/null; then
-        router_exists=true
-    fi
-
-    if [ "$router_exists" = "true" ]; then
         if gcloud compute routers nats describe "$nat_name" \
             --router="$router_name" --region="${region}" --project="${project_id}" &>/dev/null; then
             success "Cloud NAT exists: $nat_name"
             return 0
         fi
-        warn "Router exists but no NAT configured"
-        local create_choice
-        read_input create_choice "${CYAN}Create NAT on existing router? [1] Yes  [2] Skip: ${NC}"
-        [ "${create_choice:-1}" = "2" ] && return 0
-        _create_nat "$router_name" "$nat_name"
-        return 0
-    fi
-
-    local env_lower
-    env_lower=$(printf '%s' "${project_id}" | grep -oE '(pro|uat|qa)$' || echo "qa")
-    local default_choice="2"
-    if [ "$env_lower" = "pro" ]; then
-        warn "PRO environment: Cloud NAT is recommended"
-        default_choice="1"
+        info "Router exists, creating NAT: $nat_name"
     else
-        info "QA/UAT environment: Cloud NAT is optional"
+        info "Creating Cloud Router: $router_name"
+        if ! run_or_dry gcloud compute routers create "$router_name" \
+            --network="${VPC_NAME}" \
+            --region="${region}" \
+            --project="${project_id}"; then
+            error "Failed to create Cloud Router"
+            return 1
+        fi
     fi
 
-    local create_choice
-    read_input create_choice "${CYAN}Create Cloud NAT and Router? [1] Yes  [2] Skip (default: $default_choice): ${NC}"
-    [ "${create_choice:-$default_choice}" = "2" ] && return 0
-
-    info "Creating Cloud Router: $router_name"
-    if ! run_or_dry gcloud compute routers create "$router_name" \
-        --network="${VPC_NAME}" \
-        --region="${region}" \
-        --project="${project_id}"; then
-        error "Failed to create Cloud Router"
-        return 1
-    fi
+    _reserve_nat_ip
     _create_nat "$router_name" "$nat_name"
 }
 
