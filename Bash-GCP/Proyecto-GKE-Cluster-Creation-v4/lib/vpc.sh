@@ -12,6 +12,7 @@ set -o pipefail
 VPC_NAME=""
 SUBNET_NAME=""
 IS_SHARED_VPC="false"
+NAT_IP_NAME=""
 
 # get_node_subnet_cidr: returns /26 block from a /24 CIDR
 get_node_subnet_cidr() {
@@ -234,6 +235,20 @@ _setup_cloud_nat() {
         return 1
     fi
     _create_nat "$router_name" "$nat_name"
+}
+
+_reserve_nat_ip() {
+    local ip_name="${project_id}-nat-ip"
+    if gcloud compute addresses describe "$ip_name" \
+        --region="${region}" --project="${project_id}" &>/dev/null; then
+        success "Static IP exists: $ip_name"
+    else
+        info "Reserving static IP: $ip_name"
+        run_or_dry gcloud compute addresses create "$ip_name" \
+            --region="${region}" \
+            --project="${project_id}"
+    fi
+    NAT_IP_NAME="$ip_name"
 }
 
 _create_nat() {
