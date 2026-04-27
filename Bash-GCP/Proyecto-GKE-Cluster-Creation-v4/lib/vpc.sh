@@ -242,7 +242,7 @@ _create_nat() {
         --router="$router_name" \
         --region="${region}" \
         --project="${project_id}" \
-        --auto-allocate-nat-external-ips \
+        --nat-external-ip-pool="${NAT_IP_NAME}" \
         --nat-all-subnet-ip-ranges \
         --icmp-idle-timeout=30s \
         --tcp-established-idle-timeout=1200s \
