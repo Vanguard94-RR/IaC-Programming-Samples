@@ -62,6 +62,8 @@ run_test "T6: fix-shared-vpc --dry-run" \
     "$ENTRY" fix-shared-vpc --dry-run
 run_test "T7: log4j --dry-run" \
     "$ENTRY" log4j --dry-run --project test-proj
+run_test_fail "T8: _create_nat must not use auto-allocate mode" \
+    grep -q "auto-allocate-nat-external-ips" "$ROOT_DIR/lib/vpc.sh"
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
