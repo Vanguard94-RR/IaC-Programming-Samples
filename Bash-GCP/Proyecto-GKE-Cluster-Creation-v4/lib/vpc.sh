@@ -239,6 +239,11 @@ _setup_cloud_nat() {
 
 _reserve_nat_ip() {
     local ip_name="${project_id}-nat-ip"
+    if [ "${NO_CLUSTER:-0}" = "1" ]; then
+        warn "[NO_CLUSTER] Skipping static IP reservation"
+        NAT_IP_NAME="$ip_name"
+        return 0
+    fi
     if gcloud compute addresses describe "$ip_name" \
         --region="${region}" --project="${project_id}" &>/dev/null; then
         success "Static IP exists: $ip_name"
