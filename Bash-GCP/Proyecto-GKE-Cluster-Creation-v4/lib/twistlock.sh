@@ -56,7 +56,7 @@ deploy_twistlock() {
             return 0
         fi
         attempt=$((attempt + 1))
-        sleep 10
+        sleep "${TWISTLOCK_RETRY_DELAY:-10}"
     done
 
     error "Twistlock deploy failed after $max_retries attempts"

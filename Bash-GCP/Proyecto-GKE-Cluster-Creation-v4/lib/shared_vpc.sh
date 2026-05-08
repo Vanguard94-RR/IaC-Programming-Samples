@@ -159,8 +159,8 @@ configure_shared_vpc_permissions() {
         --condition=None \
         --quiet 2>/dev/null || warn "Role already assigned"
 
-    info "Waiting for IAM propagation (10s)..."
-    sleep 10
+    info "Waiting for IAM propagation (${IAM_PROPAGATION_DELAY:-10}s)..."
+    sleep "${IAM_PROPAGATION_DELAY:-10}"
     success "Shared VPC IAM permissions configured"
 }
 
