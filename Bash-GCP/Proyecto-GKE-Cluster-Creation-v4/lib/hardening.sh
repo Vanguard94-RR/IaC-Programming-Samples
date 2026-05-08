@@ -56,7 +56,7 @@ cmd_rollback_armor() {
 
     local backup_file=""
     local latest_backup
-    latest_backup=$(ls -t "${LOG_FILE%/*}"/*-armor-backup-"${project_id}".json 2>/dev/null | head -1 || true)
+    latest_backup=$(find "${LOG_FILE%/*}" -maxdepth 1 -name "*-armor-backup-${project_id}.json" -printf '%T+\t%p\n' 2>/dev/null | sort -r | head -1 | cut -f2 || true)
 
     if [ -n "$latest_backup" ]; then
         info "Latest backup found: $latest_backup"
