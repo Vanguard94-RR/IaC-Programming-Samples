@@ -222,6 +222,17 @@ cmd_create() {
 
     _collect_params
 
+    local skip_create=false
+    if [ "${NO_CLUSTER:-0}" != "1" ] && \
+       gcloud container clusters describe "$cluster_name" \
+           --project="$project_id" --region="$region" &>/dev/null; then
+        warn "Cluster '$cluster_name' already exists in project '$project_id' (region: $region)"
+        local confirm_existing
+        read_input confirm_existing "${CYAN}Continue with existing cluster? (Y/N): ${NC}"
+        [[ ! "${confirm_existing:-N}" =~ ^[Yy]$ ]] && { info "Aborted."; return 0; }
+        skip_create=true
+    fi
+
     step "Enabling GCP APIs"
     if [ "${NO_CLUSTER:-0}" = "1" ]; then
         warn "[NO_CLUSTER] Skipping API enablement"
@@ -243,54 +254,58 @@ cmd_create() {
     cluster_version=$(get_cluster_versions "$region" "$channel")
     info "Cluster version: $cluster_version"
 
-    step "Creating GKE Cluster: $cluster_name"
-    local cluster_flags
-    cluster_flags=$(_build_cluster_flags)
+    if [ "$skip_create" = "false" ]; then
+        step "Creating GKE Cluster: $cluster_name"
+        local cluster_flags
+        cluster_flags=$(_build_cluster_flags)
 
-    # shellcheck disable=SC2086
-    run_or_dry gcloud container clusters create "$cluster_name" \
-        --project="$project_id" \
-        $cluster_flags \
-        --release-channel="$channel" \
-        --cluster-version="$cluster_version" \
-        --machine-type="$machine_type" \
-        --image-type="COS_CONTAINERD" \
-        --disk-type="pd-balanced" \
-        --disk-size="100" \
-        --metadata=disable-legacy-endpoints=true \
-        --num-nodes="$num_nodes" \
-        --logging=SYSTEM,WORKLOAD \
-        --monitoring=SYSTEM,STORAGE,POD,DEPLOYMENT,STATEFULSET,DAEMONSET,HPA,CADVISOR,KUBELET \
-        --scopes="$cluster_access_scope" \
-        --no-enable-intra-node-visibility \
-        --enable-ip-alias \
-        --max-pods-per-node=64 \
-        --cluster-secondary-range-name="${PODS_RANGE_NAME}" \
-        --services-secondary-range-name="${SERVICES_RANGE_NAME}" \
-        --security-posture=standard \
-        --workload-vulnerability-scanning=disabled \
-        --no-enable-google-cloud-access \
-        --addons=HorizontalPodAutoscaling,HttpLoadBalancing,GcePersistentDiskCsiDriver,GcpFilestoreCsiDriver \
-        --enable-autoupgrade \
-        --enable-autorepair \
-        --max-surge-upgrade=1 \
-        --max-unavailable-upgrade=0 \
-        --binauthz-evaluation-mode=DISABLED \
-        --enable-managed-prometheus \
-        --enable-shielded-nodes \
-        --shielded-secure-boot \
-        --shielded-integrity-monitoring \
-        --enable-secret-manager \
-        --workload-pool="${project_id}.svc.id.goog"
+        # shellcheck disable=SC2086
+        run_or_dry gcloud container clusters create "$cluster_name" \
+            --project="$project_id" \
+            $cluster_flags \
+            --release-channel="$channel" \
+            --cluster-version="$cluster_version" \
+            --machine-type="$machine_type" \
+            --image-type="COS_CONTAINERD" \
+            --disk-type="pd-balanced" \
+            --disk-size="100" \
+            --metadata=disable-legacy-endpoints=true \
+            --num-nodes="$num_nodes" \
+            --logging=SYSTEM,WORKLOAD \
+            --monitoring=SYSTEM,STORAGE,POD,DEPLOYMENT,STATEFULSET,DAEMONSET,HPA,CADVISOR,KUBELET \
+            --scopes="$cluster_access_scope" \
+            --no-enable-intra-node-visibility \
+            --enable-ip-alias \
+            --max-pods-per-node=64 \
+            --cluster-secondary-range-name="${PODS_RANGE_NAME}" \
+            --services-secondary-range-name="${SERVICES_RANGE_NAME}" \
+            --security-posture=standard \
+            --workload-vulnerability-scanning=disabled \
+            --no-enable-google-cloud-access \
+            --addons=HorizontalPodAutoscaling,HttpLoadBalancing,GcePersistentDiskCsiDriver,GcpFilestoreCsiDriver \
+            --enable-autoupgrade \
+            --enable-autorepair \
+            --max-surge-upgrade=1 \
+            --max-unavailable-upgrade=0 \
+            --binauthz-evaluation-mode=DISABLED \
+            --enable-managed-prometheus \
+            --enable-shielded-nodes \
+            --shielded-secure-boot \
+            --shielded-integrity-monitoring \
+            --enable-secret-manager \
+            --workload-pool="${project_id}.svc.id.goog"
 
-    if [ "${NO_CLUSTER:-0}" != "1" ]; then
-        if ! gcloud container clusters describe "$cluster_name" \
-            --project="$project_id" --region="$region" &>/dev/null; then
-            error "Cluster creation failed"
-            return 1
+        if [ "${NO_CLUSTER:-0}" != "1" ]; then
+            if ! gcloud container clusters describe "$cluster_name" \
+                --project="$project_id" --region="$region" &>/dev/null; then
+                error "Cluster creation failed"
+                return 1
+            fi
         fi
+        success "Cluster created: $cluster_name"
+    else
+        success "Using existing cluster: $cluster_name"
     fi
-    success "Cluster created: $cluster_name"
 
     register_fleet
 
