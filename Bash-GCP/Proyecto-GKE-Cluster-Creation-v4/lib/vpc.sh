@@ -22,18 +22,19 @@ get_node_subnet_cidr() {
     echo "${base_ip}/24"
 }
 
-# calculate_secondary_ranges: derive pods /23 and servicios /24 from /22 base
+# calculate_secondary_ranges: derive servicios /24 and pods /23 from /22 base
 # Layout (within X.X.o3.0/22 — minimum /22 required, zero waste):
-#   primary  = base/24        (o3.0/24,    256 IPs — nodes, ILBs, misc)
-#   pods     = (o3+1).0/23    (512 IPs   — GKE pods, 4 nodes × 128 IPs/node)
-#   servicios= (o3+3).0/24    (256 IPs   — GKE services)
+#   primary   = base/24        (o3.0/24,    256 IPs — nodes, ILBs)
+#   servicios = (o3+1).0/24    (256 IPs   — GKE services)
+#   pods      = (o3+2).0/23    (512 IPs   — GKE pods, 4 nodes × 128 IPs/node)
+#   NOTE: /22 requires o3 = multiple of 4 → o3+2 always even → valid /23 address
 calculate_secondary_ranges() {
     local base_ip o1 o2 o3
     base_ip=$(echo "$1" | cut -d'/' -f1)
     o1=$(echo "$base_ip" | cut -d'.' -f1)
     o2=$(echo "$base_ip" | cut -d'.' -f2)
     o3=$(echo "$base_ip" | cut -d'.' -f3)
-    echo "pods=${o1}.${o2}.$(( o3 + 1 )).0/23,servicios=${o1}.${o2}.$(( o3 + 3 )).0/24"
+    echo "pods=${o1}.${o2}.$(( o3 + 2 )).0/23,servicios=${o1}.${o2}.$(( o3 + 1 )).0/24"
 }
 
 # validate_secondary_ranges: verify subnet has secondary ranges
