@@ -136,18 +136,9 @@ apply_cluster_hardening() {
         success "SSL policy created"
     fi
 
-    for api in certificatemanager.googleapis.com containersecurity.googleapis.com; do
-        run_or_dry gcloud services enable "$api" --project="${project_id}" 2>/dev/null \
-            || warn "$api already enabled"
-    done
-
-    local cert_map="${project_id}-cert-map"
-    if ! gcloud certificate-manager maps describe "$cert_map" \
-        --project="${project_id}" --quiet &>/dev/null; then
-        run_or_dry gcloud certificate-manager maps create "$cert_map" \
-            --project="${project_id}" --quiet \
-            || warn "Certificate Map creation failed — continuing"
-    fi
+    run_or_dry gcloud services enable containersecurity.googleapis.com \
+        --project="${project_id}" 2>/dev/null \
+        || warn "containersecurity.googleapis.com already enabled"
     success "Hardening complete"
 }
 
