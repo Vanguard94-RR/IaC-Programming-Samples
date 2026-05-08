@@ -14,14 +14,15 @@ SUBNET_NAME=""
 IS_SHARED_VPC="false"
 NAT_IP_NAME=""
 
-# get_node_subnet_cidr: returns /26 block from a /24 CIDR
+# get_node_subnet_cidr: returns /26 block (node VM IPs) from base CIDR
 get_node_subnet_cidr() {
     local base_ip
     base_ip=$(echo "$1" | cut -d'/' -f1)
     echo "${base_ip}/26"
 }
 
-# calculate_secondary_ranges: subdivide /24 into node/svc/pod blocks
+# calculate_secondary_ranges: derive pods/services /24 blocks from /22 base
+# Layout: nodes=base/26, pods=(o3+1)/24, services=(o3+2)/24 — all within /22
 calculate_secondary_ranges() {
     local base_ip o1 o2 o3 o4
     base_ip=$(echo "$1" | cut -d'/' -f1)
@@ -29,7 +30,7 @@ calculate_secondary_ranges() {
     o2=$(echo "$base_ip" | cut -d'.' -f2)
     o3=$(echo "$base_ip" | cut -d'.' -f3)
     o4=$(echo "$base_ip" | cut -d'.' -f4)
-    echo "servicios=${o1}.${o2}.${o3}.$(( o4 + 64 ))/26,pods=${o1}.${o2}.${o3}.$(( o4 + 128 ))/25"
+    echo "pods=${o1}.${o2}.$(( o3 + 1 )).${o4}/24,servicios=${o1}.${o2}.$(( o3 + 2 )).${o4}/24"
 }
 
 # validate_secondary_ranges: verify subnet has secondary ranges
@@ -106,7 +107,7 @@ cmd_vpc_select() {
             detected_subnet=$(gcloud compute networks subnets list \
                 --network="$VPC_NAME" \
                 --project="${project_id}" \
-                --filter="region:${region}" \
+                --filter="region:${region} AND NOT name~^gke-" \
                 --format="value(name)" 2>/dev/null | head -1 || true)
             prompt_or_arg SUBNET_NAME "$detected_subnet" "Subnet name" "${detected_subnet:-$VPC_NAME}"
             if ! gcloud compute networks subnets describe "$SUBNET_NAME" \
@@ -137,6 +138,13 @@ cmd_vpc_select() {
 
             if ! echo "$vpc_ip" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$'; then
                 error "Invalid CIDR format: $vpc_ip (expected x.x.x.x/prefix)"
+                return 1
+            fi
+
+            local vpc_prefix
+            vpc_prefix=$(echo "$vpc_ip" | cut -d'/' -f2)
+            if [ "$vpc_prefix" -gt 22 ]; then
+                error "CIDR too small: /$vpc_prefix (minimum /22 required — pods need adjacent /24 block)"
                 return 1
             fi
 
