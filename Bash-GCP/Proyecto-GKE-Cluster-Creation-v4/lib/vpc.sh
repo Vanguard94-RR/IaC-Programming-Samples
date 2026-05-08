@@ -14,29 +14,26 @@ SUBNET_NAME=""
 IS_SHARED_VPC="false"
 NAT_IP_NAME=""
 
-# get_node_subnet_cidr: returns /28 block (node VM IPs, max 16) from base CIDR
+# get_node_subnet_cidr: returns /24 block (node subnet) from base CIDR
+# Full /24 eliminates alignment gap — all IPs usable (nodes, ILBs, misc)
 get_node_subnet_cidr() {
     local base_ip
     base_ip=$(echo "$1" | cut -d'/' -f1)
-    echo "${base_ip}/28"
+    echo "${base_ip}/24"
 }
 
-# calculate_secondary_ranges: derive secondary ranges from /22 base
-# Layout (within X.X.o3.0/22 — minimum /22 required):
-#   nodes          = base/28         (o3.0/28,    16 IPs — primary subnet)
-#   gap            = o3.16/28        (16 IPs  — CIDR alignment, unavoidable)
-#   servicios-ext-2= o3.32/27        (32 IPs  — extra services / ILB)
-#   pods-ext       = o3.64/26        (64 IPs  — extra pods / ILB)
-#   servicios-ext  = o3.128/25       (128 IPs — extra services / ILB)
-#   pods           = (o3+1).0/23     (512 IPs — GKE pods range)
-#   servicios      = (o3+3).0/24     (256 IPs — GKE services range)
+# calculate_secondary_ranges: derive pods /23 and servicios /24 from /22 base
+# Layout (within X.X.o3.0/22 — minimum /22 required, zero waste):
+#   primary  = base/24        (o3.0/24,    256 IPs — nodes, ILBs, misc)
+#   pods     = (o3+1).0/23    (512 IPs   — GKE pods, 4 nodes × 128 IPs/node)
+#   servicios= (o3+3).0/24    (256 IPs   — GKE services)
 calculate_secondary_ranges() {
     local base_ip o1 o2 o3
     base_ip=$(echo "$1" | cut -d'/' -f1)
     o1=$(echo "$base_ip" | cut -d'.' -f1)
     o2=$(echo "$base_ip" | cut -d'.' -f2)
     o3=$(echo "$base_ip" | cut -d'.' -f3)
-    echo "pods=${o1}.${o2}.$(( o3 + 1 )).0/23,servicios=${o1}.${o2}.$(( o3 + 3 )).0/24,servicios-ext=${o1}.${o2}.${o3}.128/25,pods-ext=${o1}.${o2}.${o3}.64/26,servicios-ext-2=${o1}.${o2}.${o3}.32/27"
+    echo "pods=${o1}.${o2}.$(( o3 + 1 )).0/23,servicios=${o1}.${o2}.$(( o3 + 3 )).0/24"
 }
 
 # validate_secondary_ranges: verify subnet has secondary ranges
