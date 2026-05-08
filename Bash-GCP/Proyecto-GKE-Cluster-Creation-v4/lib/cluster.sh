@@ -213,7 +213,12 @@ _build_cluster_flags() {
         network_flags="--network=projects/${project_id}/global/networks/${VPC_NAME} --subnetwork=projects/${project_id}/regions/${region}/subnetworks/${SUBNET_NAME}"
     fi
 
-    printf '%s' "$location_flag $node_locations_flag $private_flags $network_flags"
+    local secondary_range_flags=""
+    if [ -n "${PODS_RANGE_NAME:-}" ] && [ -n "${SERVICES_RANGE_NAME:-}" ]; then
+        secondary_range_flags="--cluster-secondary-range-name=${PODS_RANGE_NAME} --services-secondary-range-name=${SERVICES_RANGE_NAME}"
+    fi
+
+    printf '%s' "$location_flag $node_locations_flag $private_flags $network_flags $secondary_range_flags"
 }
 
 cmd_create() {
@@ -277,8 +282,6 @@ cmd_create() {
             --no-enable-intra-node-visibility \
             --enable-ip-alias \
             --max-pods-per-node=110 \
-            --cluster-secondary-range-name="${PODS_RANGE_NAME}" \
-            --services-secondary-range-name="${SERVICES_RANGE_NAME}" \
             --security-posture=standard \
             --workload-vulnerability-scanning=disabled \
             --no-enable-google-cloud-access \
