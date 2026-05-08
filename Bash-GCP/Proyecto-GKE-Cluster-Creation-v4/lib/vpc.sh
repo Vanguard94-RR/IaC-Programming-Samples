@@ -21,19 +21,18 @@ get_node_subnet_cidr() {
     echo "${base_ip}/28"
 }
 
-# calculate_secondary_ranges: carve pods/services from same /24 as nodes
-# Layout (all within X.X.X.0/24):
-#   nodes    = base/28    (.0-.15,    16 IPs — max 4 nodes)
-#   gap      = .16-.63    (48 IPs    — CIDR alignment, unallocated)
-#   servicios = base+64/26 (.64-.127,  64 IPs)
-#   pods     = base+128/25 (.128-.255, 128 IPs — 4 nodes × 32 pods/node)
+# calculate_secondary_ranges: derive pods /23 and servicios /24 from /22 base
+# Layout (within X.X.o3.0/22 — minimum /22 required):
+#   nodes     = base/28       (o3.0/28,   16 IPs)
+#   pods      = (o3+1).0/23   (512 IPs   — 4 nodes × 128 IPs/node for 110 pods)
+#   servicios = (o3+3).0/24   (256 IPs)
 calculate_secondary_ranges() {
     local base_ip o1 o2 o3
     base_ip=$(echo "$1" | cut -d'/' -f1)
     o1=$(echo "$base_ip" | cut -d'.' -f1)
     o2=$(echo "$base_ip" | cut -d'.' -f2)
     o3=$(echo "$base_ip" | cut -d'.' -f3)
-    echo "pods=${o1}.${o2}.${o3}.128/25,servicios=${o1}.${o2}.${o3}.64/26"
+    echo "pods=${o1}.${o2}.$(( o3 + 1 )).0/23,servicios=${o1}.${o2}.$(( o3 + 3 )).0/24"
 }
 
 # validate_secondary_ranges: verify subnet has secondary ranges
@@ -146,8 +145,8 @@ cmd_vpc_select() {
 
             local vpc_prefix
             vpc_prefix=$(echo "$vpc_ip" | cut -d'/' -f2)
-            if [ "$vpc_prefix" -gt 24 ]; then
-                error "CIDR too small: /$vpc_prefix (minimum /24 required — pods need .128/25 within same octet)"
+            if [ "$vpc_prefix" -gt 22 ]; then
+                error "CIDR too small: /$vpc_prefix (minimum /22 required — pods need /23 spanning 2 adjacent octets)"
                 return 1
             fi
 
