@@ -1,17 +1,27 @@
-SHELL := /bin/bash
-.PHONY: lint test run
+SHELL       := /bin/bash
+SHELL_FILES := $(shell find bin lib test -name '*.sh' 2>/dev/null)
+
+.DEFAULT_GOAL := help
+.PHONY: help lint test cluster rollback
+
+help:
+	@printf "Usage: make <target>\n\n"
+	@printf "  lint   Run shellcheck on all scripts\n"
+	@printf "  test   Run lint + offline smoke test\n"
+	@printf "  run    Launch interactive cluster creation\n"
 
 lint:
 	@if command -v shellcheck >/dev/null 2>&1; then \
-		shellcheck lib/*.sh bin/*.sh test/*.sh || true; \
+		echo "$(SHELL_FILES)" | tr ' ' '\n' | xargs -P4 shellcheck; \
 	else \
-		echo "shellcheck not found; skipping lint"; \
+		echo "shellcheck not found — skipping lint"; \
 	fi
 
 test: lint
-	@echo "Running smoke test..."
 	@./test/run-smoke.sh
 
-create:
-	@echo "Starting GKE Cluster Creation (interactive)"
+cluster:
 	@./bin/create_gke_cluster.sh
+
+rollback:
+	@./bin/rollback_gke_cluster.sh

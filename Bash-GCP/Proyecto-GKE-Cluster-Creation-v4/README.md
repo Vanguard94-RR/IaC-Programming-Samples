@@ -1,148 +1,206 @@
 # GKE Cluster Creation — v4
 
-Automated GKE cluster creation with modular Bash library structure. Single entrypoint with subcommand dispatch, dry-run support, and centralized logging.
-
-**Version:** v4.0  
-**Autor:** Juan Manuel Cortes  
-**Última Actualización:** 2026-04-25
+Automated GKE cluster provisioning via a modular Bash library. Provides a single entrypoint with subcommand dispatch, dry-run support, centralized logging, and full rollback capability.
 
 ---
 
-## Inicio Rápido
+## Prerequisites
+
+The following tools must be installed and available on `PATH`:
+
+| Tool | Minimum version | Purpose |
+|---|---|---|
+| `gcloud` | Google Cloud SDK | GCP API calls |
+| `kubectl` | — | Kubernetes resource management |
+| `jq` | — | JSON parsing |
+| `bash` | 5.0 | Script execution |
+
+The operator must be authenticated to GCP before running any subcommand:
 
 ```bash
-# Otorgar permisos
-chmod +x bin/create_gke_cluster.sh
-
-# Autenticarse en GCP
 gcloud auth login
 gcloud config set project PROJECT_ID
+```
 
-# Crear cluster (interactivo)
+---
+
+## Installation
+
+```bash
+git clone <repository-url>
+cd Proyecto-GKE-Cluster-Creation-v4
+chmod +x bin/create_gke_cluster.sh
+```
+
+---
+
+## Quick Start
+
+```bash
+# Interactive cluster creation
 ./bin/create_gke_cluster.sh create
 
-# Crear cluster con parámetros pre-cargados (sin prompts)
+# Pre-loaded parameters (skips prompts)
 ./bin/create_gke_cluster.sh create \
   --project gnp-cfdi-qa \
   --cluster gke-gnp-cfdi-qa \
   --region us-central1 \
   --env qa
+
+# Dry run — prints all gcloud/kubectl calls without executing
+./bin/create_gke_cluster.sh create --dry-run --project gnp-cfdi-qa
 ```
 
 ---
 
-## Subcomandos
+## Subcommands
 
-| Subcomando | Descripción |
+| Subcommand | Purpose |
 |---|---|
-| `create` (default) | Creación completa de cluster GKE (10 pasos) |
-| `update-armor` | Aplicar/actualizar reglas de Cloud Armor |
-| `rollback-armor` | Restaurar Cloud Armor desde backup JSON |
-| `fix-shared-vpc` | Asociar proyecto de servicio a Shared VPC host |
-| `log4j` | Aplicar o respaldar reglas WAF de log4j |
+| `create` *(default)* | Full 10-step GKE cluster creation (interactive) |
+| `update-armor --project <id>` | Apply or update Cloud Armor security rules |
+| `rollback-armor --project <id>` | Restore Cloud Armor policy from JSON backup |
+| `fix-shared-vpc` | Associate a service project to a Shared VPC host |
+| `log4j --project <id>` | Apply or back up log4j WAF rules |
+| `rollback` | Delete all resources created for a given project |
 
-## Flags Globales
+---
 
-| Flag | Efecto |
+## Global Flags
+
+| Flag | Effect |
 |---|---|
-| `--dry-run` | Imprime todas las llamadas gcloud/kubectl sin ejecutarlas |
-| `--verbose` | Salida diagnóstica adicional |
-| `--project <id>` | Pre-cargar project ID (omite prompt) |
-| `--cluster <name>` | Pre-cargar nombre del cluster |
-| `--region <region>` | Pre-cargar región GCP |
-| `--env <qa\|uat\|pro>` | Pre-cargar ambiente (sets machine type, channel, fleet) |
-| `-h, --help` | Mostrar ayuda y salir |
+| `--dry-run` | Print all `gcloud`/`kubectl` calls without executing |
+| `--verbose` | Print verbose diagnostic output |
+| `--project <id>` | Pre-load project ID (skip prompt) |
+| `--cluster <name>` | Pre-load cluster name (skip prompt) |
+| `--region <region>` | Pre-load GCP region (skip prompt) |
+| `--env <qa\|uat\|pro>` | Pre-load environment (sets machine type, release channel, fleet project) |
+| `-h, --help` | Display usage information and exit |
 
 ---
 
-## Desarrollo y Pruebas
+## Execution Flow — `create` subcommand (10 steps)
 
-```bash
-make lint    # shellcheck en todos los scripts
-make test    # lint + smoke test (sin credenciales GCP)
-make run     # ejecución interactiva
-```
-
-El smoke test usa `NO_CLUSTER=1 DRY_RUN=true` — ejecuta el flujo completo sin ninguna llamada real a GCP.
-
----
-
-## Flujo de Ejecución (`create` — 10 pasos)
-
-1. Recopilación de parámetros (respeta flags pre-cargados)
-2. Habilitar APIs GCP (container, gkehub, compute)
-3. Selección de VPC: existente / nueva / Shared VPC
-4. Cloud NAT (obligatorio en todos los ambientes — IP estática fija)
-5. Obtención dinámica de versión GKE vía `get_cluster_versions(region, channel)`
-6. `gcloud container clusters create` con todos los flags
-7. Registro en Fleet + configuración Workload Identity
-8. Hardening: Cloud Armor policies + SSL policy TLS 1.2+
-9. Deploy Twistlock DaemonSet (solo PRO)
-10. Assets: namespace `apps`, KSA `apps-gke`, IAM SA `apps-sa`, WI binding
+1. Collect parameters — respects pre-loaded CLI flags
+2. Enable GCP APIs (`container`, `gkehub`, `compute`)
+3. VPC selection — existing VPC / new VPC / Shared VPC
+4. Cloud NAT — mandatory for all environments; always uses a reserved static IP
+5. Fetch GKE version dynamically via `get_cluster_versions(region, channel)`
+6. Execute `gcloud container clusters create` with all configuration flags
+7. Fleet registration and Workload Identity configuration
+8. Security hardening — Cloud Armor policy and SSL policy (TLS 1.2+)
+9. Twistlock DaemonSet deployment (PRO environment only)
+10. Post-creation assets — namespace `apps`, KSA `apps-gke`, IAM SA `apps-sa`, Workload Identity binding
 
 ---
 
-## Convenciones por Ambiente
+## Environment Conventions
 
-| Env | Machine type | Channel | Fleet project |
-|-----|-------------|---------|---------------|
-| PRO | n2-standard-2 | regular | gnp-fleets-pro |
-| UAT | n1-standard-2 | rapid | gnp-fleets-uat |
-| QA | n1-standard-2 | rapid | gnp-fleets-qa |
+The environment is auto-detected from the project ID suffix when `--env` is not provided.
+
+| Environment | Machine type | Release channel | Fleet project |
+|---|---|---|---|
+| PRO (`*-pro`) | `n2-standard-2` | `regular` | `gnp-fleets-pro` |
+| UAT (`*-uat`) | `n1-standard-2` | `rapid` | `gnp-fleets-uat` |
+| QA *(default)* | `n1-standard-2` | `rapid` | `gnp-fleets-qa` |
 
 Shared VPC host project: `gnp-red-data-central`
 
+For full configuration values per environment, refer to `GKE-CLUSTER-SPEC.md`.
+
 ---
 
-## Estructura
+## Rollback
+
+The `rollback` subcommand deletes all resources provisioned by `create` for a given project. Each deletion step is non-fatal — partial rollbacks proceed if individual resources are already absent.
+
+```bash
+./bin/create_gke_cluster.sh rollback --project gnp-cfdi-qa
+```
+
+Resources removed, in order:
+
+1. Fleet membership
+2. GKE cluster
+3. IAM Service Account (`apps-sa`)
+4. Cloud NAT, Cloud Router, static IP
+5. Subnet and VPC network
+6. Cloud Armor policy (`cve-canary`) and SSL policy (`sslsecure`)
+7. SSL certificate
+
+Confirmation requires the operator to type the project ID before any deletion proceeds.
+
+---
+
+## Development and Testing
+
+```bash
+make lint    # Run shellcheck on all scripts
+make test    # Run lint + offline smoke test (no GCP credentials required)
+make run     # Launch interactive cluster creation
+```
+
+The smoke test executes with `NO_CLUSTER=1 DRY_RUN=true` — the full flow runs without any real GCP calls.
+
+---
+
+## Repository Structure
 
 ```
 Proyecto-GKE-Cluster-Creation-v4/
 ├── bin/
-│   └── create_gke_cluster.sh   # Entrypoint único
+│   └── create_gke_cluster.sh     # Single entrypoint
 ├── lib/
-│   ├── ui.sh                   # UI TTY-aware (colores, spinners)
-│   ├── utils.sh                # run_or_dry, prompt_or_arg, log
-│   ├── vpc.sh                  # Selección VPC, Cloud NAT
-│   ├── shared_vpc.sh           # Shared VPC permissions, detect ranges
-│   ├── cluster.sh              # Orquestador 10 pasos, get_cluster_versions
-│   ├── hardening.sh            # Cloud Armor (update/rollback/apply)
-│   ├── workload_identity.sh    # Namespace, KSA, IAM SA, WI binding
-│   ├── twistlock.sh            # DaemonSet deploy
-│   ├── ssl.sh                  # Classic SSL certificate
-│   └── log4j.sh                # log4j WAF rules (apply/backup)
+│   ├── ui.sh                     # TTY-aware colors, spinners, output helpers
+│   ├── utils.sh                  # run_or_dry, prompt_or_arg, preflight checks
+│   ├── vpc.sh                    # VPC selection, Cloud NAT
+│   ├── shared_vpc.sh             # Shared VPC permissions, secondary range detection
+│   ├── cluster.sh                # 10-step orchestrator, get_cluster_versions
+│   ├── hardening.sh              # Cloud Armor (apply/update/rollback)
+│   ├── workload_identity.sh      # Namespace, KSA, IAM SA, Workload Identity binding
+│   ├── twistlock.sh              # Twistlock DaemonSet deployment
+│   ├── ssl.sh                    # Classic SSL certificate
+│   ├── log4j.sh                  # log4j WAF rules (apply/backup)
+│   └── rollback.sh               # Full resource teardown
 ├── config/
-│   ├── daemonset.yaml          # Twistlock manifest
-│   └── bundle.cer              # SSL certificate bundle
+│   ├── daemonset.yaml            # Twistlock DaemonSet manifest
+│   └── bundle.cer                # SSL certificate bundle
 ├── test/
-│   ├── run-smoke.sh            # Smoke test (NO_CLUSTER=1)
+│   ├── run-smoke.sh              # Smoke test runner
 │   └── fixtures/
-│       └── cluster_params.env  # Mock fixture
-├── logs/                       # Auto-creado en runtime
+│       └── cluster_params.env    # Mock parameters for offline testing
+├── logs/                         # Runtime log files (auto-created)
+├── GKE-CLUSTER-SPEC.md           # Full cluster and networking specification
 ├── Makefile
-├── CLAUDE.md
 └── README.md
 ```
 
 ---
 
-## Dependencias
+## GCP Permissions Required
 
-- `gcloud` (Google Cloud SDK), autenticado
-- `kubectl`
-- `jq`
-- `bash 5.0+`
+**Service project:**
 
-## Permisos GCP Requeridos
+| Role | Purpose |
+|---|---|
+| `roles/container.admin` | Create and manage GKE clusters |
+| `roles/compute.admin` | VPC, subnets, Cloud NAT, static IPs |
+| `roles/iam.securityAdmin` | Workload Identity IAM bindings |
 
-**Proyecto de servicio:** `roles/container.admin`, `roles/compute.admin`, `roles/iam.securityAdmin`
+**Host project (Shared VPC only):**
 
-**Proyecto host (Shared VPC):** `roles/compute.xpnAdmin`, `roles/compute.networkAdmin`
+| Role | Purpose |
+|---|---|
+| `roles/compute.xpnAdmin` | Enable Shared VPC service project association |
+| `roles/compute.networkAdmin` | Grant subnet access to GKE service accounts |
 
 ---
 
-## Archivos de Datos (raíz)
+## Data Files
 
-- `cluster.csv` — nombres de clusters para operaciones batch
-- `data-script.csv` — formato: `cluster_name,lb_url,backend_name,zone,project_id` (usado por `update-armor`)
-- `log4j.csv` — lista de clusters para reglas log4j batch
+| File | Purpose |
+|---|---|
+| `cluster.csv` | Cluster names for batch operations |
+| `data-script.csv` | `cluster_name,lb_url,backend_name,zone,project_id` — used by `update-armor` |
+| `backend-list.txt` | Backend service names for Cloud Armor synchronization |
