@@ -23,18 +23,20 @@ get_node_subnet_cidr() {
 
 # calculate_secondary_ranges: derive secondary ranges from /22 base
 # Layout (within X.X.o3.0/22 — minimum /22 required):
-#   nodes         = base/28          (o3.0/28,    16 IPs — primary subnet)
-#   gap-low       = o3.16-.127      (112 IPs — CIDR alignment, unallocated)
-#   servicios-ext = o3.128/25       (128 IPs — ILB / non-GKE services)
-#   pods          = (o3+1).0/23     (512 IPs — 4 nodes × 128 IPs/node for 110 pods)
-#   servicios     = (o3+3).0/24     (256 IPs — GKE services range)
+#   nodes          = base/28         (o3.0/28,    16 IPs — primary subnet)
+#   gap            = o3.16/28        (16 IPs  — CIDR alignment, unavoidable)
+#   servicios-ext-2= o3.32/27        (32 IPs  — extra services / ILB)
+#   pods-ext       = o3.64/26        (64 IPs  — extra pods / ILB)
+#   servicios-ext  = o3.128/25       (128 IPs — extra services / ILB)
+#   pods           = (o3+1).0/23     (512 IPs — GKE pods range)
+#   servicios      = (o3+3).0/24     (256 IPs — GKE services range)
 calculate_secondary_ranges() {
     local base_ip o1 o2 o3
     base_ip=$(echo "$1" | cut -d'/' -f1)
     o1=$(echo "$base_ip" | cut -d'.' -f1)
     o2=$(echo "$base_ip" | cut -d'.' -f2)
     o3=$(echo "$base_ip" | cut -d'.' -f3)
-    echo "pods=${o1}.${o2}.$(( o3 + 1 )).0/23,servicios=${o1}.${o2}.$(( o3 + 3 )).0/24,servicios-ext=${o1}.${o2}.${o3}.128/25"
+    echo "pods=${o1}.${o2}.$(( o3 + 1 )).0/23,servicios=${o1}.${o2}.$(( o3 + 3 )).0/24,servicios-ext=${o1}.${o2}.${o3}.128/25,pods-ext=${o1}.${o2}.${o3}.64/26,servicios-ext-2=${o1}.${o2}.${o3}.32/27"
 }
 
 # validate_secondary_ranges: verify subnet has secondary ranges
