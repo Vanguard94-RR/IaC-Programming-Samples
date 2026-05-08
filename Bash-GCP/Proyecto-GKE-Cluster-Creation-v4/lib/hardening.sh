@@ -12,6 +12,7 @@ WAF_ALLOWED_IPS="35.238.84.248,34.121.197.40"
 
 cmd_update_armor() {
     step "Cloud Armor Rules Update"
+    _preflight_checks
 
     prompt_or_arg project_id "${ARG_PROJECT:-}" "GCP Project ID" ""
     [ -z "${project_id:-}" ] && { error "project_id required"; return 1; }
@@ -45,6 +46,7 @@ cmd_update_armor() {
 
 cmd_rollback_armor() {
     step "Cloud Armor Rollback"
+    _preflight_checks
 
     prompt_or_arg project_id "${ARG_PROJECT:-}" "GCP Project ID" ""
     [ -z "${project_id:-}" ] && { error "project_id required"; return 1; }

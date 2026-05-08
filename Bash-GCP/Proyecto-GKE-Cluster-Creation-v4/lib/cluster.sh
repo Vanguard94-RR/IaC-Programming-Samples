@@ -218,6 +218,7 @@ _build_cluster_flags() {
 
 cmd_create() {
     print_banner_box "GKE Cluster Creation — v4.0"
+    _preflight_checks
 
     _collect_params
 
