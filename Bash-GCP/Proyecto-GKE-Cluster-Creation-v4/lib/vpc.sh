@@ -109,6 +109,11 @@ cmd_vpc_select() {
                 --filter="region:${region}" \
                 --format="value(name)" 2>/dev/null | head -1 || true)
             prompt_or_arg SUBNET_NAME "$detected_subnet" "Subnet name" "${detected_subnet:-$VPC_NAME}"
+            if ! gcloud compute networks subnets describe "$SUBNET_NAME" \
+                --project="${project_id}" --region="${region}" &>/dev/null; then
+                error "Subnet '$SUBNET_NAME' not found in region '${region}'. Use option 2 to create it."
+                return 1
+            fi
             local ranges
             ranges=$(gcloud compute networks subnets describe "$SUBNET_NAME" \
                 --project="${project_id}" --region="${region}" \
@@ -127,8 +132,13 @@ cmd_vpc_select() {
             ;;
         2)
             local vpc_ip
-            read_input vpc_ip "${CYAN}Enter IP range for new VPC (e.g. 10.0.0.0/24): ${NC}"
-            [ -z "$vpc_ip" ] && vpc_ip="10.0.0.0/24"
+            read_input vpc_ip "${CYAN}Enter IP range for new VPC (e.g. 10.0.0.0/22): ${NC}"
+            [ -z "$vpc_ip" ] && vpc_ip="10.0.0.0/22"
+
+            if ! echo "$vpc_ip" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$'; then
+                error "Invalid CIDR format: $vpc_ip (expected x.x.x.x/prefix)"
+                return 1
+            fi
 
             local new_vpc_name="${project_id}-vpc"
             local new_subnet_name="${project_id}-subnet"
@@ -143,19 +153,22 @@ cmd_vpc_select() {
             secondary_ranges=$(calculate_secondary_ranges "$vpc_ip")
             node_cidr=$(get_node_subnet_cidr "$vpc_ip")
 
-            run_or_dry gcloud compute networks subnets create "$new_subnet_name" \
+            if ! run_or_dry gcloud compute networks subnets create "$new_subnet_name" \
                 --project="${project_id}" \
                 --range="$node_cidr" \
                 --stack-type=IPV4_ONLY \
                 --network="$new_vpc_name" \
                 --region="${region}" \
                 --secondary-range "$secondary_ranges" \
-                --enable-private-ip-google-access 2>/dev/null || \
-            run_or_dry gcloud compute networks subnets update "$new_subnet_name" \
-                --project="${project_id}" \
-                --region="${region}" \
-                --add-secondary-ranges "$secondary_ranges" 2>/dev/null || \
-            warn "Secondary ranges already exist"
+                --enable-private-ip-google-access 2>/dev/null; then
+                if ! run_or_dry gcloud compute networks subnets update "$new_subnet_name" \
+                    --project="${project_id}" \
+                    --region="${region}" \
+                    --add-secondary-ranges "$secondary_ranges" 2>/dev/null; then
+                    error "Failed to create subnet $new_subnet_name"
+                    return 1
+                fi
+            fi
 
             VPC_NAME="$new_vpc_name"
             SUBNET_NAME="$new_subnet_name"
@@ -163,6 +176,7 @@ cmd_vpc_select() {
             SERVICES_RANGE_NAME="servicios"
             ;;
         3)
+            # shellcheck disable=SC2034
             IS_SHARED_VPC="true"
             prompt_or_arg SHARED_HOST "" "Host project ID" "gnp-red-data-central"
             prompt_or_arg VPC_NAME "" "Shared VPC name" "gnp-datalake-qa"
@@ -191,7 +205,7 @@ cmd_vpc_select() {
     _setup_cloud_nat
 }
 
-# _setup_cloud_nat: creates Cloud Router + NAT if needed (mandatory for all envs)
+# _setup_cloud_nat: creates Cloud Router + NAT — mandatory for all envs (qa/uat/pro), always fixed static IP
 _setup_cloud_nat() {
     step "Cloud NAT Configuration"
 

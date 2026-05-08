@@ -7,7 +7,9 @@ set -o pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/utils.sh"
 
 # Globals set by this module (used by cluster.sh)
+# shellcheck disable=SC2034
 SHARED_HOST=""
+# shellcheck disable=SC2034
 IS_SHARED_VPC="false"
 PODS_RANGE_NAME=""
 SERVICES_RANGE_NAME=""

@@ -7,6 +7,7 @@ set -o pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/utils.sh"
 
 create_ssl_certificate() {
+    # shellcheck disable=SC2154
     local ssl_cert_name="${project_id}-ssl-cert"
     local cert_file
     cert_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../config/bundle.cer"
