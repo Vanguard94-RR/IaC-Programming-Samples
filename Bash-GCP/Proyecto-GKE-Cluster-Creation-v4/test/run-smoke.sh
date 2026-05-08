@@ -64,6 +64,14 @@ run_test "T7: log4j --dry-run" \
     "$ENTRY" log4j --dry-run --project test-proj
 run_test_fail "T8: _create_nat must not use auto-allocate mode" \
     grep -q "auto-allocate-nat-external-ips" "$ROOT_DIR/lib/vpc.sh"
+run_test_fail "T9: --env invalid value exits non-zero" \
+    "$ENTRY" create --dry-run \
+    --project test-proj --cluster test-gke \
+    --region us-central1 --env badvalue
+run_test "T10: --env pro with dry-run exits 0" \
+    "$ENTRY" create --dry-run \
+    --project test-proj --cluster test-gke \
+    --region us-central1 --env pro
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
