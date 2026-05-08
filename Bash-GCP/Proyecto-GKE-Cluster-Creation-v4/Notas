@@ -1,0 +1,116 @@
+No usar token
+
+el cluster por default, debe ser creado como cluster regional con 2 nodos en una sola zona
+
+para pro el tipo de maquina debe ser 
+
+cambiar la logica de la vpc
+
+verificar si existe la vpc
+
+si si existe la vpc, preguntar si se quiere usar la actual o si se quiere crear una nueva o si se quiere usar una shared vpc
+
+si se quiere usar la actual, continuar con el proceso
+
+si se quiere crear una nueva, crear la vpc y continuar con el proceso
+
+si se quiere usar una shared vpc, solicitar los datos de la vpc y continuar con el proceso
+
+aplicar twistlock
+
+se requiere crear un namespace llamado applications
+
+se requiere crear una cuenta de servicio en el cluster llamada applications-gke en el namespace applications
+
+se requiere crear una cuenta de servicio en iam llamada applications-sa en iam
+gcloud iam service-accounts create applications-sa --namespace applications
+kubectl create serviceaccount applications-sa -n applications
+
+gcloud iam service-accounts add-iam-policy-binding \
+--role="roles/iam.workloadIdentityUser" \
+--member="serviceAccount:idproject.svc.id.goog[applications/applications-gke]" applications-sa
+
+kubectl annotate serviceaccount applications-gke -n applications iam.gke.io/gcp-service-account=applications-sa
+
+ns: applications
+cs_gke: applications-gke
+idproject: id del proyecto gcp
+cs_iam: applications-sa
+
+
+
+kubectl create namespace applications
+
+kubectl create serviceaccount applications-gke -n applications
+
+gcloud iam service-accounts add-iam-policy-binding \
+--role="roles/iam.workloadIdentityUser" \
+--member="serviceAccount:idproject.svc.id.goog[applications/applications-gke]" applications-sa  
+
+kubectl annotate serviceaccount cs_gke -n ns iam.gke.io/gcp-service-account=nombre_cs_iam
+
+
+/tesoreria/cuentas-cobrar/bff/*		
+/tesoreria/cuentas-cobrar/cifras-control/*		
+/tesoreria/referencias-bancarias/*		
+/tesoreria/cuentas-cobrar/trazabilidad-lectura/*	
+/tesoreria/cuentas-cobrar/dispatcher/*		
+/tesoreria/cuentas-cobrar/*		
+/tesoreria/cuentas-bancarias-trazabilidad/*	
+/tesoreria/cuentas-bancarias/*		
+/tesoreria/cuentas-bancarias		
+/tesoreria/administracion/*	 
+
+gcloud iam service-accounts add-iam-policy-binding --role="roles/iam.workloadIdentityUser" --member="serviceAccount:gnp-stela-pro.svc.id.goog[default/administrador-tesoreria-account]" stela-tesoreria-administracion@gnp-stela-pro.iam.gserviceaccount.com 
+
+kubectl annotate serviceaccount administrador-tesoreria-account -n default iam.gke.io/gcp-service-account=stela-tesoreria-administracion@gnp-stela-pro.iam.gserviceaccount.com
+
+
+
+
+gcloud iam service-accounts add-iam-policy-binding "administrador-tesoreria-account" --role "roles/iam.workloadIdentityUser" --member "serviceAccount:gnp-stela-pro.svc.id.goog[default/administrador-tesoreria-account]" --project "gnp-stela-pro"
+
+
+gke-gnp-administracion
+gke-gnp-bff-tesoreria-empleados	 	
+gke-gnp-cuentas-bancarias	 
+gke-gnp-cuentas-bancarias-trazabilidad	
+gke-gnp-cuentas-cobrar	 
+gke-gnp-cuentas-cobrar-cifras-control	 
+gke-gnp-cuentas-cobrar-dispatcher	 
+gke-gnp-cuentas-cobrar-instrucciones
+gke-gnp-cuentas-cobrar-trazabilidad-escritura
+gke-gnp-cuentas-cobrar-trazabilidad-lectura
+
+
+
+gcloud container clusters update gke-gnp-vencsiniestros-vidaind-uat --fleet-project=gnp-fleets-uat --zone=us-central1-f --project=gnp-vencsiniestros-vidaind-uat
+
+gcloud projects add-iam-policy-binding gnp-vencsiniestros-vidaind-uat \
+    --member="serviceAccount:service-1034622372978@gcp-sa-gkehub.iam.gserviceaccount.com" \
+    --role="roles/container.serviceAgent"
+
+
+verificar cloud nat
+
+
+para pro tomar stela pro
+
+para uat y qa tomar stela uat y qa
+
+
+Solo cuando es shared vpc
+la cuenta de servicio que se cree como raiz debe aplicarse compute network user en el proyecto red central a nivel iam applications-sa 
+
+para ambientes previos es rapid para prod si es regular
+
+        --network="projects/$project_id/global/networks/$VPC_NAME" \
+        --subnetwork="projects/$project_id/regions/$region/subnetworks/$SUBNET_NAME" \
+
+
+el namespace debe ser apps no applications
+
+para las cuentas de servicio de kubernetes y iam los valores por defecto deben ser apps-gke y apps-sa respectivamente
+pero el script debe permitir al usuaro cambiarlos si asi lo desea
+
+Se ajusta el codigo de workloadidentity para solicitar los nombres de los assets

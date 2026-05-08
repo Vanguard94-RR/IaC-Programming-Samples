@@ -12,6 +12,6 @@ test: lint
 	@echo "Running smoke test..."
 	@./test/run-smoke.sh
 
-run:
+create:
 	@echo "Starting GKE Cluster Creation (interactive)"
 	@./bin/create_gke_cluster.sh

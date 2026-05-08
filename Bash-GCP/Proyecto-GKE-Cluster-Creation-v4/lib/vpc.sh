@@ -91,16 +91,24 @@ cmd_vpc_select() {
         info "[1] Create new VPC"
         info "[2] Use Shared VPC"
         read_input menu_opt "${CYAN}Select option [1-2]: ${NC}"
-        [ "$menu_opt" = "1" ] && menu_opt="2"
-        [ "$menu_opt" = "2" ] && menu_opt="3"
+        case "$menu_opt" in
+            1) menu_opt="2" ;;
+            2) menu_opt="3" ;;
+        esac
     fi
 
     case "$menu_opt" in
         1)
             info "Available VPCs:"
             gcloud compute networks list --project="${project_id}" --format="table(name,subnetworkMode)"
-            prompt_or_arg VPC_NAME "" "VPC name" "$vpc_exists"
-            prompt_or_arg SUBNET_NAME "" "Subnet name" "$vpc_exists"
+            prompt_or_arg VPC_NAME "$vpc_exists" "VPC name" "$vpc_exists"
+            local detected_subnet
+            detected_subnet=$(gcloud compute networks subnets list \
+                --network="$VPC_NAME" \
+                --project="${project_id}" \
+                --filter="region:${region}" \
+                --format="value(name)" 2>/dev/null | head -1 || true)
+            prompt_or_arg SUBNET_NAME "$detected_subnet" "Subnet name" "${detected_subnet:-$VPC_NAME}"
             local ranges
             ranges=$(gcloud compute networks subnets describe "$SUBNET_NAME" \
                 --project="${project_id}" --region="${region}" \
@@ -122,7 +130,10 @@ cmd_vpc_select() {
             read_input vpc_ip "${CYAN}Enter IP range for new VPC (e.g. 10.0.0.0/24): ${NC}"
             [ -z "$vpc_ip" ] && vpc_ip="10.0.0.0/24"
 
-            run_or_dry gcloud compute networks create "${project_id}" \
+            local new_vpc_name="${project_id}-vpc"
+            local new_subnet_name="${project_id}-subnet"
+
+            run_or_dry gcloud compute networks create "$new_vpc_name" \
                 --project="${project_id}" \
                 --subnet-mode=custom \
                 --mtu=1460 \
@@ -132,22 +143,22 @@ cmd_vpc_select() {
             secondary_ranges=$(calculate_secondary_ranges "$vpc_ip")
             node_cidr=$(get_node_subnet_cidr "$vpc_ip")
 
-            run_or_dry gcloud compute networks subnets create "${project_id}" \
+            run_or_dry gcloud compute networks subnets create "$new_subnet_name" \
                 --project="${project_id}" \
                 --range="$node_cidr" \
                 --stack-type=IPV4_ONLY \
-                --network="${project_id}" \
+                --network="$new_vpc_name" \
                 --region="${region}" \
                 --secondary-range "$secondary_ranges" \
                 --enable-private-ip-google-access 2>/dev/null || \
-            run_or_dry gcloud compute networks subnets update "${project_id}" \
+            run_or_dry gcloud compute networks subnets update "$new_subnet_name" \
                 --project="${project_id}" \
                 --region="${region}" \
                 --add-secondary-ranges "$secondary_ranges" 2>/dev/null || \
             warn "Secondary ranges already exist"
 
-            VPC_NAME="${project_id}"
-            SUBNET_NAME="${project_id}"
+            VPC_NAME="$new_vpc_name"
+            SUBNET_NAME="$new_subnet_name"
             PODS_RANGE_NAME="pods"
             SERVICES_RANGE_NAME="servicios"
             ;;

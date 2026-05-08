@@ -30,6 +30,7 @@ cluster_scope=""
 fleet_id=""
 cluster_version=""
 cluster_access_scope=""
+authorized_cidr=""
 
 get_cluster_versions() {
     local target_region="${1:-us-central1}"
@@ -113,6 +114,14 @@ _collect_params() {
     prompt_or_arg region "${ARG_REGION:-}" "GCP region" "us-central1"
 
     local env="${ARG_ENV:-}"
+    if [ -z "$env" ]; then
+        case "$project_id" in
+            *-pro) env="pro" ;;
+            *-uat) env="uat" ;;
+            *)     env="qa"  ;;
+        esac
+    fi
+    info "Environment: $env"
     case "$env" in
         pro)
             machine_type="${machine_type:-n2-standard-2}"
@@ -157,6 +166,19 @@ _collect_params() {
         private_nodes="true"
         read_input control_plane_ip "${CYAN}Control plane CIDR (e.g. 172.19.0.0/28): ${NC}"
         control_plane_ip="${control_plane_ip:-172.19.0.0/28}"
+        local current_ip
+        current_ip=$(curl -4 -s --max-time 5 ifconfig.me 2>/dev/null \
+            || curl -4 -s --max-time 5 api.ipify.org 2>/dev/null \
+            || true)
+        if [ -n "$current_ip" ]; then
+            local ip3 ip4_net
+            ip3=$(echo "$current_ip" | cut -d. -f1-3)
+            ip4_net=$(( $(echo "$current_ip" | cut -d. -f4) & 240 ))
+            authorized_cidr="${ip3}.${ip4_net}/28"
+            info "Authorizing control plane access: ${authorized_cidr}"
+        else
+            warn "Could not detect public IP — control plane may be unreachable after create"
+        fi
     fi
 
     local scope_choice
@@ -174,7 +196,9 @@ _build_cluster_flags() {
     node_locations_flag="--node-locations=${zone}"
 
     if [ "$private_nodes" = "true" ]; then
-        private_flags="--enable-private-nodes --master-ipv4-cidr=${control_plane_ip} --enable-master-authorized-networks"
+        local authorized_net=""
+        [ -n "${authorized_cidr:-}" ] && authorized_net="--master-authorized-networks=${authorized_cidr}"
+        private_flags="--enable-private-nodes --master-ipv4-cidr=${control_plane_ip} --enable-master-authorized-networks ${authorized_net}"
     else
         private_flags="--no-enable-private-nodes"
     fi
@@ -271,12 +295,8 @@ cmd_create() {
         return 0
     fi
 
-    local confirm_hardening
-    read_input confirm_hardening "${CYAN}Apply security hardening? (Y/N): ${NC}"
-    if [[ "${confirm_hardening:-N}" =~ ^[Yy]$ ]]; then
-        apply_cluster_hardening
-        create_ssl_certificate
-    fi
+    apply_cluster_hardening
+    create_ssl_certificate
 
     if [[ "$project_id" =~ -pro$ ]]; then
         local confirm_twistlock
