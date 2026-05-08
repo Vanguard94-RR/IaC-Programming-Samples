@@ -27,8 +27,8 @@ fi
 bold() { printf "%s%s%s" "${BOLD}" "*$*" "${NC}"; }
 
 # Verbose logging control
-: ${VERBOSE:=false}
-: ${DRY_RUN:=false}
+: "${VERBOSE:=false}"
+: "${DRY_RUN:=false}"
 
 vprint() {
     if [ "${VERBOSE}" = "true" ]; then
@@ -172,7 +172,7 @@ print_command_box() {
     local cmd="$2"
     local min_width=44
     local content_len=${#title}
-    [ ${#cmd} -gt $content_len ] && content_len=${#cmd}
+    [ ${#cmd} -gt "$content_len" ] && content_len=${#cmd}
     local width=$(( content_len + 4 > min_width ? content_len + 4 : min_width ))
     local bar=""
     for ((i=1; i<=width; i++)); do bar+="═"; done
