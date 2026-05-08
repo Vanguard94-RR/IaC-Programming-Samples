@@ -273,7 +273,6 @@ Used when the cluster's project is a service project attached to a Shared VPC ho
 | `container.googleapis.com` | GKE cluster management |
 | `gkehub.googleapis.com` | Fleet registration |
 | `compute.googleapis.com` | VPC, subnets, Cloud NAT, static IPs |
-| `certificatemanager.googleapis.com` | SSL certificate management |
 | `containersecurity.googleapis.com` | Container security posture |
 
 ---
