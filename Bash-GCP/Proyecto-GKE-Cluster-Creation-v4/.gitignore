@@ -3,6 +3,6 @@
 *.cer
 *.log
 
-*CLAUDE.md
-*.claude/*
-*docs/*
+CLAUDE.md
+.claude/
+docs/
