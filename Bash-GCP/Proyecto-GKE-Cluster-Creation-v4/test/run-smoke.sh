@@ -72,6 +72,10 @@ run_test "T10: --env pro with dry-run exits 0" \
     "$ENTRY" create --dry-run \
     --project test-proj --cluster test-gke \
     --region us-central1 --env pro
+run_test "T11: rollback --dry-run exits 0" \
+    "$ENTRY" rollback --dry-run \
+    --project test-proj --cluster test-gke \
+    --region us-central1 --env qa
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"

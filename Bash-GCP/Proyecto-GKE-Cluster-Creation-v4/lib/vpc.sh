@@ -59,6 +59,7 @@ cmd_vpc_select() {
             gcloud compute networks list --project="${project_id}" --format="table(name,subnetworkMode)"
             prompt_or_arg VPC_NAME "$vpc_exists" "VPC name" "$vpc_exists"
             local detected_subnet
+            # shellcheck disable=SC2154
             detected_subnet=$(gcloud compute networks subnets list \
                 --network="$VPC_NAME" \
                 --project="${project_id}" \

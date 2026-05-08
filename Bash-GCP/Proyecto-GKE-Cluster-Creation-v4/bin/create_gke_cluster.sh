@@ -6,7 +6,7 @@ set -o pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
 # Source all modules
-for _lib in ui utils shared_vpc vpc twistlock ssl workload_identity hardening cluster; do
+for _lib in ui utils shared_vpc vpc twistlock ssl workload_identity hardening cluster rollback; do
     # shellcheck source=/dev/null
     . "$SCRIPT_DIR/lib/${_lib}.sh"
 done
@@ -61,5 +61,6 @@ case "$SUBCOMMAND" in
     rollback-armor) cmd_rollback_armor ;;
     fix-shared-vpc) cmd_fix_shared_vpc ;;
     log4j)          cmd_log4j ;;
+    rollback)       cmd_rollback ;;
     *)              error "Unknown subcommand: $SUBCOMMAND"; usage; exit 1 ;;
 esac
