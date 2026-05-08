@@ -14,23 +14,26 @@ SUBNET_NAME=""
 IS_SHARED_VPC="false"
 NAT_IP_NAME=""
 
-# get_node_subnet_cidr: returns /26 block (node VM IPs) from base CIDR
+# get_node_subnet_cidr: returns /28 block (node VM IPs, max 16) from base CIDR
 get_node_subnet_cidr() {
     local base_ip
     base_ip=$(echo "$1" | cut -d'/' -f1)
-    echo "${base_ip}/26"
+    echo "${base_ip}/28"
 }
 
-# calculate_secondary_ranges: derive pods/services /24 blocks from /22 base
-# Layout: nodes=base/26, pods=(o3+1)/24, services=(o3+2)/24 — all within /22
+# calculate_secondary_ranges: carve pods/services from same /24 as nodes
+# Layout (all within X.X.X.0/24):
+#   nodes    = base/28    (.0-.15,    16 IPs — max 4 nodes)
+#   gap      = .16-.63    (48 IPs    — CIDR alignment, unallocated)
+#   servicios = base+64/26 (.64-.127,  64 IPs)
+#   pods     = base+128/25 (.128-.255, 128 IPs — 4 nodes × 32 pods/node)
 calculate_secondary_ranges() {
-    local base_ip o1 o2 o3 o4
+    local base_ip o1 o2 o3
     base_ip=$(echo "$1" | cut -d'/' -f1)
     o1=$(echo "$base_ip" | cut -d'.' -f1)
     o2=$(echo "$base_ip" | cut -d'.' -f2)
     o3=$(echo "$base_ip" | cut -d'.' -f3)
-    o4=$(echo "$base_ip" | cut -d'.' -f4)
-    echo "pods=${o1}.${o2}.$(( o3 + 1 )).${o4}/24,servicios=${o1}.${o2}.$(( o3 + 2 )).${o4}/24"
+    echo "pods=${o1}.${o2}.${o3}.128/25,servicios=${o1}.${o2}.${o3}.64/26"
 }
 
 # validate_secondary_ranges: verify subnet has secondary ranges
@@ -143,8 +146,8 @@ cmd_vpc_select() {
 
             local vpc_prefix
             vpc_prefix=$(echo "$vpc_ip" | cut -d'/' -f2)
-            if [ "$vpc_prefix" -gt 22 ]; then
-                error "CIDR too small: /$vpc_prefix (minimum /22 required — pods need adjacent /24 block)"
+            if [ "$vpc_prefix" -gt 24 ]; then
+                error "CIDR too small: /$vpc_prefix (minimum /24 required — pods need .128/25 within same octet)"
                 return 1
             fi
 
