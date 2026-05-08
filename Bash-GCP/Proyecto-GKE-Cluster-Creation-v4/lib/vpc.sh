@@ -14,58 +14,11 @@ SUBNET_NAME=""
 IS_SHARED_VPC="false"
 NAT_IP_NAME=""
 
-# get_node_subnet_cidr: returns /24 block (node subnet) from base CIDR
-# Full /24 eliminates alignment gap — all IPs usable (nodes, ILBs, misc)
-get_node_subnet_cidr() {
-    local base_ip
-    base_ip=$(echo "$1" | cut -d'/' -f1)
-    echo "${base_ip}/24"
-}
-
-# calculate_secondary_ranges: derive servicios /24 and pods /23 from /22 base
-# Layout (within X.X.o3.0/22 — minimum /22 required, zero waste):
-#   primary   = base/24        (o3.0/24,    256 IPs — nodes, ILBs)
-#   servicios = (o3+1).0/24    (256 IPs   — GKE services)
-#   pods      = (o3+2).0/23    (512 IPs   — GKE pods, 4 nodes × 128 IPs/node)
-#   NOTE: /22 requires o3 = multiple of 4 → o3+2 always even → valid /23 address
-calculate_secondary_ranges() {
-    local base_ip o1 o2 o3
-    base_ip=$(echo "$1" | cut -d'/' -f1)
-    o1=$(echo "$base_ip" | cut -d'.' -f1)
-    o2=$(echo "$base_ip" | cut -d'.' -f2)
-    o3=$(echo "$base_ip" | cut -d'.' -f3)
-    echo "pods=${o1}.${o2}.$(( o3 + 2 )).0/23,servicios=${o1}.${o2}.$(( o3 + 1 )).0/24"
-}
-
-# validate_secondary_ranges: verify subnet has secondary ranges
-validate_secondary_ranges() {
-    local subnet="$1"
-    if [ -z "$subnet" ]; then
-        error "Subnet name required for validation"
-        return 1
-    fi
-
-    if [ "${NO_CLUSTER:-0}" = "1" ]; then
-        warn "[NO_CLUSTER] Skipping secondary range validation"
-        return 0
-    fi
-
-    local ranges
-    ranges=$(gcloud compute networks subnets describe "$subnet" \
-        --project="${project_id:-}" --region="${region:-us-central1}" \
-        --format="json" 2>/dev/null \
-        | jq -r '.secondaryIpRanges[]?.rangeName' 2>/dev/null || true)
-
-    if [ -z "$ranges" ]; then
-        error "No secondary ranges found in subnet '$subnet'"
-        return 1
-    fi
-    success "Secondary ranges validated in '$subnet': $(echo "$ranges" | tr '\n' ' ')"
-}
 
 # cmd_vpc_select: interactive VPC selection
-# Sets globals: VPC_NAME, SUBNET_NAME, IS_SHARED_VPC, SHARED_HOST,
-#               PODS_RANGE_NAME, SERVICES_RANGE_NAME
+# Sets globals: VPC_NAME, SUBNET_NAME, IS_SHARED_VPC, SHARED_HOST
+# PODS_RANGE_NAME, SERVICES_RANGE_NAME set only for existing/shared VPC paths
+# (new VPC path leaves them empty — GKE auto-allocates secondary ranges)
 cmd_vpc_select() {
     step "VPC Configuration"
 
@@ -73,8 +26,6 @@ cmd_vpc_select() {
         warn "[NO_CLUSTER] Skipping VPC selection — using defaults"
         VPC_NAME="${project_id:-test-vpc}"
         SUBNET_NAME="${project_id:-test-subnet}"
-        PODS_RANGE_NAME="pods"
-        SERVICES_RANGE_NAME="servicios"
         IS_SHARED_VPC="false"
         _setup_cloud_nat
         return 0
@@ -137,18 +88,11 @@ cmd_vpc_select() {
             ;;
         2)
             local vpc_ip
-            read_input vpc_ip "${CYAN}Enter IP range for new VPC (e.g. 10.0.0.0/22): ${NC}"
+            read_input vpc_ip "${CYAN}Enter IP range for new VPC (e.g. 10.100.20.0/22): ${NC}"
             [ -z "$vpc_ip" ] && vpc_ip="10.0.0.0/22"
 
             if ! echo "$vpc_ip" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$'; then
                 error "Invalid CIDR format: $vpc_ip (expected x.x.x.x/prefix)"
-                return 1
-            fi
-
-            local vpc_prefix
-            vpc_prefix=$(echo "$vpc_ip" | cut -d'/' -f2)
-            if [ "$vpc_prefix" -gt 22 ]; then
-                error "CIDR too small: /$vpc_prefix (minimum /22 required — pods need /23 spanning 2 adjacent octets)"
                 return 1
             fi
 
@@ -161,32 +105,19 @@ cmd_vpc_select() {
                 --mtu=1460 \
                 --bgp-routing-mode=regional 2>/dev/null || warn "VPC already exists"
 
-            local secondary_ranges node_cidr
-            secondary_ranges=$(calculate_secondary_ranges "$vpc_ip")
-            node_cidr=$(get_node_subnet_cidr "$vpc_ip")
-
             if ! run_or_dry gcloud compute networks subnets create "$new_subnet_name" \
                 --project="${project_id}" \
-                --range="$node_cidr" \
+                --range="$vpc_ip" \
                 --stack-type=IPV4_ONLY \
                 --network="$new_vpc_name" \
                 --region="${region}" \
-                --secondary-range "$secondary_ranges" \
                 --enable-private-ip-google-access; then
-                info "Subnet create failed — attempting add-secondary-ranges on existing subnet..."
-                if ! run_or_dry gcloud compute networks subnets update "$new_subnet_name" \
-                    --project="${project_id}" \
-                    --region="${region}" \
-                    --add-secondary-ranges "$secondary_ranges"; then
-                    error "Failed to create subnet $new_subnet_name"
-                    return 1
-                fi
+                error "Failed to create subnet $new_subnet_name"
+                return 1
             fi
 
             VPC_NAME="$new_vpc_name"
             SUBNET_NAME="$new_subnet_name"
-            PODS_RANGE_NAME="pods"
-            SERVICES_RANGE_NAME="servicios"
             ;;
         3)
             # shellcheck disable=SC2034
