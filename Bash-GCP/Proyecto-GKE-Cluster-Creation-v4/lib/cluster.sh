@@ -120,6 +120,10 @@ _collect_params() {
             *)     env="qa"  ;;
         esac
     fi
+    case "$env" in
+        pro|uat|qa) ;;
+        *) error "Invalid env: '$env'. Must be: qa, uat, pro"; return 1 ;;
+    esac
     info "Environment: $env"
     case "$env" in
         pro)
@@ -134,7 +138,7 @@ _collect_params() {
             num_nodes="${num_nodes:-2}"
             fleet_id="${fleet_id:-gnp-fleets-uat}"
             ;;
-        qa|*)
+        qa)
             machine_type="${machine_type:-n1-standard-2}"
             channel="${channel:-rapid}"
             num_nodes="${num_nodes:-1}"
