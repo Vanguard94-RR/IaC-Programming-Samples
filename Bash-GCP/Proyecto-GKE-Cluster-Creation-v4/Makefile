@@ -8,7 +8,8 @@ help:
 	@printf "Usage: make <target>\n\n"
 	@printf "  lint   Run shellcheck on all scripts\n"
 	@printf "  test   Run lint + offline smoke test\n"
-	@printf "  run    Launch interactive cluster creation\n"
+	@printf "  cluster   Launch interactive cluster creation\n"
+	@printf "  rollback   Rollback GKE cluster\n"
 
 lint:
 	@if command -v shellcheck >/dev/null 2>&1; then \
