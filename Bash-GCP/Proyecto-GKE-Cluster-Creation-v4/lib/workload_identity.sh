@@ -23,6 +23,7 @@ create_workload_identity_assets() {
     info "KSA:        $ksa_name"
     info "IAM SA:     $iam_sa_name"
 
+    # shellcheck disable=SC2154
     if ! run_or_dry gcloud container clusters get-credentials "${cluster_name}" \
         --region "${region}" --project "${project_id}" --quiet; then
         error "Could not get cluster credentials"

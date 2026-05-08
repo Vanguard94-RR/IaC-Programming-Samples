@@ -31,6 +31,7 @@ ARG_CLUSTER=""
 ARG_REGION=""
 ARG_ENV=""
 
+# shellcheck disable=SC2034
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
         --dry-run)   DRY_RUN=true; shift ;;
