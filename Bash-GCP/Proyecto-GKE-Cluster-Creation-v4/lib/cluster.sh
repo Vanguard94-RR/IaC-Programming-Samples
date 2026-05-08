@@ -110,7 +110,8 @@ _collect_params() {
     [ -z "$project_id" ] && { error "project_id required"; return 1; }
 
     prompt_or_arg cluster_name "${ARG_CLUSTER:-}" "Cluster name" "gke-${project_id}"
-    prompt_or_arg region "${ARG_REGION:-}" "GCP region" "us-central1"
+    region="${ARG_REGION:-us-central1}"
+    info "Region: $region"
 
     local env="${ARG_ENV:-}"
     if [ -z "$env" ]; then
@@ -161,36 +162,24 @@ _collect_params() {
         return 0
     fi
 
-    local cluster_type
-    read_input cluster_type "${CYAN}Cluster type: [1] Private  [2] Public (default: 1): ${NC}"
-    if [ "${cluster_type:-1}" = "2" ]; then
-        private_nodes="false"
+    private_nodes="true"
+    control_plane_ip="172.19.0.0/28"
+    info "Control plane CIDR: $control_plane_ip"
+    local current_ip
+    current_ip=$(curl -4 -s --max-time 5 ifconfig.me 2>/dev/null \
+        || curl -4 -s --max-time 5 api.ipify.org 2>/dev/null \
+        || true)
+    if [ -n "$current_ip" ]; then
+        local ip3 ip4_net
+        ip3=$(echo "$current_ip" | cut -d. -f1-3)
+        ip4_net=$(( $(echo "$current_ip" | cut -d. -f4) & 240 ))
+        authorized_cidr="${ip3}.${ip4_net}/28"
+        info "Authorizing control plane access: ${authorized_cidr}"
     else
-        private_nodes="true"
-        read_input control_plane_ip "${CYAN}Control plane CIDR (e.g. 172.19.0.0/28): ${NC}"
-        control_plane_ip="${control_plane_ip:-172.19.0.0/28}"
-        local current_ip
-        current_ip=$(curl -4 -s --max-time 5 ifconfig.me 2>/dev/null \
-            || curl -4 -s --max-time 5 api.ipify.org 2>/dev/null \
-            || true)
-        if [ -n "$current_ip" ]; then
-            local ip3 ip4_net
-            ip3=$(echo "$current_ip" | cut -d. -f1-3)
-            ip4_net=$(( $(echo "$current_ip" | cut -d. -f4) & 240 ))
-            authorized_cidr="${ip3}.${ip4_net}/28"
-            info "Authorizing control plane access: ${authorized_cidr}"
-        else
-            warn "Could not detect public IP — control plane may be unreachable after create"
-        fi
+        warn "Could not detect public IP — control plane may be unreachable after create"
     fi
 
-    local scope_choice
-    read_input scope_choice "${CYAN}API access scope: [1] Default  [2] Full (default: 1): ${NC}"
-    if [ "${scope_choice:-1}" = "2" ]; then
-        cluster_access_scope="https://www.googleapis.com/auth/cloud-platform"
-    else
-        cluster_access_scope="gke-default"
-    fi
+    cluster_access_scope="gke-default"
 }
 
 _build_cluster_flags() {
