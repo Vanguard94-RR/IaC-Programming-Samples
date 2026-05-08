@@ -82,3 +82,40 @@ usage() {
     info "  --region <region>  GCP region (e.g. us-central1)"
     info "  --env <qa|uat|pro> Environment (sets machine type, channel, fleet)"
 }
+
+# _preflight_checks: verify required tools and gcloud auth before touching GCP
+_preflight_checks() {
+    if [ "${NO_CLUSTER:-0}" = "1" ]; then
+        return 0
+    fi
+
+    local errors=()
+
+    if ! command -v gcloud &>/dev/null; then
+        errors+=("gcloud not found — install: https://cloud.google.com/sdk/docs/install")
+    else
+        local active_account
+        active_account=$(gcloud auth list --filter="status:ACTIVE" --format="value(account)" 2>/dev/null | head -1 || true)
+        if [ -z "$active_account" ]; then
+            errors+=("No active gcloud account — run: gcloud auth login")
+        fi
+    fi
+
+    if ! command -v kubectl &>/dev/null; then
+        errors+=("kubectl not found — install: https://kubernetes.io/docs/tasks/tools/")
+    fi
+
+    if ! command -v jq &>/dev/null; then
+        errors+=("jq not found — install: sudo dnf install jq")
+    fi
+
+    if [ "${#errors[@]}" -gt 0 ]; then
+        error "Pre-flight checks failed:"
+        for e in "${errors[@]}"; do
+            error "  • $e"
+        done
+        return 1
+    fi
+
+    success "Pre-flight checks passed"
+}
