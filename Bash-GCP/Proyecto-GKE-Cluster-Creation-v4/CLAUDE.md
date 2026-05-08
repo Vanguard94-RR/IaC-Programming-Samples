@@ -112,5 +112,11 @@ Shared VPC host project: `gnp-red-data-central`
 
 ## Hard Rules
 
-- Always use /caveman
-- Never mention Claude in commits
+- Always use caveman skill /caveman
+- Never mention Claude in commits o as coauthor
+- All commits must be in present tense and start with a verb (e.g. "Add", "Fix", "Update")
+- Use `git commit -s` to sign off commits
+- Follow the existing code style and patterns in the repository
+- Ensure all new code is covered by tests (if applicable)
+- Avoid hardcoding values; use variables or configuration files instead
+- Always validate input parameters and handle errors gracefully

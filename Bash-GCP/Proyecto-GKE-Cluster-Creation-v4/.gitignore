@@ -1,0 +1,8 @@
+# Security - Never commit key files
+*.key
+*.cer
+*.log
+
+*CLAUDE.md
+*.claude/*
+*docs/*
