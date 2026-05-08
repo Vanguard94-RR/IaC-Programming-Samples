@@ -77,13 +77,27 @@ cmd_vpc_select() {
                 | jq -r '.secondaryIpRanges[]?.rangeName' 2>/dev/null || true)
             if [ -z "$ranges" ]; then
                 warn "No secondary ranges found in subnet '$SUBNET_NAME'"
-                read_input PODS_RANGE_NAME "${CYAN}Enter pods range name (e.g. pods): ${NC}"
-                read_input SERVICES_RANGE_NAME "${CYAN}Enter services range name (e.g. servicios): ${NC}"
-                PODS_RANGE_NAME="${PODS_RANGE_NAME:-pods}"
-                SERVICES_RANGE_NAME="${SERVICES_RANGE_NAME:-servicios}"
+                read_input PODS_RANGE_NAME "${CYAN}Pods range name: ${NC}"
+                read_input SERVICES_RANGE_NAME "${CYAN}Services range name: ${NC}"
+                if [ -z "$PODS_RANGE_NAME" ] || [ -z "$SERVICES_RANGE_NAME" ]; then
+                    error "Both pods and services range names required — subnet has no secondary ranges"
+                    return 1
+                fi
             else
-                PODS_RANGE_NAME=$(echo "$ranges" | grep -E '^pods?$' | head -1 || echo "pods")
-                SERVICES_RANGE_NAME=$(echo "$ranges" | grep -E '^servicios?$|^services?$' | head -1 || echo "servicios")
+                local pods_match services_match
+                pods_match=$(echo "$ranges" | grep -E '^pods?$' | head -1 || true)
+                services_match=$(echo "$ranges" | grep -E '^servicios?$|^services?$' | head -1 || true)
+                if [ -z "$pods_match" ] || [ -z "$services_match" ]; then
+                    info "Secondary ranges in '$SUBNET_NAME': $(echo "$ranges" | tr '\n' ' ')"
+                    [ -z "$pods_match" ] && read_input pods_match "${CYAN}Which range is pods? ${NC}"
+                    [ -z "$services_match" ] && read_input services_match "${CYAN}Which range is services? ${NC}"
+                    if [ -z "$pods_match" ] || [ -z "$services_match" ]; then
+                        error "Both pods and services range names required"
+                        return 1
+                    fi
+                fi
+                PODS_RANGE_NAME="$pods_match"
+                SERVICES_RANGE_NAME="$services_match"
             fi
             ;;
         2)
