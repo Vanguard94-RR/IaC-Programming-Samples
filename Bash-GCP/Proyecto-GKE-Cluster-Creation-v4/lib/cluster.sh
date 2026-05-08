@@ -312,14 +312,10 @@ cmd_create() {
     create_ssl_certificate
 
     if [[ "$project_id" =~ -pro$ ]]; then
-        local confirm_twistlock
-        read_input confirm_twistlock "${CYAN}Deploy Twistlock? (Y/N): ${NC}"
-        [[ "${confirm_twistlock:-N}" =~ ^[Yy]$ ]] && deploy_twistlock
+        deploy_twistlock
     fi
 
-    local confirm_wi
-    read_input confirm_wi "${CYAN}Create Workload Identity assets? (Y/N): ${NC}"
-    [[ "${confirm_wi:-N}" =~ ^[Yy]$ ]] && create_workload_identity_assets
+    create_workload_identity_assets
 
     _print_cluster_summary
 }
