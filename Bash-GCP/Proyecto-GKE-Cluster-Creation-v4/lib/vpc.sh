@@ -171,11 +171,12 @@ cmd_vpc_select() {
                 --network="$new_vpc_name" \
                 --region="${region}" \
                 --secondary-range "$secondary_ranges" \
-                --enable-private-ip-google-access 2>/dev/null; then
+                --enable-private-ip-google-access; then
+                info "Subnet create failed — attempting add-secondary-ranges on existing subnet..."
                 if ! run_or_dry gcloud compute networks subnets update "$new_subnet_name" \
                     --project="${project_id}" \
                     --region="${region}" \
-                    --add-secondary-ranges "$secondary_ranges" 2>/dev/null; then
+                    --add-secondary-ranges "$secondary_ranges"; then
                     error "Failed to create subnet $new_subnet_name"
                     return 1
                 fi
