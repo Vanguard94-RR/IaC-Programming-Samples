@@ -131,7 +131,8 @@ apply_cluster_hardening() {
         run_or_dry gcloud compute ssl-policies create "$SSL_POLICY_NAME" \
             --profile=MODERN \
             --min-tls-version=1.2 \
-            --project="${project_id}"
+            --project="${project_id}" \
+            || warn "SSL policy creation failed — continuing"
         success "SSL policy created"
     fi
 
@@ -154,13 +155,13 @@ _apply_armor_rules() {
     local proj="$1"
 
     _upsert_rule "$proj" 100 \
-        "evaluatePreconfiguredExpr('cve-canary-stable')" \
-        "deny(403)" \
+        "evaluatePreconfiguredExpr('cve-canary')" \
+        "deny-403" \
         "CVE-Canary WAF"
 
     _upsert_rule "$proj" 200 \
         "evaluatePreconfiguredExpr('xss-stable') || evaluatePreconfiguredExpr('sqli-stable')" \
-        "deny(403)" \
+        "deny-403" \
         "WAF XSS-SQLi"
 
     local allow_expr
@@ -177,7 +178,7 @@ _apply_armor_rules() {
 
     _upsert_rule "$proj" 2147483647 \
         "true" \
-        "deny(403)" \
+        "deny-403" \
         "Default deny"
 
     run_or_dry gcloud compute security-policies update "$POLICY_NAME" \
@@ -190,7 +191,7 @@ _apply_armor_rules() {
 
     local count=0 updated=0
     while IFS= read -r svc; do
-        [ -z "$svc" ] && continue
+        if [ -z "$svc" ]; then continue; fi
         count=$((count + 1))
         if run_or_dry gcloud compute backend-services update "$svc" \
             --security-policy="$POLICY_NAME" \
@@ -201,11 +202,20 @@ _apply_armor_rules() {
             warn "  Failed: $svc"
         fi
     done <<< "$backends"
-    [ "$count" -gt 0 ] && info "Backend services: $updated/$count updated"
+    if [ "$count" -gt 0 ]; then info "Backend services: $updated/$count updated"; fi
 }
 
 _upsert_rule() {
     local proj="$1" priority="$2" expression="$3" action="$4" description="$5"
+
+    local throttle_flags=""
+    if [ "$action" = "throttle" ]; then
+        throttle_flags="--rate-limit-threshold-count=100 --rate-limit-threshold-interval-sec=60 --conform-action=allow --exceed-action=deny-403 --enforce-on-key=IP"
+    fi
+
+    # Default rule (2147483647) requires --src-ip-ranges=* not --expression
+    local match_flag="--expression=${expression}"
+    [ "$priority" = "2147483647" ] && match_flag="--src-ip-ranges=*"
 
     if gcloud compute security-policies rules describe "$priority" \
         --security-policy="$POLICY_NAME" --project="$proj" &>/dev/null; then
@@ -218,20 +228,24 @@ _upsert_rule() {
             return 0
         fi
         info "  Rule $priority: updating ($description)..."
+        # shellcheck disable=SC2086
         run_or_dry gcloud compute security-policies rules update "$priority" \
             --security-policy="$POLICY_NAME" \
-            --expression="$expression" \
+            "$match_flag" \
             --action="$action" \
             --description="$description" \
-            --project="$proj"
+            --project="$proj" \
+            $throttle_flags
     else
         info "  Rule $priority: creating ($description)..."
+        # shellcheck disable=SC2086
         run_or_dry gcloud compute security-policies rules create "$priority" \
             --security-policy="$POLICY_NAME" \
-            --expression="$expression" \
+            "$match_flag" \
             --action="$action" \
             --description="$description" \
-            --project="$proj"
+            --project="$proj" \
+            $throttle_flags
     fi
     success "  Rule $priority: done"
 }
@@ -278,8 +292,8 @@ _apply_log4j_rules() {
         --format=json > "$backup_file" 2>/dev/null || warn "Could not backup — continuing"
 
     local priority=1000
-    local expression="evaluatePreconfiguredExpr('cve-canary-stable')"
-    local action="deny(403)"
+    local expression="evaluatePreconfiguredExpr('cve-canary')"
+    local action="deny-403"
     local description="log4j CVE RCE block"
 
     if gcloud compute security-policies rules describe "$priority" \
