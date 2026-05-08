@@ -276,7 +276,7 @@ cmd_create() {
             --scopes="$cluster_access_scope" \
             --no-enable-intra-node-visibility \
             --enable-ip-alias \
-            --max-pods-per-node=64 \
+            --max-pods-per-node=32 \
             --cluster-secondary-range-name="${PODS_RANGE_NAME}" \
             --services-secondary-range-name="${SERVICES_RANGE_NAME}" \
             --security-posture=standard \
