@@ -26,7 +26,6 @@ num_nodes=""
 channel=""
 private_nodes=""
 control_plane_ip=""
-cluster_scope=""
 fleet_id=""
 cluster_version=""
 cluster_access_scope=""
@@ -214,7 +213,7 @@ _build_cluster_flags() {
 }
 
 cmd_create() {
-    print_banner_box "GKE Cluster Creation — v3.7.1"
+    print_banner_box "GKE Cluster Creation — v4.0"
 
     _collect_params
 

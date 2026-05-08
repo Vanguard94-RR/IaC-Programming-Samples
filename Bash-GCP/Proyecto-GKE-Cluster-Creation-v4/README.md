@@ -72,7 +72,7 @@ El smoke test usa `NO_CLUSTER=1 DRY_RUN=true` — ejecuta el flujo completo sin 
 1. Recopilación de parámetros (respeta flags pre-cargados)
 2. Habilitar APIs GCP (container, gkehub, compute)
 3. Selección de VPC: existente / nueva / Shared VPC
-4. Cloud NAT (obligatorio PRO, opcional QA/UAT)
+4. Cloud NAT (obligatorio en todos los ambientes — IP estática fija)
 5. Obtención dinámica de versión GKE vía `get_cluster_versions(region, channel)`
 6. `gcloud container clusters create` con todos los flags
 7. Registro en Fleet + configuración Workload Identity
