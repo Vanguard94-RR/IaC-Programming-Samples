@@ -6,6 +6,7 @@ set -o nounset
 set -o pipefail
 
 # TTY-aware colors
+# shellcheck disable=SC2034
 if [ -t 1 ] && [ -z "${NO_COLOR-}" ]; then
     GREEN="\033[0;32m"
     YELLOW="\033[1;33m"
@@ -13,6 +14,7 @@ if [ -t 1 ] && [ -z "${NO_COLOR-}" ]; then
     CYAN="\033[0;36m"
     WHITE="\033[1;37m"
     BOLD="\033[1m"
+    DIM="\033[2m"
     NC="\033[0m"
 else
     GREEN=""
@@ -21,6 +23,7 @@ else
     CYAN=""
     WHITE=""
     BOLD=""
+    DIM=""
     NC=""
 fi
 
@@ -29,6 +32,8 @@ bold() { printf "%s%s%s" "${BOLD}" "*$*" "${NC}"; }
 # Verbose logging control
 : "${VERBOSE:=false}"
 : "${DRY_RUN:=false}"
+STEP_CURRENT=0
+STEP_TOTAL=0
 
 vprint() {
     if [ "${VERBOSE}" = "true" ]; then
@@ -60,11 +65,24 @@ print_banner_box() {
     printf '%b\n' "${CYAN}${line_bot}${bar}╝${NC}"
 }
 
-step() { printf "\n${YELLOW}➜ ${WHITE}${BOLD}%s${NC}\n" "$1"; }
-info() { printf "${CYAN}• ${WHITE}%s${NC}\n" "$1"; }
-success() { printf "${GREEN}✔ ${WHITE}%s${NC}\n" "$1"; }
-warn() { printf "${YELLOW}⚠ ${WHITE}${BOLD}%s${NC}\n" "$1"; }
-error() { printf "${RED}✖ ${WHITE}${BOLD}%s${NC}\n" "$1"; }
+step_init() { STEP_TOTAL="${1:-0}"; STEP_CURRENT=0; }
+
+step() {
+    STEP_CURRENT=$(( STEP_CURRENT + 1 ))
+    local label="$1"
+    local RULE="${CYAN}──────────────────────────────────────────────────${NC}"
+    if [ "${STEP_TOTAL:-0}" -gt 0 ]; then
+        printf "\n%b\n  ${CYAN}STEP %d/%d  ${WHITE}${BOLD}%s${NC}\n%b\n" \
+            "$RULE" "$STEP_CURRENT" "$STEP_TOTAL" "$label" "$RULE"
+    else
+        printf "\n%b\n  ${CYAN}STEP %d  ${WHITE}${BOLD}%s${NC}\n%b\n" \
+            "$RULE" "$STEP_CURRENT" "$label" "$RULE"
+    fi
+}
+info()    { printf "  ${CYAN}·${NC}  ${WHITE}%s${NC}\n"           "$1"; }
+success() { printf "  ${GREEN}✔${NC}  ${GREEN}${BOLD}%s${NC}\n"   "$1"; }
+warn()    { printf "  ${YELLOW}⚠${NC}  ${YELLOW}${BOLD}%s${NC}\n" "$1"; }
+error()   { printf "  ${RED}✖${NC}  ${RED}${BOLD}%s${NC}\n"       "$1" >&2; }
 
 spinner_start() {
     local msg=$1
