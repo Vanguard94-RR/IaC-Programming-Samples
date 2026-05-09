@@ -18,7 +18,14 @@ run_or_dry() {
         info "[DRY-RUN] $*"
         return 0
     fi
-    "$@"
+    if [ "$VERBOSE" = "true" ]; then
+        "$@" 2>&1 | while IFS= read -r line || [ -n "$line" ]; do
+            vprint "$line"
+            printf '%s\n' "$line" >> "$LOG_FILE"
+        done
+    else
+        "$@" >> "$LOG_FILE" 2>&1
+    fi
 }
 
 # prompt_or_arg: prompt that respects a pre-loaded CLI flag value
