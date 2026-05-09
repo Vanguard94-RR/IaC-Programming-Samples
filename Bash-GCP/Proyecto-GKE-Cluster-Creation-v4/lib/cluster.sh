@@ -216,7 +216,10 @@ cmd_create() {
     print_banner_box "GKE Cluster Creation — v4.0"
     _preflight_checks
 
+    step_init 10
     _collect_params
+    # shellcheck disable=SC2034
+    [[ "${project_id:-}" =~ -pro$ ]] && STEP_TOTAL=11
 
     local skip_create=false
     if [ "${NO_CLUSTER:-0}" != "1" ] && \
@@ -323,14 +326,14 @@ cmd_create() {
 _print_cluster_summary() {
     printf '\n'
     printf '%b\n' "${CYAN}╔══════════════════════════════════════╗${NC}"
-    printf '%b\n' "${CYAN}║         CLUSTER CREATED              ║${NC}"
+    printf '%b\n' "${CYAN}║${NC}  ${GREEN}${BOLD}✔  CLUSTER CREATED${NC}                  ${CYAN}║${NC}"
     printf '%b\n' "${CYAN}╠══════════════════════════════════════╣${NC}"
-    printf "%b\n" "${CYAN}║${NC} Project:  ${WHITE}${project_id}${NC}"
-    printf "%b\n" "${CYAN}║${NC} Cluster:  ${WHITE}${cluster_name}${NC}"
-    printf "%b\n" "${CYAN}║${NC} Fleet:    ${WHITE}${fleet_id}${NC}"
-    printf "%b\n" "${CYAN}║${NC} Region:   ${WHITE}${region}${NC}"
-    printf "%b\n" "${CYAN}║${NC} VPC:      ${WHITE}${VPC_NAME}${NC}"
-    printf "%b\n" "${CYAN}║${NC} Version:  ${WHITE}${cluster_version}${NC}"
+    printf "%b\n" "${CYAN}║${NC}  ${DIM}Project${NC}   ${WHITE}${project_id}${NC}"
+    printf "%b\n" "${CYAN}║${NC}  ${DIM}Cluster${NC}   ${WHITE}${cluster_name}${NC}"
+    printf "%b\n" "${CYAN}║${NC}  ${DIM}Fleet${NC}     ${WHITE}${fleet_id}${NC}"
+    printf "%b\n" "${CYAN}║${NC}  ${DIM}Region${NC}    ${WHITE}${region}${NC}"
+    printf "%b\n" "${CYAN}║${NC}  ${DIM}VPC${NC}       ${WHITE}${VPC_NAME}${NC}"
+    printf "%b\n" "${CYAN}║${NC}  ${DIM}Version${NC}   ${WHITE}${cluster_version}${NC}"
     printf '%b\n' "${CYAN}╚══════════════════════════════════════╝${NC}"
     printf '\n'
 }
