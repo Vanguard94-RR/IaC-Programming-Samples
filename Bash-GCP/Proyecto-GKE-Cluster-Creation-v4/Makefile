@@ -20,6 +20,7 @@ lint:
 
 test: lint
 	@./test/run-smoke.sh
+	@./test/test-run-or-dry.sh
 
 cluster:
 	@./bin/create_gke_cluster.sh
