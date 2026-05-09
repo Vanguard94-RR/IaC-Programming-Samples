@@ -216,10 +216,11 @@ cmd_create() {
     print_banner_box "GKE Cluster Creation — v4.0"
     _preflight_checks
 
-    step_init 10
+    # shellcheck disable=SC2034
+    STEP_CURRENT=0
     _collect_params
     # shellcheck disable=SC2034
-    [[ "${project_id:-}" =~ -pro$ ]] && STEP_TOTAL=11
+    [[ "${project_id:-}" =~ -pro$ ]] && STEP_TOTAL=11 || STEP_TOTAL=10
 
     local skip_create=false
     if [ "${NO_CLUSTER:-0}" != "1" ] && \

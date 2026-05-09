@@ -49,12 +49,11 @@ test_step_shows_counter() {
 
 # T4: step() shows STEP N only (no slash) when STEP_TOTAL = 0
 test_step_no_total() {
-    STEP_CURRENT=0
-    STEP_TOTAL=0
+    step_init 0
     local out
     out=$(step "My Step" 2>/dev/null)
     echo "$out" | grep -q "STEP 1" || return 1
-    if echo "$out" | grep -q "STEP 1/"; then return 1; fi
+    echo "$out" | grep -q "STEP 1/" && return 1
     return 0
 }
 
