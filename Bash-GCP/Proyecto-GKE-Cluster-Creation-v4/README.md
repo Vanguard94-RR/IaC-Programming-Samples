@@ -191,7 +191,7 @@ Proyecto-GKE-Cluster-Creation-v4/
 **Host project (Shared VPC only):**
 
 | Role | Purpose |
-|---|---|
+| --- | --- |
 | `roles/compute.xpnAdmin` | Enable Shared VPC service project association |
 | `roles/compute.networkAdmin` | Grant subnet access to GKE service accounts |
 
@@ -200,7 +200,7 @@ Proyecto-GKE-Cluster-Creation-v4/
 ## Data Files
 
 | File | Purpose |
-|---|---|
+| --- | --- |
 | `cluster.csv` | Cluster names for batch operations |
 | `data-script.csv` | `cluster_name,lb_url,backend_name,zone,project_id` — used by `update-armor` |
 | `backend-list.txt` | Backend service names for Cloud Armor synchronization |

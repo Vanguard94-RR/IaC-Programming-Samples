@@ -19,10 +19,10 @@ setup:
 	python3 setup-config.py
 
 promote:
-	GITLAB_TOKEN=$$(cat ../PersonalGitLabToken) python3 promote-files.py --config promotion-config.json
+	GITLAB_TOKEN=$$(cat ../../../../PersonalGitLabToken) python3 promote-files.py --config promotion-config.json
 
 promote-dry:
-	GITLAB_TOKEN=$$(cat ../PersonalGitLabToken) python3 promote-files.py --config promotion-config.json --dry-run
+	GITLAB_TOKEN=$$(cat ../../../../PersonalGitLabToken) python3 promote-files.py --config promotion-config.json --dry-run
 
 logs:
 	@tail -20 promotion.log 2>/dev/null || echo "No logs"
