@@ -99,6 +99,69 @@ class GitLabFilePromoter:
             logger.error(f"Error al obtener ID de proyecto {project_path}: {e}")
             return None
     
+    def list_files_in_directory(self, project_id: str, dir_path: str, branch: str = 'master') -> List[str]:
+        """
+        Lista archivos en un directorio del repositorio
+        
+        Args:
+            project_id: ID del proyecto
+            dir_path: Ruta del directorio
+            branch: Rama del repositorio
+        
+        Returns:
+            Lista de nombres de archivos en el directorio
+        """
+        try:
+            encoded_path = requests.utils.quote(dir_path, safe='')
+            url = f"{self.gitlab_url}/api/v4/projects/{project_id}/repository/tree"
+            params = {'ref': branch, 'path': dir_path, 'per_page': 100}
+            response = self.session.get(url, params=params)
+            
+            if response.status_code == 200:
+                items = response.json()
+                files = []
+                for item in items:
+                    if item.get('type') == 'blob':
+                        files.append(item.get('path', ''))
+                return files
+            else:
+                return []
+        except Exception as e:
+            logger.debug(f"Error listando directorio {dir_path}: {e}")
+            return []
+    
+    def find_similar_files(self, project_id: str, file_path: str, branch: str = 'master') -> List[str]:
+        """
+        Encuentra archivos similares cuando uno no existe
+        
+        Args:
+            project_id: ID del proyecto
+            file_path: Ruta del archivo buscado
+            branch: Rama del repositorio
+        
+        Returns:
+            Lista de archivos similares en el mismo directorio
+        """
+        import os.path
+        dir_path = os.path.dirname(file_path)
+        file_name = os.path.basename(file_path)
+        
+        if not dir_path:
+            return []
+        
+        files = self.list_files_in_directory(project_id, dir_path, branch)
+        
+        # Retornar archivos en el mismo directorio
+        similar = []
+        for f in files:
+            fname = os.path.basename(f)
+            # Buscar coincidencias parciales (ej: app.yaml, app_old.yaml, etc)
+            if fname and file_name and (file_name in fname or fname in file_name or 
+                                       file_name.split('.')[0] in fname):
+                similar.append(f)
+        
+        return similar if similar else files[:5]  # Retornar similar o primeros 5 archivos
+    
     def get_file_content(self, project_id: str, file_path: str, branch: str = 'master') -> Optional[str]:
         """
         Obtiene el contenido de un archivo desde un repositorio
@@ -121,11 +184,26 @@ class GitLabFilePromoter:
                 content = response.json().get('content')
                 logger.info(f"Archivo obtenido: {file_path} desde rama {branch}")
                 return content
+            elif response.status_code == 404:
+                # Archivo no encontrado - intentar encontrar sugerencias
+                logger.error(f"❌ Archivo NO ENCONTRADO: {file_path}")
+                
+                # Buscar alternativas
+                similar = self.find_similar_files(project_id, file_path, branch)
+                if similar:
+                    logger.error(f"   📋 Archivos similares disponibles en el mismo directorio:")
+                    for alt in similar[:5]:
+                        logger.error(f"      • {alt}")
+                    logger.error(f"   💡 Sugerencia: Revisar la ruta en promotion-config.json")
+                else:
+                    logger.error(f"   📋 No se encontraron archivos similares en el directorio")
+                
+                return None
             else:
-                logger.error(f"Error al obtener archivo {file_path}: {response.status_code}")
+                logger.error(f"❌ Error al obtener archivo {file_path}: HTTP {response.status_code}")
                 return None
         except Exception as e:
-            logger.error(f"Error al descargar {file_path}: {e}")
+            logger.error(f"❌ Error al descargar {file_path}: {e}")
             return None
     
     def file_exists_with_content(self, project_id: str, file_path: str, content: str, 
@@ -284,6 +362,74 @@ class GitLabFilePromoter:
             logger.error(f"✗ Promoción fallida: {source_file_path}")
             return {'success': False, 'changed': False}
     
+    def pre_validate_promotions(self, promotions: List[Dict]) -> Tuple[bool, List[str]]:
+        """
+        Valida que todos los archivos fuente existan ANTES de intentar promocionar
+        
+        Args:
+            promotions: Lista de configuraciones de promoción
+        
+        Returns:
+            Tupla (todos_ok, lista_de_errores)
+        """
+        errors = []
+        
+        logger.info("=" * 60)
+        logger.info("🔍 PRE-VALIDANDO ARCHIVOS FUENTE...")
+        logger.info("=" * 60)
+        
+        for i, promotion in enumerate(promotions, 1):
+            source_path = promotion.get('source_path', '?')
+            source_project = promotion['source']['project']
+            source_branch = promotion['source'].get('branch', 'master')
+            
+            # Obtener ID del proyecto fuente
+            source_project_id = self.get_project_id(source_project)
+            if not source_project_id:
+                errors.append(f"[Promo {i}] Proyecto fuente NO ENCONTRADO: {source_project}")
+                continue
+            
+            # Verificar existencia del archivo
+            encoded_path = requests.utils.quote(source_path, safe='')
+            url = f"{self.gitlab_url}/api/v4/projects/{source_project_id}/repository/files/{encoded_path}"
+            params = {'ref': source_branch}
+            
+            try:
+                response = self.session.get(url, params=params, timeout=5)
+                
+                if response.status_code == 200:
+                    logger.info(f"  ✓ [{i}] Archivo encontrado: {source_path}")
+                elif response.status_code == 404:
+                    error_msg = f"[Promo {i}] ❌ ARCHIVO NO ENCONTRADO: {source_path} (rama: {source_branch})"
+                    errors.append(error_msg)
+                    logger.error(error_msg)
+                    
+                    # Sugerir alternativas
+                    similar = self.find_similar_files(source_project_id, source_path, source_branch)
+                    if similar:
+                        logger.error(f"        📋 Archivos disponibles en el mismo directorio:")
+                        for alt in similar[:3]:
+                            logger.error(f"           • {alt}")
+                else:
+                    error_msg = f"[Promo {i}] Error HTTP {response.status_code}: {source_path}"
+                    errors.append(error_msg)
+                    logger.error(f"  ⚠️  {error_msg}")
+            except Exception as e:
+                error_msg = f"[Promo {i}] Error validando {source_path}: {e}"
+                errors.append(error_msg)
+                logger.error(f"  ⚠️  {error_msg}")
+        
+        logger.info("=" * 60)
+        
+        if errors:
+            logger.error("🛑 VALIDACIÓN FALLIDA - Se encontraron problemas:")
+            for error in errors:
+                logger.error(f"   • {error}")
+            return False, errors
+        else:
+            logger.info("✅ TODOS los archivos fuente están disponibles - OK para promocionar")
+            return True, []
+    
     def promote_multiple_files(self, promotions: List[Dict], user_acronym: str = None, ticket: str = None) -> Dict:
         """
         Promueve múltiples archivos
@@ -302,6 +448,25 @@ class GitLabFilePromoter:
             'failed': 0,
             'details': []
         }
+        
+        # PRE-VALIDAR todos los archivos ANTES de intentar promocionar
+        validation_ok, validation_errors = self.pre_validate_promotions(promotions)
+        if not validation_ok:
+            logger.error("\n🛑 PROMOCIÓN CANCELADA: Existen archivos faltantes o inaccesibles")
+            logger.error("   Revisa la configuración en promotion-config.json\n")
+            stats['successful'] = 0
+            stats['failed'] = len(promotions)
+            for promotion in promotions:
+                stats['details'].append({
+                    'file': promotion.get('source_path', 'unknown'),
+                    'status': 'skipped',
+                    'reason': 'validación previa falló'
+                })
+            return stats
+        
+        logger.info("")
+        logger.info("🚀 INICIANDO PROMOCIÓN DE ARCHIVOS...")
+        logger.info("")
         
         # Generar commit message si se proporcionan datos
         commit_msg = None
@@ -385,7 +550,7 @@ def load_config(config_file: str) -> Dict:
         sys.exit(1)
 
 
-def load_token(token_file: str = '../PersonalGitLabToken') -> str:
+def load_token(token_file: str = '../../../../PersonalGitLabToken') -> str:
     """Carga el token desde archivo. No usar env vars."""
     try:
         with open(token_file, 'r') as f:
@@ -425,7 +590,7 @@ def main():
     args = parser.parse_args()
     
     # Cargar token automáticamente
-    token = load_token('../PersonalGitLabToken')
+    token = load_token('../../../../PersonalGitLabToken')
     
     # Cargar configuración
     if not os.path.exists(args.config):

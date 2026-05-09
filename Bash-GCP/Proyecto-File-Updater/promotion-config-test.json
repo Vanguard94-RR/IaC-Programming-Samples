@@ -1,6 +1,6 @@
 {
   "gitlab_url": "https://gitlab.com",
-  "ticket": "CTASK0366049",
+  "ticket": "CTASK0366048",
   "promotions": [
     {
       "source": {
@@ -11,8 +11,8 @@
         "project": "gitgnp/gcp/gae-config-files",
         "branch": "master"
       },
-      "source_path": "GAE-GNP-HogarVersatil-portal-integracion/config/uat/app_temp.yaml",
-      "dest_path": "gnp-hogarversatil/uat/GAE-GNP-HogarVersatil-portal-integracion/app.yaml"
+      "source_path": "GAE-GNP-HogarVersatil-NegocioOperable-backend/config_project/uat/app_WRONG.yaml",
+      "dest_path": "gnp-hogarversatil/uat/GAE-GNP-HogarVersatil-NegocioOperable-backend/app.yaml"
     }
   ],
   "user": "JMCM"
