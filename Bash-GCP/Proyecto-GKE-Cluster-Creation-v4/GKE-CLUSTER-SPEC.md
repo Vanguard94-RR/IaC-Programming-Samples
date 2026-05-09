@@ -9,7 +9,7 @@ This document describes the configuration applied by `bin/create_gke_cluster.sh`
 ### Subcommands
 
 | Subcommand | Purpose |
-|---|---|
+| ----- | ----- |
 | `create` (default) | Full 10-step GKE cluster creation (interactive) |
 | `update-armor --project <id>` | Apply/update Cloud Armor rules |
 | `rollback-armor --project <id>` | Restore Cloud Armor from JSON backup |
@@ -19,7 +19,7 @@ This document describes the configuration applied by `bin/create_gke_cluster.sh`
 ### CLI Flags
 
 | Flag | Effect |
-|---|---|
+| ----- | ----- |
 | `--dry-run` | Print all gcloud/kubectl calls without executing |
 | `--verbose` | Print verbose diagnostic output |
 | `--project <id>` | Pre-load project ID (skip prompt) |
@@ -32,7 +32,7 @@ This document describes the configuration applied by `bin/create_gke_cluster.sh`
 If `--env` is not provided, environment is inferred from the project ID suffix:
 
 | Project ID suffix | Environment |
-|---|---|
+| ----- | ----- |
 | `-pro` | PRO |
 | `-uat` | UAT |
 | anything else | QA |
@@ -46,7 +46,7 @@ Configuration identical across all environments.
 ### GKE Cluster Flags
 
 | Flag | Value |
-|---|---|
+| ----- | ----- |
 | Image type | `COS_CONTAINERD` |
 | Disk type | `pd-balanced` |
 | Disk size | 100 GB |
@@ -77,7 +77,7 @@ Configuration identical across all environments.
 Mandatory for all environments. Always uses a fixed reserved static IP — auto-allocation is never used.
 
 | Parameter | Value |
-|---|---|
+| ----- | ----- |
 | Router name | `{project_id}-router` |
 | NAT gateway name | `{project_id}-nat` |
 | Static IP name | `{project_id}-nat-ip` |
@@ -92,7 +92,7 @@ Mandatory for all environments. Always uses a fixed reserved static IP — auto-
 Policy name: `cve-canary`
 
 | Priority | Name | Expression | Action |
-|---|---|---|---|
+| ----- | ----- | ----- | ----- |
 | 100 | CVE-Canary WAF | `evaluatePreconfiguredExpr('cve-canary')` | deny-403 |
 | 200 | XSS / SQLi WAF | `evaluatePreconfiguredExpr('xss-stable') OR evaluatePreconfiguredExpr('sqli-stable')` | deny-403 |
 | 300 | Allow known IPs | `inIpRange(origin.ip, '35.238.84.248,34.121.197.40')` | allow |
@@ -108,7 +108,7 @@ Policy name: `cve-canary`
 Policy name: `sslsecure`
 
 | Parameter | Value |
-|---|---|
+| ----- | ----- |
 | Profile | `MODERN` |
 | Minimum TLS version | 1.2 |
 
@@ -121,7 +121,7 @@ Policy name: `sslsecure`
 #### Cluster
 
 | Parameter | Value |
-|---|---|
+| ----- | ----- |
 | Machine type | `n1-standard-2` |
 | Default node count | 1 |
 | Release channel | `rapid` |
@@ -133,7 +133,7 @@ Policy name: `sslsecure`
 #### Networking
 
 | Parameter | Value |
-|---|---|
+| ----- | ----- |
 | VPC name | `{project_id}-vpc` (new VPC path) |
 | Subnet name | `{project_id}-subnet` (new VPC path) |
 | Primary subnet CIDR | User-provided — full range used as-is (nodes, ILBs) |
@@ -150,7 +150,7 @@ Policy name: `sslsecure`
 #### Security
 
 | Parameter | Value |
-|---|---|
+| ----- | ----- |
 | Cloud Armor | Applied (see Shared Defaults) |
 | SSL policy | Applied (see Shared Defaults) |
 | Workload identity pool | `{project_id}.svc.id.goog` |
@@ -158,7 +158,7 @@ Policy name: `sslsecure`
 #### Post-creation Components
 
 | Component | Value |
-|---|---|
+| ----- | ----- |
 | Namespace | `apps` |
 | Kubernetes Service Account (KSA) | `apps-gke` |
 | GCP IAM Service Account | `apps-sa` |
@@ -172,7 +172,7 @@ Policy name: `sslsecure`
 #### Cluster
 
 | Parameter | Value |
-|---|---|
+| ----- | ----- |
 | Machine type | `n1-standard-2` |
 | Default node count | 2 |
 | Release channel | `rapid` |
@@ -192,7 +192,7 @@ Same as QA. See QA — Security section above.
 #### Post-creation Components
 
 | Component | Value |
-|---|---|
+| ----- | ----- |
 | Namespace | `apps` |
 | Kubernetes Service Account (KSA) | `apps-gke` |
 | GCP IAM Service Account | `apps-sa` |
@@ -206,7 +206,7 @@ Same as QA. See QA — Security section above.
 #### Cluster
 
 | Parameter | Value |
-|---|---|
+| ----- | ----- |
 | Machine type | `n2-standard-2` |
 | Default node count | 2 |
 | Release channel | `regular` |
@@ -226,7 +226,7 @@ Same as QA. See QA — Security section above.
 #### Post-creation Components
 
 | Component | Value |
-|---|---|
+| ----- | ----- |
 | Namespace | `apps` |
 | Kubernetes Service Account (KSA) | `apps-gke` |
 | GCP IAM Service Account | `apps-sa` |
@@ -236,7 +236,7 @@ Same as QA. See QA — Security section above.
 **Twistlock DaemonSet (PRO only):**
 
 | Parameter | Value |
-|---|---|
+| ----- | ----- |
 | Namespace | `twistlock` |
 | Defender image | `registry-auth.twistlock.com/tw_0uchx1fydjtjdemwtvgh538up3q5t1qq/twistlock/defender:defender_34_02_133` |
 | Console endpoint | `wss://us-west1.cloud.twistlock.com:443` |
@@ -255,7 +255,7 @@ Same as QA. See QA — Security section above.
 Used when the cluster's project is a service project attached to a Shared VPC host.
 
 | Parameter | Value |
-|---|---|
+| ----- | ----- |
 | Default host project | `gnp-red-data-central` |
 | GKE service account | `service-{project_number}@container-engine-robot.iam.gserviceaccount.com` |
 | API service account | `{project_number}@cloudservices.gserviceaccount.com` |
@@ -269,7 +269,7 @@ Used when the cluster's project is a service project attached to a Shared VPC ho
 ## GCP APIs Enabled by Script
 
 | API | Purpose |
-|---|---|
+| ----- | ----- |
 | `container.googleapis.com` | GKE cluster management |
 | `gkehub.googleapis.com` | Fleet registration |
 | `compute.googleapis.com` | VPC, subnets, Cloud NAT, static IPs |
@@ -282,7 +282,7 @@ Used when the cluster's project is a service project attached to a Shared VPC ho
 ### Service project
 
 | Role | Purpose |
-|---|---|
+| ----- | ----- |
 | `roles/container.admin` | Create and manage GKE clusters |
 | `roles/compute.admin` | VPC, subnets, Cloud NAT, static IPs |
 | `roles/iam.securityAdmin` | Workload Identity IAM bindings |
@@ -290,6 +290,6 @@ Used when the cluster's project is a service project attached to a Shared VPC ho
 ### Host project (Shared VPC only)
 
 | Role | Purpose |
-|---|---|
+| ----- | ----- |
 | `roles/compute.xpnAdmin` | Enable Shared VPC service project association |
 | `roles/compute.networkAdmin` | Grant subnet access to GKE service accounts |
