@@ -133,6 +133,23 @@ cmd_vpc_select() {
 
             VPC_NAME="$new_vpc_name"
             SUBNET_NAME="$new_subnet_name"
+
+            local pods_cidr services_cidr
+            read_input pods_cidr "${CYAN}Pods CIDR     (default: 10.96.0.0/14): ${NC}"
+            [ -z "$pods_cidr" ] && pods_cidr="10.96.0.0/14"
+            read_input services_cidr "${CYAN}Services CIDR (default: 10.100.0.0/20): ${NC}"
+            [ -z "$services_cidr" ] && services_cidr="10.100.0.0/20"
+
+            PODS_RANGE_NAME="${project_id}-pods"
+            SERVICES_RANGE_NAME="${project_id}-services"
+
+            if ! run_or_dry gcloud compute networks subnets update "$new_subnet_name" \
+                --project="${project_id}" \
+                --region="${region}" \
+                --add-secondary-ranges="${PODS_RANGE_NAME}=${pods_cidr},${SERVICES_RANGE_NAME}=${services_cidr}"; then
+                error "Failed to add secondary ranges to $new_subnet_name"
+                return 1
+            fi
             ;;
         3)
             # shellcheck disable=SC2034
