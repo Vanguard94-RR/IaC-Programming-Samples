@@ -89,7 +89,7 @@ download_gitlab_raw() {
             encoded_path=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$file_path")
         else
             # encode slashes and spaces conservatively
-            encoded_path=$(printf '%s' "$file_path" | sed -e 's/ /%20/g' -e 's#/##g')
+            encoded_path=$(printf '%s' "$file_path" | sed -e 's/ /%20/g' -e 's#/#%2F#g')
         fi
 
         # URL-encode project_path for project id

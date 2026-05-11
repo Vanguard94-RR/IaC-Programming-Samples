@@ -13,6 +13,6 @@ test: lint
 	@echo "Running smoke test..."
 	@./test/run-smoke.sh
 
-run:
+update:
 	@echo "Run entrypoint (interactive)"
 	@./bin/update_ingress.v2.sh
