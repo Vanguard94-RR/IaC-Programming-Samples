@@ -1,18 +1,18 @@
 {
   "gitlab_url": "https://gitlab.com",
-  "ticket": "CTASK0366049",
+  "ticket": "CTASK0366234",
   "promotions": [
     {
       "source": {
-        "project": "gitgnp/cotizadores/gke-gnp-danios-config-back-end",
-        "branch": "0.1.209"
+        "project": "gitgnp/bca/archivos_promocion_bca",
+        "branch": "0.0.226"
       },
       "destination": {
-        "project": "gitgnp/gcp/gae-config-files",
+        "project": "gitgnp/gcp/gke-config-files",
         "branch": "master"
       },
-      "source_path": "GAE-GNP-HogarVersatil-portal-integracion/config/uat/app_temp.yaml",
-      "dest_path": "gnp-hogarversatil/uat/GAE-GNP-HogarVersatil-portal-integracion/app.yaml"
+      "source_path": "GKE/selo/gke-bca-consulta-bonos/2.0/uat/Deployment-gke-bca-consulta-bonos.yaml",
+      "dest_path": "harness-manifests/gnp-baseunicaagentes/uat/GKE-GNP-bca-consulta-bonos/Deployment-gke-bca-consulta-bonos.yaml"
     }
   ],
   "user": "JMCM"
