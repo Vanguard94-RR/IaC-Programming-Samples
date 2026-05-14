@@ -6,3 +6,8 @@
 CLAUDE.md
 .claude/
 docs/
+
+# Operator runtime files — not in repo
+cluster.csv
+data-script.csv
+REVIEW.md
