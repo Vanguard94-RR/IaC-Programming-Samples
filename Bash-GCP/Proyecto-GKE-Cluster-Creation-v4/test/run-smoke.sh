@@ -107,7 +107,7 @@ run_test_output "T14: --env qa defaults to regular channel" \
     --region us-central1 --env qa
 
 run_test_output "T15: SA step prints NO_CLUSTER skip message" \
-    "Skipping SA role" \
+    "NO_CLUSTER.*Skipping SA role" \
     "$ENTRY" create --dry-run \
     --project test-proj --cluster test-gke \
     --region us-central1 --env qa
