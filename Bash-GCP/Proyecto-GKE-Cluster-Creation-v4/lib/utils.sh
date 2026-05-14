@@ -72,7 +72,7 @@ usage() {
     info "Usage: create_gke_cluster.sh [SUBCOMMAND] [FLAGS]"
     info ""
     info "Subcommands:"
-    info "  create (default)   Full 10-step GKE cluster creation"
+    info "  create (default)   Full 11-step GKE cluster creation (12 for PRO)"
     info "  update-armor       Apply/update Cloud Armor rules"
     info "  rollback-armor     Restore Cloud Armor rules from JSON backup"
     info "  fix-shared-vpc     Associate service project to Shared VPC host"
