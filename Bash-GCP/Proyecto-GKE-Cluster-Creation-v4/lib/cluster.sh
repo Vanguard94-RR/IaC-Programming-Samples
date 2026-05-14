@@ -250,7 +250,7 @@ cmd_create() {
     else
         local project_number
         project_number=$(gcloud projects describe "$project_id" \
-            --format='value(projectNumber)')
+            --format='value(projectNumber)' 2>/dev/null || true)
         [[ -z "$project_number" ]] && { error "Could not fetch project number for $project_id"; return 1; }
         local sa="${project_number}-compute@developer.gserviceaccount.com"
         for role in \
