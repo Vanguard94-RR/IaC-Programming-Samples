@@ -169,6 +169,12 @@ do_setup() {
 
     connect_to_cluster "$cluster" "$location" "$project" || return 1
 
+    # Idempotency: skip if already fully configured
+    if check_binding_exists "$iam_sa" "$project" "$ksa" "$namespace"; then
+        echo "Binding already configured: $ksa → $iam_sa"
+        return 0
+    fi
+
     local saved_dry="${WI_DRY_RUN:-0}"
     [[ "$dry_run" == "1" ]] && export WI_DRY_RUN=1
 
