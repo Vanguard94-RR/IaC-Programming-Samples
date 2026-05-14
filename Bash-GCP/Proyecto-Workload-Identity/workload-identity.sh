@@ -70,6 +70,9 @@ if [[ -f "$G_SCRIPT_DIR/config.sh" ]]; then
     source "$G_SCRIPT_DIR/config.sh"
 fi
 
+# --- Source Library Files ---
+source "$G_SCRIPT_DIR/lib/registry.sh"
+
 # Use configuration values with fallbacks to defaults
 readonly G_IAM_ROLE="${WI_IAM_ROLE:-roles/iam.workloadIdentityUser}"
 readonly G_DEFAULT_NS="${WI_DEFAULT_NAMESPACE:-apps}"
@@ -87,135 +90,10 @@ cleanup() {
 }
 mkdir -p "$G_TEMP_DIR"
 
-# --- Initialize and secure control file ---
-init_control_file() {
-    if [[ ! -f "$G_CONTROL_FILE" ]]; then
-        echo "Fecha,Ticket,ProjectId,Cluster,Location,Namespace,KSA,IAM_SA,Status" > "$G_CONTROL_FILE"
-        chmod 600 "$G_CONTROL_FILE"
-    fi
-    
-    # Secure file permissions (sensitive data) - ensure they are strictly 600
-    if ! chmod 600 "$G_CONTROL_FILE" 2>/dev/null; then
-        echo -e "${RED}✗ Error: Cannot set secure permissions on $G_CONTROL_FILE${NC}" >&2
-        return 1
-    fi
-    
-    # Verify permissions were actually set to 600
-    local actual_perms
-    actual_perms=$(stat -c '%a' "$G_CONTROL_FILE" 2>/dev/null || stat -f '%OA' "$G_CONTROL_FILE" 2>/dev/null)
-    if [[ "$actual_perms" != "600" ]]; then
-        echo -e "${YELLOW}⚠ Warning: CSV file permissions may not be 600 (found: $actual_perms)${NC}" >&2
-    fi
-    
-    # Migrate old format if needed
-    if [[ -f "$G_CONTROL_FILE" ]]; then
-        local header
-        header=$(head -1 "$G_CONTROL_FILE" 2>/dev/null || echo "")
-        if [[ -n "$header" && ! "$header" =~ "Status" ]]; then
-            sed -i '1s/$/,Status/' "$G_CONTROL_FILE"
-            sed -i '2,$s/$/,activo/' "$G_CONTROL_FILE"
-            chmod 600 "$G_CONTROL_FILE"
-        fi
-    fi
-}
-
-# --- Register execution in control file ---
+# register_execution kept as thin wrapper for backward compat
 register_execution() {
-    local ticket="$1"
-    local project="$2"
-    local cluster="$3"
-    local location="$4"
-    local namespace="$5"
-    local ksa="$6"
-    local iam_sa="$7"
-    local status="${8:-activo}"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    
-    # Use "-" if no ticket
-    [[ -z "$ticket" ]] && ticket="-"
-    
-    echo "${timestamp},${ticket},${project},${cluster},${location},${namespace},${ksa},${iam_sa},${status}" >> "$G_CONTROL_FILE"
+    registry_upsert "$1" "$2" "$3" "$4" "$5" "$6" "$7"
 }
-
-# --- Update registry status (optimized with awk) ---
-update_registry_status() {
-    local project="$1"
-    local cluster="$2"
-    local namespace="$3"
-    local ksa="$4"
-    local new_status="$5"
-    
-    [[ ! -f "$G_CONTROL_FILE" ]] && return 1
-    
-    # Use awk for efficient single-pass update
-    local temp_file
-    temp_file=$(mktemp --tmpdir="$G_TEMP_DIR")
-    
-    awk -F',' -v p="$project" -v c="$cluster" -v ns="$namespace" -v k="$ksa" -v s="$new_status" '
-        BEGIN { OFS="," }
-        NR==1 { print; next }
-        $3==p && $4==c && $6==ns && $7==k { $9=s }
-        { print }
-    ' "$G_CONTROL_FILE" > "$temp_file"
-    
-    mv "$temp_file" "$G_CONTROL_FILE"
-    chmod 600 "$G_CONTROL_FILE"
-}
-
-
-
-
-
-# =============================================================================
-# Function: sync_registry
-# Description: Sync registry with GCS bucket for team sharing (optional)
-# Parameters: $1 = action (push|pull)
-# Returns: 0=success, 1=error (non-fatal if bucket not configured)
-# =============================================================================
-sync_registry() {
-    local action="${1:-push}"
-    
-    # Non-fatal: skip if bucket not configured
-    [[ -z "$G_GCS_BUCKET" ]] && return 0
-    
-    # Validate bucket path format
-    if [[ ! "$G_GCS_BUCKET" =~ ^gs:// ]]; then
-        log "WARNING: Invalid GCS bucket path: $G_GCS_BUCKET (expected gs://bucket-name)"
-        return 0
-    fi
-    
-    # Validate registry file exists
-    [[ ! -f "$G_CONTROL_FILE" ]] && {
-        log "WARNING: Registry file not found, skipping sync"
-        return 0
-    }
-    
-    case "$action" in
-        push)
-            if gcloud storage cp "$G_CONTROL_FILE" "$G_GCS_BUCKET/registry.csv" --quiet 2>&1; then
-                log "Registry synced to GCS"
-                return 0
-            else
-                log "WARNING: Failed to sync registry to GCS (check permissions)"
-                return 0  # Non-fatal
-            fi
-            ;;
-        pull)
-            if gcloud storage cp "$G_GCS_BUCKET/registry.csv" "$G_CONTROL_FILE" --quiet 2>&1; then
-                chmod 600 "$G_CONTROL_FILE"
-                log "Registry synced from GCS"
-                return 0
-            else
-                log "WARNING: Failed to sync registry from GCS (file may not exist)"
-                return 0  # Non-fatal
-            fi
-            ;;
-        *)
-            return 1
-            ;;
-    esac
-}
-
 
 # --- Setup log directory (called after ticket input) ---
 setup_log_directory() {

@@ -601,6 +601,96 @@ run_regression_tests() {
 }
 
 # =============================================================================
+# GROUP: registry
+# =============================================================================
+run_registry_tests() {
+    echo -e "\n${CYAN}── Registry Tests ───────────────────────────────────────────────${NC}"
+    source_script_for_unit
+
+    # T070: registry_upsert appends new row when no match exists
+    if should_run T070 registry; then
+        rm -f "$G_CONTROL_FILE"
+        G_ENCRYPT_REGISTRY=0
+        init_control_file 2>/dev/null
+        registry_upsert "TKT001" "proj-01" "cluster-a" "us-central1" "apps" "sa1" \
+            "sa1@proj-01.iam.gserviceaccount.com" 2>/dev/null
+        local data_rows
+        data_rows=$(awk 'NR>1 && NF' "$G_CONTROL_FILE" | wc -l)
+        if [[ "$data_rows" -eq 1 ]]; then
+            pass T070 "registry_upsert: appends new row"
+        else
+            fail T070 "registry_upsert: appends new row" "data_rows=$data_rows (expected 1)"
+        fi
+    fi
+
+    # T071: registry_upsert does not duplicate — second call updates, not appends
+    if should_run T071 registry; then
+        rm -f "$G_CONTROL_FILE"
+        G_ENCRYPT_REGISTRY=0
+        init_control_file 2>/dev/null
+        registry_upsert "TKT001" "proj-01" "cluster-a" "us-central1" "apps" "sa1" \
+            "sa1@proj-01.iam.gserviceaccount.com" 2>/dev/null
+        registry_upsert "TKT002" "proj-01" "cluster-a" "us-central1" "apps" "sa1" \
+            "sa1@proj-01.iam.gserviceaccount.com" 2>/dev/null
+        local data_rows
+        data_rows=$(awk 'NR>1 && NF' "$G_CONTROL_FILE" | wc -l)
+        if [[ "$data_rows" -eq 1 ]]; then
+            pass T071 "registry_upsert: no duplicate on repeated call"
+        else
+            fail T071 "registry_upsert: no duplicate on repeated call" "data_rows=$data_rows (expected 1)"
+        fi
+    fi
+
+    # T072: registry_upsert updates ticket on second call
+    if should_run T072 registry; then
+        rm -f "$G_CONTROL_FILE"
+        G_ENCRYPT_REGISTRY=0
+        init_control_file 2>/dev/null
+        registry_upsert "TKT001" "proj-01" "cluster-a" "us-central1" "apps" "sa1" \
+            "sa1@proj-01.iam.gserviceaccount.com" 2>/dev/null
+        registry_upsert "TKT002" "proj-01" "cluster-a" "us-central1" "apps" "sa1" \
+            "sa1@proj-01.iam.gserviceaccount.com" 2>/dev/null
+        local ticket
+        ticket=$(awk -F',' 'NR==2 {print $2}' "$G_CONTROL_FILE")
+        assert_equals T072 "registry_upsert: second call updates ticket field" "TKT002" "$ticket"
+    fi
+
+    # T073: different (project, cluster, namespace, ksa) tuples → separate rows
+    if should_run T073 registry; then
+        rm -f "$G_CONTROL_FILE"
+        G_ENCRYPT_REGISTRY=0
+        init_control_file 2>/dev/null
+        registry_upsert "TKT001" "proj-01" "cluster-a" "us-central1" "apps" "sa1" \
+            "sa1@proj-01.iam.gserviceaccount.com" 2>/dev/null
+        registry_upsert "TKT002" "proj-01" "cluster-a" "us-central1" "apps" "sa2" \
+            "sa2@proj-01.iam.gserviceaccount.com" 2>/dev/null
+        local data_rows
+        data_rows=$(awk 'NR>1 && NF' "$G_CONTROL_FILE" | wc -l)
+        if [[ "$data_rows" -eq 2 ]]; then
+            pass T073 "registry_upsert: distinct keys → distinct rows"
+        else
+            fail T073 "registry_upsert: distinct keys → distinct rows" "data_rows=$data_rows (expected 2)"
+        fi
+    fi
+
+    # T074: init_control_file migrates corrupt rows (tab in cluster field)
+    if should_run T074 registry; then
+        rm -f "$G_CONTROL_FILE"
+        printf 'Fecha,Ticket,ProjectId,Cluster,Location,Namespace,KSA,IAM_SA,Status\n' \
+            > "$G_CONTROL_FILE"
+        # Corrupt: field 4 contains "cluster-a<TAB>us-central1" (location embedded in cluster)
+        printf '2026-01-01 00:00:00,TKT001,proj-01,cluster-a\tus-central1,,apps,sa1,sa1@proj-01.iam.gserviceaccount.com,activo\n' \
+            >> "$G_CONTROL_FILE"
+        chmod 600 "$G_CONTROL_FILE"
+        init_control_file 2>/dev/null
+        local location
+        location=$(awk -F',' 'NR==2 {print $5}' "$G_CONTROL_FILE")
+        assert_equals T074 "init_control_file: tab-migration fixes Location field" \
+            "us-central1" "$location"
+    fi
+}
+
+# =============================================================================
 # Summary
 # =============================================================================
 print_summary() {
@@ -641,6 +731,7 @@ main() {
     [[ -z "$OPT_GROUP" || "$OPT_GROUP" == "unit"        ]] && run_unit_tests
     [[ -z "$OPT_GROUP" || "$OPT_GROUP" == "integration" ]] && run_integration_tests
     [[ -z "$OPT_GROUP" || "$OPT_GROUP" == "regression"  ]] && run_regression_tests
+    [[ -z "$OPT_GROUP" || "$OPT_GROUP" == "registry"    ]] && run_registry_tests
 
     print_summary
 
