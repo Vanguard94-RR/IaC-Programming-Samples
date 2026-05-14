@@ -188,9 +188,10 @@ do_setup() {
     fi
 
     # Create KSA if missing
-    if ! kubectl get serviceaccount "$ksa" -n "$namespace" &>/dev/null; then
-        exec_or_dry "create KSA" \
-            kubectl create serviceaccount "$ksa" -n "$namespace"
+    if [[ "${WI_DRY_RUN:-0}" == "1" ]]; then
+        exec_or_dry "create KSA" kubectl create serviceaccount "$ksa" -n "$namespace"
+    elif ! kubectl get serviceaccount "$ksa" -n "$namespace" &>/dev/null; then
+        exec_or_dry "create KSA" kubectl create serviceaccount "$ksa" -n "$namespace"
     fi
 
     # IAM binding
@@ -352,34 +353,37 @@ check_gcloud_auth() {
 }
 
 retry_gcloud_command() {
-    local max_retries=3 timeout=1 attempt=1
+    local max_retries=3 timeout=1 attempt=1 exit_code=0
     while [[ $attempt -le $max_retries ]]; do
-        if "$@"; then return 0; fi
-        local exit_code=$?
+        "$@"
+        exit_code=$?
+        [[ $exit_code -eq 0 ]] && return 0
         if [[ $exit_code -eq 1 || $exit_code -eq 403 || $exit_code -eq 401 ]]; then
             return $exit_code
         fi
         if [[ $attempt -lt $max_retries ]]; then
             echo -e "\033[0;37m  Retry $attempt/$max_retries in ${timeout}s...\033[0m" >&2
-            sleep $timeout
-            timeout=$((timeout * 2))
-            ((attempt++))
-        else
-            ((attempt++))
+            sleep "$timeout"
+            timeout=$(( timeout * 2 ))
         fi
+        (( attempt++ ))
     done
     return $exit_code
 }
 
 connect_to_cluster() {
     local cluster_name="$1" location="$2" project_id="$3"
+    local flag
     log "Connecting to cluster: $cluster_name in $location"
     if [[ "$location" =~ ^[a-z]+-[a-z]+[0-9]+$ ]]; then
-        gcloud container clusters get-credentials "$cluster_name" \
-            --region "$location" --project "$project_id" &>/dev/null
+        flag="--region"
     else
-        gcloud container clusters get-credentials "$cluster_name" \
-            --zone "$location" --project "$project_id" &>/dev/null
+        flag="--zone"
+    fi
+    if ! gcloud container clusters get-credentials "$cluster_name" \
+            "$flag" "$location" --project "$project_id" 2>/dev/null; then
+        echo "Failed to connect to cluster $cluster_name ($location)" >&2
+        return 1
     fi
     log "Connected to cluster: $cluster_name"
 }
