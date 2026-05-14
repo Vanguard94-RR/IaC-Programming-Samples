@@ -40,17 +40,16 @@ run_test_fail() {
 }
 
 run_test_output() {
-    local name="$1"
-    local pattern="$2"
+    local name="$1" pattern="$2"
     shift 2
     printf "  %-50s" "$name"
-    set +o pipefail
-    if "$@" 2>&1 | grep -qe "$pattern"; then
+    local out
+    out=$("$@" 2>&1) || true
+    if printf '%s' "$out" | grep -qe "$pattern"; then
         printf "PASS\n"; PASS=$((PASS+1))
     else
         printf "FAIL\n"; FAIL=$((FAIL+1))
     fi
-    set -o pipefail
 }
 
 echo ""
