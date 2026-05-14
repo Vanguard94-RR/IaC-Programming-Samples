@@ -71,14 +71,13 @@ if [[ -f "$G_SCRIPT_DIR/config.sh" ]]; then
 fi
 
 # --- Source Library Files ---
+[[ -f "$G_SCRIPT_DIR/lib/registry.sh" ]] || { echo "ERROR: lib/registry.sh not found" >&2; exit 1; }
 source "$G_SCRIPT_DIR/lib/registry.sh"
 
 # Use configuration values with fallbacks to defaults
 readonly G_IAM_ROLE="${WI_IAM_ROLE:-roles/iam.workloadIdentityUser}"
 readonly G_DEFAULT_NS="${WI_DEFAULT_NAMESPACE:-apps}"
 readonly G_ANNOTATION_KEY="${WI_ANNOTATION_KEY:-iam.gke.io/gcp-service-account}"
-readonly G_REGISTRY_FILE="${WI_REGISTRY_FILE:-$G_SCRIPT_DIR/workload-identity-registry.csv}"
-
 # Remote sync settings (default: gs://gnp-workloadidentity, override via WI_GCS_BUCKET)
 G_GCS_BUCKET="${WI_GCS_BUCKET:-gs://gnp-workloadidentity}"
 
@@ -90,7 +89,8 @@ cleanup() {
 }
 mkdir -p "$G_TEMP_DIR"
 
-# register_execution kept as thin wrapper for backward compat
+# register_execution kept for backward compat; status arg ($8) intentionally dropped:
+# registry_upsert always writes "activo" (cleanup uses update_registry_status instead)
 register_execution() {
     registry_upsert "$1" "$2" "$3" "$4" "$5" "$6" "$7"
 }
