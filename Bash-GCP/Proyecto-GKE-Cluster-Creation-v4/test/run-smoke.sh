@@ -39,6 +39,20 @@ run_test_fail() {
     fi
 }
 
+run_test_output() {
+    local name="$1"
+    local pattern="$2"
+    shift 2
+    printf "  %-50s" "$name"
+    set +o pipefail
+    if "$@" 2>&1 | grep -qe "$pattern"; then
+        printf "PASS\n"; PASS=$((PASS+1))
+    else
+        printf "FAIL\n"; FAIL=$((FAIL+1))
+    fi
+    set -o pipefail
+}
+
 echo ""
 echo "=== GKE Cluster Creation Smoke Test ==="
 echo ""
@@ -80,6 +94,18 @@ run_test "T12: create --dry-run without --region defaults correctly" \
     "$ENTRY" create --dry-run \
     --project test-proj --cluster test-gke \
     --env qa
+
+run_test_output "T13: --env pro defaults to stable channel" \
+    "--release-channel=stable" \
+    "$ENTRY" create --dry-run \
+    --project test-proj --cluster test-gke \
+    --region us-central1 --env pro
+
+run_test_output "T14: --env qa defaults to regular channel" \
+    "--release-channel=regular" \
+    "$ENTRY" create --dry-run \
+    --project test-proj --cluster test-gke \
+    --region us-central1 --env qa
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"

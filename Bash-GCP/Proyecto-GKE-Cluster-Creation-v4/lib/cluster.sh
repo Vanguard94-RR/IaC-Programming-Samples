@@ -129,19 +129,19 @@ _collect_params() {
     case "$env" in
         pro)
             machine_type="${machine_type:-n2-standard-2}"
-            channel="${channel:-regular}"
+            channel="${channel:-stable}"
             num_nodes="${num_nodes:-2}"
             fleet_id="${fleet_id:-gnp-fleets-pro}"
             ;;
         uat)
             machine_type="${machine_type:-n1-standard-2}"
-            channel="${channel:-rapid}"
+            channel="${channel:-regular}"
             num_nodes="${num_nodes:-2}"
             fleet_id="${fleet_id:-gnp-fleets-uat}"
             ;;
         qa)
             machine_type="${machine_type:-n1-standard-2}"
-            channel="${channel:-rapid}"
+            channel="${channel:-regular}"
             num_nodes="${num_nodes:-1}"
             fleet_id="${fleet_id:-gnp-fleets-qa}"
             ;;
