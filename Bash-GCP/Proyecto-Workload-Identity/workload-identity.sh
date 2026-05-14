@@ -222,11 +222,14 @@ prompt_input() {
     fi
     
     read input_value
-    
+    # Trim leading/trailing whitespace (handles copy-paste with accidental spaces)
+    input_value="${input_value#"${input_value%%[![:space:]]*}"}"
+    input_value="${input_value%"${input_value##*[![:space:]]}"}"
+
     if [[ -z "$input_value" ]] && [[ -n "$default_value" ]]; then
         input_value="$default_value"
     fi
-    
+
     printf -v "$variable_name" '%s' "$input_value"
     log "Input - ${prompt_text}: ${input_value}"
 }
