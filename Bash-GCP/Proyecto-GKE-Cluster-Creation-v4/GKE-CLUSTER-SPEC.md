@@ -10,7 +10,7 @@ This document describes the configuration applied by `bin/create_gke_cluster.sh`
 
 | Subcommand | Purpose |
 | ----- | ----- |
-| `create` (default) | Full 10-step GKE cluster creation (interactive) |
+| `create` (default) | Full 11-step GKE cluster creation (12 for PRO, interactive) |
 | `update-armor --project <id>` | Apply/update Cloud Armor rules |
 | `rollback-armor --project <id>` | Restore Cloud Armor from JSON backup |
 | `fix-shared-vpc` | Associate service project to Shared VPC host |
@@ -124,11 +124,11 @@ Policy name: `sslsecure`
 | ----- | ----- |
 | Machine type | `n1-standard-2` |
 | Default node count | 1 |
-| Release channel | `rapid` |
+| Release channel | `regular` |
 | Fleet project | `gnp-fleets-qa` |
 | Default region | `us-central1` |
 | Node zone | `{region}-f` |
-| GKE version | Auto-fetched from server-config for `rapid` channel |
+| GKE version | Auto-fetched from server-config for `regular` channel |
 
 #### Networking
 
@@ -174,12 +174,12 @@ Policy name: `sslsecure`
 | Parameter | Value |
 | ----- | ----- |
 | Machine type | `n1-standard-2` |
-| Default node count | 2 |
-| Release channel | `rapid` |
+| Default node count | 1 |
+| Release channel | `regular` |
 | Fleet project | `gnp-fleets-uat` |
 | Default region | `us-central1` |
 | Node zone | `{region}-f` |
-| GKE version | Auto-fetched from server-config for `rapid` channel |
+| GKE version | Auto-fetched from server-config for `regular` channel |
 
 #### Networking
 
@@ -209,11 +209,11 @@ Same as QA. See QA — Security section above.
 | ----- | ----- |
 | Machine type | `n2-standard-2` |
 | Default node count | 2 |
-| Release channel | `regular` |
+| Release channel | `stable` |
 | Fleet project | `gnp-fleets-pro` |
 | Default region | `us-central1` |
 | Node zone | `{region}-f` |
-| GKE version | Auto-fetched from server-config for `regular` channel |
+| GKE version | Auto-fetched from server-config for `stable` channel |
 
 #### Networking
 

@@ -259,7 +259,8 @@ cmd_create() {
             roles/logging.logWriter; do
             run_or_dry gcloud projects add-iam-policy-binding "$project_id" \
                 --member="serviceAccount:${sa}" \
-                --role="$role"
+                --role="$role" \
+                --quiet
         done
         success "Service account roles configured"
     fi
