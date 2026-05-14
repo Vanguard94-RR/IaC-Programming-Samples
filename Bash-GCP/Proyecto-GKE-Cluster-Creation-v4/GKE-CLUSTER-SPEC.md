@@ -116,19 +116,26 @@ Policy name: `sslsecure`
 
 ## Environment Specifications
 
-### QA
+### QA / UAT
 
 #### Cluster
+
+**Shared settings:**
 
 | Parameter | Value |
 | ----- | ----- |
 | Machine type | `n1-standard-2` |
-| Default node count | 1 |
 | Release channel | `regular` |
-| Fleet project | `gnp-fleets-qa` |
 | Default region | `us-central1` |
 | Node zone | `{region}-f` |
 | GKE version | Auto-fetched from server-config for `regular` channel |
+
+**Per-environment differences:**
+
+| Parameter | QA | UAT |
+| ----- | ----- | ----- |
+| Default node count | 1 | 2 |
+| Fleet project | `gnp-fleets-qa` | `gnp-fleets-uat` |
 
 #### Networking
 
@@ -154,40 +161,6 @@ Policy name: `sslsecure`
 | Cloud Armor | Applied (see Shared Defaults) |
 | SSL policy | Applied (see Shared Defaults) |
 | Workload identity pool | `{project_id}.svc.id.goog` |
-
-#### Post-creation Components
-
-| Component | Value |
-| ----- | ----- |
-| Namespace | `apps` |
-| Kubernetes Service Account (KSA) | `apps-gke` |
-| GCP IAM Service Account | `apps-sa` |
-| Workload Identity binding | `apps-sa@{project_id}.iam.gserviceaccount.com` ↔ `apps/apps-gke` |
-| Twistlock | Not deployed |
-
----
-
-### UAT
-
-#### Cluster
-
-| Parameter | Value |
-| ----- | ----- |
-| Machine type | `n1-standard-2` |
-| Default node count | 1 |
-| Release channel | `regular` |
-| Fleet project | `gnp-fleets-uat` |
-| Default region | `us-central1` |
-| Node zone | `{region}-f` |
-| GKE version | Auto-fetched from server-config for `regular` channel |
-
-#### Networking
-
-Same as QA. See QA — Networking section above.
-
-#### Security
-
-Same as QA. See QA — Security section above.
 
 #### Post-creation Components
 
