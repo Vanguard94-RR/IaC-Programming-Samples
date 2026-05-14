@@ -220,7 +220,7 @@ cmd_create() {
     STEP_CURRENT=0
     _collect_params
     # shellcheck disable=SC2034
-    [[ "${project_id:-}" =~ -pro$ ]] && STEP_TOTAL=11 || STEP_TOTAL=10
+    [[ "${project_id:-}" =~ -pro$ ]] && STEP_TOTAL=12 || STEP_TOTAL=11
 
     local skip_create=false
     if [ "${NO_CLUSTER:-0}" != "1" ] && \
@@ -242,6 +242,25 @@ cmd_create() {
                 || warn "$api already enabled"
         done
         success "APIs enabled"
+    fi
+
+    step "Configuring Compute Service Account"
+    if [ "${NO_CLUSTER:-0}" = "1" ]; then
+        warn "[NO_CLUSTER] Skipping SA role assignment"
+    else
+        local project_number
+        project_number=$(gcloud projects describe "$project_id" \
+            --format='value(projectNumber)')
+        local sa="${project_number}-compute@developer.gserviceaccount.com"
+        for role in \
+            roles/container.defaultNodeServiceAccount \
+            roles/artifactregistry.reader \
+            roles/logging.logWriter; do
+            run_or_dry gcloud projects add-iam-policy-binding "$project_id" \
+                --member="serviceAccount:${sa}" \
+                --role="$role"
+        done
+        success "Service account roles configured"
     fi
 
     cmd_vpc_select
