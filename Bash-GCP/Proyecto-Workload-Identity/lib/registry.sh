@@ -11,7 +11,10 @@ init_control_file() {
     if [[ ! -f "$G_CONTROL_FILE" ]]; then
         echo "Fecha,Ticket,ProjectId,Cluster,Location,Namespace,KSA,IAM_SA,Status" \
             > "$G_CONTROL_FILE"
-        chmod 600 "$G_CONTROL_FILE"
+        if ! chmod 600 "$G_CONTROL_FILE" 2>/dev/null; then
+            echo -e "\033[0;31m✗ Cannot set secure permissions on $G_CONTROL_FILE\033[0m" >&2
+            return 1
+        fi
     fi
 
     chmod 600 "$G_CONTROL_FILE" 2>/dev/null || true
@@ -148,6 +151,10 @@ sync_registry() {
             else
                 log "WARNING: Failed to sync registry from GCS"
             fi
+            ;;
+        *)
+            log "WARNING: sync_registry: unknown action '$action'"
+            return 1
             ;;
     esac
     return 0
