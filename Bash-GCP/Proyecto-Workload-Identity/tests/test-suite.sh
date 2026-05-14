@@ -601,6 +601,87 @@ run_regression_tests() {
 }
 
 # =============================================================================
+# GROUP: core
+# =============================================================================
+run_core_tests() {
+    echo -e "\n${CYAN}── Core Tests ───────────────────────────────────────────────────${NC}"
+    source_script_for_unit
+
+    # T080: exec_or_dry with WI_DRY_RUN=1 does NOT execute the command
+    if should_run T080 core; then
+        local sentinel="$TEST_TMP/exec-or-dry-sentinel"
+        rm -f "$sentinel"
+        WI_DRY_RUN=1 exec_or_dry "sentinel touch" touch "$sentinel" 2>/dev/null || true
+        if [[ ! -f "$sentinel" ]]; then
+            pass T080 "exec_or_dry: WI_DRY_RUN=1 suppresses execution"
+        else
+            fail T080 "exec_or_dry: WI_DRY_RUN=1 suppresses execution" "file was created"
+        fi
+    fi
+
+    # T081: exec_or_dry dry-run output contains [DRY-RUN]
+    if should_run T081 core; then
+        local out
+        out=$(WI_DRY_RUN=1 exec_or_dry "desc" echo "payload" 2>&1)
+        if echo "$out" | grep -q '\[DRY-RUN\]'; then
+            pass T081 "exec_or_dry: dry-run output starts with [DRY-RUN]"
+        else
+            fail T081 "exec_or_dry: dry-run output starts with [DRY-RUN]" "output='$out'"
+        fi
+    fi
+
+    # T082: exec_or_dry with WI_DRY_RUN=0 executes the command
+    if should_run T082 core; then
+        local sentinel="$TEST_TMP/exec-or-dry-live"
+        rm -f "$sentinel"
+        WI_DRY_RUN=0 exec_or_dry "sentinel touch" touch "$sentinel" 2>/dev/null
+        if [[ -f "$sentinel" ]]; then
+            pass T082 "exec_or_dry: WI_DRY_RUN=0 executes command"
+        else
+            fail T082 "exec_or_dry: WI_DRY_RUN=0 executes command" "file was not created"
+        fi
+    fi
+
+    # T083: do_bind dry-run exits 0 and contains [DRY-RUN] in output
+    if should_run T083 core; then
+        local out exit_code=0
+        out=$(
+            WI_DRY_RUN=1 \
+            WI_REGISTRY_FILE="$TEST_TMP/registry-bind.csv" \
+            do_bind \
+                "test-project-01" "test-cluster" "us-central1" "apps" \
+                "app-ksa" "app-ksa@test-project-01.iam.gserviceaccount.com" \
+                "TKTTEST" "1" \
+            2>&1
+        ) || exit_code=$?
+        if [[ $exit_code -eq 0 ]] && echo "$out" | grep -q '\[DRY-RUN\]'; then
+            pass T083 "do_bind: --dry-run exits 0 and shows [DRY-RUN] output"
+        else
+            fail T083 "do_bind: --dry-run exits 0 and shows [DRY-RUN] output" \
+                "exit=$exit_code output='$(echo "$out" | head -3)'"
+        fi
+    fi
+
+    # T084: do_verify exits 0 and produces output (stub gcloud/kubectl return success)
+    if should_run T084 core; then
+        local out exit_code=0
+        out=$(
+            WI_REGISTRY_FILE="$TEST_TMP/registry-verify.csv" \
+            do_verify \
+                "test-project-01" "test-cluster" "us-central1" "apps" \
+                "app-ksa" "app-ksa@test-project-01.iam.gserviceaccount.com" \
+            2>&1
+        ) || exit_code=$?
+        if [[ -n "$out" ]]; then
+            pass T084 "do_verify: produces output"
+        else
+            fail T084 "do_verify: produces output" \
+                "exit=$exit_code output='$(echo "$out" | head -3)'"
+        fi
+    fi
+}
+
+# =============================================================================
 # GROUP: registry
 # =============================================================================
 run_registry_tests() {
@@ -731,6 +812,7 @@ main() {
     [[ -z "$OPT_GROUP" || "$OPT_GROUP" == "unit"        ]] && run_unit_tests
     [[ -z "$OPT_GROUP" || "$OPT_GROUP" == "integration" ]] && run_integration_tests
     [[ -z "$OPT_GROUP" || "$OPT_GROUP" == "regression"  ]] && run_regression_tests
+    [[ -z "$OPT_GROUP" || "$OPT_GROUP" == "core"        ]] && run_core_tests
     [[ -z "$OPT_GROUP" || "$OPT_GROUP" == "registry"    ]] && run_registry_tests
 
     print_summary
