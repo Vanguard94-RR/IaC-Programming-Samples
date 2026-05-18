@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /home/admin/Documents/GNP/Repos/IaC-Programming-Samples/Bash-GCP/Proyecto-Workload-Identity commit -m ' *)",
+      "Bash(git commit -m 'feat: extract lib/registry.sh with registry_upsert and tab migration *)",
+      "Bash(bash /home/admin/Documents/GNP/Repos/IaC-Programming-Samples/Bash-GCP/Proyecto-Workload-Identity/tests/test-suite.sh -g registry)",
+      "Bash(git stash *)",
+      "Bash(git checkout *)",
+      "Bash(bash tests/test-suite.sh -t T049)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(bash tests/test-suite.sh --group registry)",
+      "Bash(bash tests/test-suite.sh --group static)",
+      "Bash(shellcheck /home/admin/Documents/GNP/Repos/IaC-Programming-Samples/Bash-GCP/Proyecto-Workload-Identity/lib/registry.sh)",
+      "Bash(awk -F',' '{print NF, \"f4=[\"$4\"] f5=[\"$5\"]\"}')",
+      "Bash(/usr/bin/grep --version)",
+      "Bash(grep -v \"^#\\\\|^[[:space:]]*$\\\\|^[a-z_]*\\(\\){\\\\|^[a-z_]*\\(\\)\\\\|^}\" /home/admin/Documents/GNP/Repos/IaC-Programming-Samples/Bash-GCP/Proyecto-Workload-Identity/lib/registry.sh)",
+      "Bash(bash -c 'G_CONTROL_FILE=/tmp/test.csv; G_TEMP_DIR=/tmp; G_GCS_BUCKET=\"\"; source /home/admin/Documents/GNP/Repos/IaC-Programming-Samples/Bash-GCP/Proyecto-Workload-Identity/lib/registry.sh && echo \"Source OK — only functions defined\" && declare -f init_control_file > /dev/null && echo \"init_control_file: defined\" && declare -f registry_upsert > /dev/null && echo \"registry_upsert: defined\"')",
+      "Bash(git commit -m 'fix: registry.sh code quality issues \\(chmod, sync case, guard, dead var\\) *)",
+      "Bash(echo \"exit:$?\")",
+      "Bash(bash /home/admin/Documents/GNP/Repos/IaC-Programming-Samples/Bash-GCP/Proyecto-Workload-Identity/workload-identity.sh list)",
+      "Bash(bash /home/admin/Documents/GNP/Repos/IaC-Programming-Samples/Bash-GCP/Proyecto-Workload-Identity/tests/test-suite.sh --group registry)",
+      "Bash(git -C /home/admin/Documents/GNP/Repos/IaC-Programming-Samples/Bash-GCP/Proyecto-Workload-Identity log --oneline -4)",
+      "Bash(bash tests/test-suite.sh -g core)",
+      "Bash(grep -v \"^\\\\s*$\")",
+      "Bash(bash tests/test-suite.sh -g static)",
+      "Bash(bash tests/test-suite.sh -g unit)",
+      "Bash(bash tests/test-suite.sh -g registry)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(grep -n \"\\\\\"list\\\\\"\\\\|\\\\\"verify\\\\\"\\\\|\\\\\"setup\\\\\"\\\\|\\\\\"bind\\\\\"\\\\|\\\\\"cleanup\\\\\"\\\\|WI_UNIT_TEST\\\\|CLI_MODE\\\\|non-interactive\\\\|parse.*arg\\\\|arg.*parse\\\\|COMMAND\\\\|\\\\$1.*case\\\\|case.*\\\\$1\" /home/admin/Documents/GNP/Repos/IaC-Programming-Samples/Bash-GCP/Proyecto-Workload-Identity/workload-identity.sh)",
+      "Bash(bash tests/test-suite.sh --group integration --verbose)",
+      "Bash(WI_ENCRYPT_REGISTRY=0 WI_REGISTRY_FILE=/tmp/test-reg.csv PATH=tests/stub-bin:__TRACKED_VAR__ bash workload-identity.sh list --project proj-01)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(WI_ENCRYPT_REGISTRY=0 WI_REGISTRY_FILE=/tmp/test-reg.csv PATH=tests/stub-bin:__TRACKED_VAR__ bash -x workload-identity.sh list --project proj-01)",
+      "Bash(bash tests/test-suite.sh --group core)",
+      "Bash(git -C /home/admin/Documents/GNP/Repos/IaC-Programming-Samples/Bash-GCP/Proyecto-Workload-Identity log --oneline -5)",
+      "Bash(WI_UNIT_TEST=1 bash tests/test-suite.sh)",
+      "Bash(git -C /home/admin/Documents/GNP/Repos/IaC-Programming-Samples/Bash-GCP/Proyecto-Workload-Identity add lib/ui.sh workload-identity.sh)",
+      "Bash(git -C /home/admin/Documents/GNP/Repos/IaC-Programming-Samples/Bash-GCP/Proyecto-Workload-Identity commit -m 'feat: extract lib/ui.sh with interactive_bind and updated menu *)",
+      "Bash(git -C /home/admin/Documents/GNP/Repos/IaC-Programming-Samples/Bash-GCP/Proyecto-Workload-Identity commit -m 'feat: extract lib/ui.sh with interactive_bind and updated menu')"
+    ]
+  }
+}
