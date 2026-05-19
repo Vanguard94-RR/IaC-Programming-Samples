@@ -505,17 +505,13 @@ interactive_setup() {
         return 1
     fi
 
+
     echo ""
 
     # --- Step 6: Namespace ---
     prompt_input "Enter namespace" "namespace" "$G_DEFAULT_NS"
 
-    echo -ne "${GRAY}Validating namespace...${NC}"
-    if ! kubectl get namespace "$namespace" &>/dev/null; then
-        echo -e "\r${YELLOW}⚠ Namespace does not exist (will be created)${NC}     "
-    else
-        echo -e "\r${LGREEN}✓ Namespace verified${NC}     "
-    fi
+    echo -e "${GRAY}Namespace: $namespace (will be created if missing)${NC}"
 
     echo ""
 
@@ -588,9 +584,23 @@ interactive_setup() {
     fi
     ((step++))
 
-    # Add IAM Workload Identity binding
+    # Add IAM Workload Identity binding — auto-enables WI if pool missing, then retries
     echo -ne "${WHITE}[${step}/${total_steps}]${NC} Adding IAM binding..."
-    if add_iam_binding "$iam_sa_email" "$project_id" "$ksa_name" "$namespace" >/dev/null 2>&1; then
+    local bind_out bind_rc=0
+    bind_out=$(add_iam_binding "$iam_sa_email" "$project_id" "$ksa_name" "$namespace" 2>&1) || bind_rc=$?
+    if [[ $bind_rc -ne 0 ]] && echo "$bind_out" | grep -q "Identity Pool does not exist"; then
+        echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Adding IAM binding... ${YELLOW}(WI not enabled)${NC}"
+        if ensure_workload_identity_enabled "$project_id" "$selected_cluster" "$selected_location"; then
+            echo -ne "${WHITE}[${step}/${total_steps}]${NC} Adding IAM binding (retry)..."
+            if add_iam_binding "$iam_sa_email" "$project_id" "$ksa_name" "$namespace" >/dev/null 2>&1; then
+                echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Adding IAM binding... ${LGREEN}✓${NC}"
+                bind_rc=0
+            else
+                echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Adding IAM binding... ${RED}✗${NC}"
+                print_error "Error adding IAM binding after WI enable"
+            fi
+        fi
+    elif [[ $bind_rc -eq 0 ]]; then
         echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Adding IAM binding... ${LGREEN}✓${NC}"
     else
         echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Adding IAM binding... ${RED}✗${NC}"
@@ -600,11 +610,14 @@ interactive_setup() {
 
     # Annotate KSA with IAM SA email
     echo -ne "${WHITE}[${step}/${total_steps}]${NC} Annotating Kubernetes SA..."
-    if annotate_ksa "$ksa_name" "$namespace" "$iam_sa_email" >/dev/null 2>&1; then
+    local ann_out ann_rc=0
+    ann_out=$(annotate_ksa "$ksa_name" "$namespace" "$iam_sa_email" 2>&1) || ann_rc=$?
+    if [[ $ann_rc -eq 0 ]]; then
         echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Annotating Kubernetes SA... ${LGREEN}✓${NC}"
     else
         echo -e "\r${WHITE}[${step}/${total_steps}]${NC} Annotating Kubernetes SA... ${RED}✗${NC}"
-        print_error "Error annotating KSA"
+        print_error "Error annotating KSA: $ann_out"
+        log "Annotate error: $ann_out"
     fi
 
     echo ""
@@ -750,7 +763,7 @@ interactive_verify() {
 
     # 2. Kubernetes Service Account
     echo -ne "  Checking KSA...${NC}"
-    if kubectl get serviceaccount "$ksa_name" -n "$namespace" &>/dev/null; then
+    if kubectl get serviceaccount "$ksa_name" -n "$namespace" --request-timeout=5s &>/dev/null; then
         echo -e "\r${LGREEN}✓ KSA exists${NC}                    "
         ksa_exists=true
     else
@@ -1236,7 +1249,7 @@ interactive_list() {
 
     if [[ "$namespace" == "all" ]]; then
         local namespaces
-        namespaces=$(kubectl get namespaces -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+        namespaces=$(kubectl get namespaces --request-timeout=5s -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
         for ns in $namespaces; do
             list_workload_identities "$ns"
             echo ""

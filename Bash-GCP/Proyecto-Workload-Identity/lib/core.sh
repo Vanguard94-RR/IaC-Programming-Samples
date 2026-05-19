@@ -118,13 +118,31 @@ do_bind() {
     local saved_dry="${WI_DRY_RUN:-0}"
     [[ "$dry_run" == "1" ]] && export WI_DRY_RUN=1
 
-    # IAM binding
+    # Create IAM SA if missing
+    if ! verify_iam_sa "$iam_sa" "$project"; then
+        local sa_name="${iam_sa%%@*}"
+        exec_or_dry "create IAM SA" \
+            gcloud iam service-accounts create "$sa_name" \
+                --project "$project" \
+                --display-name "$sa_name"
+    fi
+
+    # Create KSA if missing
+    if [[ "${WI_DRY_RUN:-0}" == "1" ]]; then
+        exec_or_dry "create KSA" kubectl create serviceaccount "$ksa" -n "$namespace"
+    elif ! kubectl get serviceaccount "$ksa" -n "$namespace" --request-timeout=5s &>/dev/null; then
+        exec_or_dry "create KSA" kubectl create serviceaccount "$ksa" -n "$namespace"
+    fi
+
+    # IAM binding — auto-enables WI if pool missing, then retries
     local member="serviceAccount:${project}.svc.id.goog[${namespace}/${ksa}]"
-    exec_or_dry "add IAM binding" \
-        gcloud iam service-accounts add-iam-policy-binding "$iam_sa" \
-            --project "$project" \
-            --role "$G_IAM_ROLE" \
-            --member "$member"
+    if [[ "${WI_DRY_RUN:-0}" == "1" ]]; then
+        exec_or_dry "add IAM binding" \
+            gcloud iam service-accounts add-iam-policy-binding "$iam_sa" \
+                --project "$project" --role "$G_IAM_ROLE" --member "$member"
+    else
+        _add_iam_binding_wi_aware "$iam_sa" "$project" "$G_IAM_ROLE" "$member" "$cluster" "$location" || { export WI_DRY_RUN="$saved_dry"; return 1; }
+    fi
 
     # KSA annotation
     exec_or_dry "annotate KSA" \
@@ -190,17 +208,19 @@ do_setup() {
     # Create KSA if missing
     if [[ "${WI_DRY_RUN:-0}" == "1" ]]; then
         exec_or_dry "create KSA" kubectl create serviceaccount "$ksa" -n "$namespace"
-    elif ! kubectl get serviceaccount "$ksa" -n "$namespace" &>/dev/null; then
+    elif ! kubectl get serviceaccount "$ksa" -n "$namespace" --request-timeout=5s &>/dev/null; then
         exec_or_dry "create KSA" kubectl create serviceaccount "$ksa" -n "$namespace"
     fi
 
-    # IAM binding
+    # IAM binding — auto-enables WI if pool missing, then retries
     local member="serviceAccount:${project}.svc.id.goog[${namespace}/${ksa}]"
-    exec_or_dry "add IAM binding" \
-        gcloud iam service-accounts add-iam-policy-binding "$iam_sa" \
-            --project "$project" \
-            --role "$G_IAM_ROLE" \
-            --member "$member"
+    if [[ "${WI_DRY_RUN:-0}" == "1" ]]; then
+        exec_or_dry "add IAM binding" \
+            gcloud iam service-accounts add-iam-policy-binding "$iam_sa" \
+                --project "$project" --role "$G_IAM_ROLE" --member "$member"
+    else
+        _add_iam_binding_wi_aware "$iam_sa" "$project" "$G_IAM_ROLE" "$member" "$cluster" "$location" || { export WI_DRY_RUN="$saved_dry"; return 1; }
+    fi
 
     # KSA annotation
     exec_or_dry "annotate KSA" \
@@ -249,7 +269,7 @@ do_verify() {
     fi
 
     # KSA exists
-    if kubectl get serviceaccount "$ksa" -n "$namespace" &>/dev/null; then
+    if kubectl get serviceaccount "$ksa" -n "$namespace" --request-timeout=5s &>/dev/null; then
         echo "✓ KSA exists: $ksa (ns=$namespace)"
     else
         echo "✗ KSA not found: $ksa (ns=$namespace)"
@@ -402,14 +422,14 @@ create_iam_sa() {
 
 create_namespace() {
     local namespace="$1"
-    kubectl get namespace "$namespace" &>/dev/null && return 0
-    kubectl create namespace "$namespace"
+    timeout 7 kubectl get namespace "$namespace" --request-timeout=5s &>/dev/null && return 0
+    timeout 12 kubectl create namespace "$namespace" --request-timeout=10s
 }
 
 create_ksa() {
     local ksa_name="$1" namespace="$2"
-    kubectl get serviceaccount "$ksa_name" -n "$namespace" &>/dev/null && return 0
-    kubectl create serviceaccount "$ksa_name" -n "$namespace"
+    timeout 7 kubectl get serviceaccount "$ksa_name" -n "$namespace" --request-timeout=5s &>/dev/null && return 0
+    timeout 12 kubectl create serviceaccount "$ksa_name" -n "$namespace" --request-timeout=10s
 }
 
 add_iam_binding() {
@@ -421,8 +441,9 @@ add_iam_binding() {
 
 annotate_ksa() {
     local ksa_name="$1" namespace="$2" iam_sa_email="$3"
-    kubectl annotate serviceaccount "$ksa_name" \
+    timeout 12 kubectl annotate serviceaccount "$ksa_name" \
         --namespace "$namespace" \
+        --request-timeout=10s \
         "${G_ANNOTATION_KEY}=${iam_sa_email}" --overwrite
 }
 
@@ -441,6 +462,7 @@ delete_ksa() {
 get_ksa_annotation() {
     local ksa_name="$1" namespace="$2"
     kubectl get serviceaccount "$ksa_name" -n "$namespace" \
+        --request-timeout=5s \
         -o jsonpath='{.metadata.annotations.iam\.gke\.io/gcp-service-account}' 2>/dev/null
 }
 
@@ -453,7 +475,7 @@ list_gke_clusters() {
 list_workload_identities() {
     local namespace="$1"
     local ksa_output
-    ksa_output=$(kubectl get serviceaccounts -n "$namespace" -o json 2>/dev/null)
+    ksa_output=$(kubectl get serviceaccounts -n "$namespace" --request-timeout=5s -o json 2>/dev/null)
     [[ -z "$ksa_output" ]] && { echo "  No service accounts found in $namespace"; return 0; }
 
     local found=0
@@ -514,8 +536,76 @@ validate_k8s_name() {
 
 validate_namespace() {
     local namespace="$1"
-    if ! kubectl get namespace "$namespace" &>/dev/null; then
+    if ! kubectl get namespace "$namespace" --request-timeout=5s &>/dev/null; then
         echo -e "\033[0;31m✗ Namespace not found: $namespace\033[0m" >&2
+        return 1
+    fi
+    return 0
+}
+
+validate_workload_identity_enabled() {
+    local project="$1" cluster="$2" location="$3"
+    local pool
+    pool=$(gcloud container clusters describe "$cluster" \
+        --project "$project" \
+        --location "$location" \
+        --format="value(workloadIdentityConfig.workloadPool)" 2>/dev/null)
+    if [[ -z "$pool" ]]; then
+        echo -e "\033[0;31m✗ Workload Identity not enabled on cluster '$cluster'\033[0m" >&2
+        echo -e "\033[0;33m  Fix: gcloud container clusters update $cluster --location=$location --project=$project --workload-pool=${project}.svc.id.goog\033[0m" >&2
+        return 1
+    fi
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# _add_iam_binding_wi_aware iam_sa project role member cluster location
+# Attempts IAM binding; if WI pool missing, offers to enable and retries once.
+# ---------------------------------------------------------------------------
+_add_iam_binding_wi_aware() {
+    local iam_sa="$1" project="$2" role="$3" member="$4" cluster="$5" location="$6"
+    local out rc=0
+    out=$(gcloud iam service-accounts add-iam-policy-binding "$iam_sa" \
+        --project "$project" --role "$role" --member "$member" 2>&1) || rc=$?
+    [[ $rc -eq 0 ]] && return 0
+    if echo "$out" | grep -q "Identity Pool does not exist"; then
+        ensure_workload_identity_enabled "$project" "$cluster" "$location" || return 1
+        gcloud iam service-accounts add-iam-policy-binding "$iam_sa" \
+            --project "$project" --role "$role" --member "$member"
+        return $?
+    fi
+    echo "$out" >&2
+    return $rc
+}
+
+enable_workload_identity() {
+    local project="$1" cluster="$2" location="$3"
+    echo -e "\033[1;33m⚠ Enabling Workload Identity on '$cluster' — node pools will restart (~5 min)\033[0m"
+    gcloud container clusters update "$cluster" \
+        --location "$location" \
+        --project "$project" \
+        --workload-pool="${project}.svc.id.goog" \
+        --quiet
+}
+
+ensure_workload_identity_enabled() {
+    local project="$1" cluster="$2" location="$3"
+    # Fast path: already enabled
+    validate_workload_identity_enabled "$project" "$cluster" "$location" 2>/dev/null && return 0
+
+    echo -e "\033[1;33m⚠ Workload Identity not enabled on cluster '$cluster'\033[0m"
+    if ! ask_confirmation "Enable Workload Identity on cluster '$cluster'" "enable"; then
+        return 1
+    fi
+    enable_workload_identity "$project" "$cluster" "$location" || return 1
+    echo -e "\033[1;32m✓ Workload Identity enabled\033[0m"
+    return 0
+}
+
+validate_kubectl_connectivity() {
+    if ! kubectl cluster-info --request-timeout=5s &>/dev/null; then
+        echo -e "\033[0;31m✗ kubectl cannot reach cluster API server (timeout)\033[0m" >&2
+        echo -e "\033[0;33m  Check VPN or masterAuthorizedNetworksConfig\033[0m" >&2
         return 1
     fi
     return 0
