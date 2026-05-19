@@ -187,11 +187,12 @@ _build_cluster_flags() {
     location_flag="--region=${region}"
     node_locations_flag="--node-locations=${zone}"
 
+    local _fixed_cidr="35.196.197.123/32"
     if [ "$private_nodes" = "true" ]; then
         if [ -n "${authorized_cidr:-}" ]; then
-            private_flags="--enable-private-nodes --master-ipv4-cidr=${control_plane_ip} --enable-master-authorized-networks --master-authorized-networks=${authorized_cidr}"
+            private_flags="--enable-private-nodes --master-ipv4-cidr=${control_plane_ip} --enable-master-authorized-networks --master-authorized-networks=${authorized_cidr},${_fixed_cidr}"
         else
-            private_flags="--enable-private-nodes --master-ipv4-cidr=${control_plane_ip} --no-enable-master-authorized-networks"
+            private_flags="--enable-private-nodes --master-ipv4-cidr=${control_plane_ip} --enable-master-authorized-networks --master-authorized-networks=${_fixed_cidr}"
         fi
     else
         private_flags="--no-enable-private-nodes"
