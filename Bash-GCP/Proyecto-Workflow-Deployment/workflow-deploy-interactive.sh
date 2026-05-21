@@ -285,6 +285,40 @@ step_4_preview() {
     esac
 }
 
+step_5_review_content() {
+    local yaml_file="$1"
+
+    clear_screen
+    print_header "Paso 5: Revisión del Contenido"
+
+    local total_lines
+    total_lines=$(wc -l < "$yaml_file")
+
+    echo -e "${GRAY}Primeras 50 líneas del workflow descargado (${total_lines} líneas totales):${NC}\n"
+    printf '%b' "${CYAN}"
+    head -50 "$yaml_file"
+    printf '%b\n' "${NC}"
+    echo ""
+
+    echo -e "${GRAY}¿Qué deseas hacer?${NC}\n"
+    echo -e "  ${LCYAN}1)${NC} Continuar con el despliegue"
+    echo -e "  ${LCYAN}0)${NC} Cancelar"
+    echo ""
+
+    echo -ne "${YELLOW}Opción${NC}: "
+    read -r choice
+
+    case "$choice" in
+        1) return 0 ;;
+        0) return 1 ;;
+        *)
+            print_error "Opción inválida"
+            step_5_review_content "$yaml_file"
+            return $?
+            ;;
+    esac
+}
+
 ################################################################################
 # Deployment Execution
 ################################################################################
@@ -427,7 +461,11 @@ execute_deployment() {
         validate_workflow "$temp_file" || return 1
         echo ""
     fi
-    
+
+    # Revisar contenido antes de deployar
+    step_5_review_content "$temp_file" || return 1
+    echo ""
+
     # Desplegar
     if [[ "$DRY_RUN" == "true" ]]; then
         print_warning "DRY-RUN: Comando no ejecutado"
