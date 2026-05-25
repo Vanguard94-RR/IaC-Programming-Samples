@@ -357,16 +357,26 @@ cmd_create() {
 }
 
 _print_cluster_summary() {
+    local iam_sa="apps-sa@${project_id}.iam.gserviceaccount.com"
     printf '\n'
-    printf '%b\n' "${CYAN}╔══════════════════════════════════════╗${NC}"
-    printf '%b\n' "${CYAN}║${NC}  ${GREEN}${BOLD}✔  CLUSTER CREATED${NC}                  ${CYAN}║${NC}"
-    printf '%b\n' "${CYAN}╠══════════════════════════════════════╣${NC}"
-    printf "%b\n" "${CYAN}║${NC}  ${DIM}Project${NC}   ${WHITE}${project_id}${NC}"
-    printf "%b\n" "${CYAN}║${NC}  ${DIM}Cluster${NC}   ${WHITE}${cluster_name}${NC}"
-    printf "%b\n" "${CYAN}║${NC}  ${DIM}Fleet${NC}     ${WHITE}${fleet_id}${NC}"
-    printf "%b\n" "${CYAN}║${NC}  ${DIM}Region${NC}    ${WHITE}${region}${NC}"
-    printf "%b\n" "${CYAN}║${NC}  ${DIM}VPC${NC}       ${WHITE}${VPC_NAME}${NC}"
-    printf "%b\n" "${CYAN}║${NC}  ${DIM}Version${NC}   ${WHITE}${cluster_version}${NC}"
-    printf '%b\n' "${CYAN}╚══════════════════════════════════════╝${NC}"
+    printf '%b\n' "${CYAN}╔══════════════════════════════════════════════════════╗${NC}"
+    printf '%b\n' "${CYAN}║${NC}  ${GREEN}${BOLD}✔  CLUSTER CREATED${NC}                                   ${CYAN}║${NC}"
+    printf '%b\n' "${CYAN}╠══════════════════════════════════════════════════════╣${NC}"
+    printf '%b\n' "${CYAN}║${NC}  ${DIM}Project${NC}    ${WHITE}${project_id}${NC}"
+    printf '%b\n' "${CYAN}║${NC}  ${DIM}Cluster${NC}    ${WHITE}${cluster_name}${NC}"
+    printf '%b\n' "${CYAN}║${NC}  ${DIM}Env${NC}        ${WHITE}${env}${NC}"
+    printf '%b\n' "${CYAN}║${NC}  ${DIM}Region${NC}     ${WHITE}${region}${NC}"
+    printf '%b\n' "${CYAN}║${NC}  ${DIM}Version${NC}    ${WHITE}${cluster_version}${NC}"
+    printf '%b\n' "${CYAN}║${NC}  ${DIM}Channel${NC}    ${WHITE}${channel}${NC}"
+    printf '%b\n' "${CYAN}║${NC}  ${DIM}Machine${NC}    ${WHITE}${machine_type} × ${num_nodes} node(s)${NC}"
+    printf '%b\n' "${CYAN}╠══════════════════════════════════════════════════════╣${NC}"
+    printf '%b\n' "${CYAN}║${NC}  ${DIM}VPC${NC}        ${WHITE}${VPC_NAME}${NC}"
+    printf '%b\n' "${CYAN}║${NC}  ${DIM}Subnet${NC}     ${WHITE}${SUBNET_NAME}${NC}"
+    printf '%b\n' "${CYAN}║${NC}  ${DIM}Fleet${NC}      ${WHITE}${fleet_id}${NC}"
+    printf '%b\n' "${CYAN}╠══════════════════════════════════════════════════════╣${NC}"
+    printf '%b\n' "${CYAN}║${NC}  ${DIM}Namespace${NC}  ${WHITE}apps${NC}"
+    printf '%b\n' "${CYAN}║${NC}  ${DIM}KSA${NC}        ${WHITE}apps-gke${NC}"
+    printf '%b\n' "${CYAN}║${NC}  ${DIM}IAM SA${NC}     ${WHITE}${iam_sa}${NC}"
+    printf '%b\n' "${CYAN}╚══════════════════════════════════════════════════════╝${NC}"
     printf '\n'
 }
