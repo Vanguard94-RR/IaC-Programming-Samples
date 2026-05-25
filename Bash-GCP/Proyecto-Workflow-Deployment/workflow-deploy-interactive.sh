@@ -335,8 +335,8 @@ parse_gitlab_url() {
     # Extraer componentes de la URL
     local project_part="${url#*gitlab.com/}"
     local branch_part="${project_part#*/-/blob/}"
+    local branch="${branch_part%%/*}"
     local file_part="${branch_part#*/}"
-    local branch="${branch_part%/*}"
     local project="${project_part%%/-/blob*}"
     
     echo "$project|$branch|$file_part"
@@ -369,18 +369,25 @@ download_workflow() {
     printf 'header = "PRIVATE-TOKEN: %s"\n' "$GITLAB_TOKEN" > "$curl_config"
 
     local curl_exit=0
-    curl -s -K "$curl_config" \
+    local http_code
+    http_code=$(curl -s -K "$curl_config" \
         -o "$output_file" \
-        "$gitlab_api_url?ref=$branch" 2>/dev/null || curl_exit=$?
+        -w "%{http_code}" \
+        "$gitlab_api_url?ref=$branch" 2>/dev/null) || curl_exit=$?
     rm -f "$curl_config"
 
     if [ "$curl_exit" -ne 0 ]; then
         print_error "No se pudo descargar el archivo"
         return 1
     fi
-    
+
     if [ ! -s "$output_file" ]; then
         print_error "Archivo descargado está vacío"
+        return 1
+    fi
+
+    if [ "$http_code" != "200" ]; then
+        print_error "GitLab respondió HTTP $http_code — verifica rama, ruta y token"
         return 1
     fi
     
@@ -442,7 +449,7 @@ execute_deployment() {
     
     local temp_file
     temp_file=$(mktemp /tmp/workflow-XXXXXX.yaml)
-    trap 'rm -f "$temp_file"' RETURN
+    trap 'rm -f "$temp_file"; trap - RETURN' RETURN
     
     echo ""
     
@@ -517,13 +524,17 @@ main() {
                     echo -e "  ${LCYAN}1)${NC} Sí, nuevo despliegue"
                     echo -e "  ${LCYAN}0)${NC} No, salir"
                     echo ""
-                    
+
                     echo -ne "${YELLOW}Opción${NC}: "
                     read -r choice
-                    
+
                     if [[ "$choice" != "1" ]]; then
                         break
                     fi
+                else
+                    echo ""
+                    echo -ne "${GRAY}Presiona ENTER para continuar...${NC}"
+                    read -r
                 fi
                 ;;
             1)
