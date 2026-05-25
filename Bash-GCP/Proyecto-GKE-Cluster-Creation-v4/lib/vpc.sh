@@ -84,6 +84,19 @@ cmd_vpc_select() {
                     error "Both pods and services range names required — subnet has no secondary ranges"
                     return 1
                 fi
+                local pods_cidr services_cidr
+                read_input pods_cidr "${CYAN}Pods CIDR     (default: 10.96.0.0/14): ${NC}"
+                [ -z "$pods_cidr" ] && pods_cidr="10.96.0.0/14"
+                read_input services_cidr "${CYAN}Services CIDR (default: 10.100.0.0/20): ${NC}"
+                [ -z "$services_cidr" ] && services_cidr="10.100.0.0/20"
+                info "Creating secondary ranges in subnet '$SUBNET_NAME'"
+                if ! run_or_dry gcloud compute networks subnets update "$SUBNET_NAME" \
+                    --project="${project_id}" --region="${region}" \
+                    --add-secondary-ranges="${PODS_RANGE_NAME}=${pods_cidr},${SERVICES_RANGE_NAME}=${services_cidr}"; then
+                    error "Failed to create secondary ranges in $SUBNET_NAME"
+                    return 1
+                fi
+                success "Secondary ranges created: ${PODS_RANGE_NAME}=${pods_cidr}, ${SERVICES_RANGE_NAME}=${services_cidr}"
             else
                 local pods_match services_match
                 pods_match=$(echo "$ranges" | grep -E '^pods?$' | head -1 || true)
