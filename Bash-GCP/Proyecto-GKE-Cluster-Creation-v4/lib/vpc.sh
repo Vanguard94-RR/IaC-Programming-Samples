@@ -99,8 +99,8 @@ cmd_vpc_select() {
                 success "Secondary ranges created: ${PODS_RANGE_NAME}=${pods_cidr}, ${SERVICES_RANGE_NAME}=${services_cidr}"
             else
                 local pods_match services_match
-                pods_match=$(echo "$ranges" | grep -E '^pods?$' | head -1 || true)
-                services_match=$(echo "$ranges" | grep -E '^servicios?$|^services?$' | head -1 || true)
+                pods_match=$(echo "$ranges" | grep -iE 'pod' | head -1 || true)
+                services_match=$(echo "$ranges" | grep -iE 'servi' | head -1 || true)
                 if [ -z "$pods_match" ] || [ -z "$services_match" ]; then
                     info "Secondary ranges in '$SUBNET_NAME': $(echo "$ranges" | tr '\n' ' ')"
                     [ -z "$pods_match" ] && read_input pods_match "${CYAN}Which range is pods? ${NC}"
