@@ -341,6 +341,10 @@ cmd_create() {
         deploy_twistlock
     fi
 
+    if [[ "$env" == "qa" || "$env" == "uat" ]]; then
+        deploy_castai
+    fi
+
     create_workload_identity_assets
 
     _print_cluster_summary
