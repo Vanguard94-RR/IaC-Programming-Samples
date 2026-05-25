@@ -6,7 +6,7 @@ set -o pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
 # Source all modules
-for _lib in ui utils shared_vpc vpc twistlock ssl workload_identity hardening cluster rollback; do
+for _lib in ui utils shared_vpc vpc twistlock castai ssl workload_identity hardening cluster rollback; do
     # shellcheck source=/dev/null
     . "$SCRIPT_DIR/lib/${_lib}.sh"
 done
