@@ -60,6 +60,7 @@ case "$SUBCOMMAND" in
     update-armor)   cmd_update_armor ;;
     rollback-armor) cmd_rollback_armor ;;
     fix-shared-vpc) cmd_fix_shared_vpc ;;
+    fix-access)     cmd_fix_access ;;
     log4j)          cmd_log4j ;;
     rollback)       cmd_rollback ;;
     *)              error "Unknown subcommand: $SUBCOMMAND"; usage; exit 1 ;;

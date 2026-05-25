@@ -385,3 +385,49 @@ _print_cluster_summary() {
     printf '%b\n' "${CYAN}╚══════════════════════════════════════════════════════╝${NC}"
     printf '\n'
 }
+
+cmd_fix_access() {
+    local _project="${ARG_PROJECT:-}"
+    local _cluster="${ARG_CLUSTER:-}"
+    local _region="${ARG_REGION:-us-central1}"
+
+    [ -z "$_project" ] && read_input _project "Project ID"
+    [ -z "$_cluster" ] && read_input _cluster "Cluster name"
+
+    local _env
+    _env=$(gcloud container clusters describe "$_cluster" \
+        --project="$_project" --region="$_region" \
+        --format="value(resourceLabels.env)" 2>/dev/null || true)
+
+    if [[ "$_env" != "qa" && "$_env" != "uat" ]]; then
+        warn "Cluster env label is '${_env:-unknown}' — fix-access only targets qa/uat. Proceed? [y/N]"
+        local confirm
+        read -r confirm
+        [[ ! "${confirm:-N}" =~ ^[Yy]$ ]] && { info "Aborted."; return 0; }
+    fi
+
+    step "Disabling private endpoint enforcement"
+    run_or_dry gcloud container clusters update "$_cluster" \
+        --project="$_project" --region="$_region" \
+        --no-enable-private-endpoint
+    success "Private endpoint enforcement disabled"
+
+    step "Opening master authorized networks"
+    run_or_dry gcloud container clusters update "$_cluster" \
+        --project="$_project" --region="$_region" \
+        --enable-master-authorized-networks \
+        --master-authorized-networks=0.0.0.0/0
+    success "Master authorized networks: 0.0.0.0/0"
+
+    info "Fetching credentials"
+    run_or_dry gcloud container clusters get-credentials "$_cluster" \
+        --project="$_project" --region="$_region"
+
+    if [ "${DRY_RUN:-false}" != "true" ]; then
+        if kubectl cluster-info; then
+            success "Cluster accessible: $_cluster"
+        else
+            warn "Credentials fetched but kubectl cluster-info failed"
+        fi
+    fi
+}
