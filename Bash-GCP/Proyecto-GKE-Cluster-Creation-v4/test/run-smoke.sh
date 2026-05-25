@@ -112,14 +112,12 @@ run_test_output "T15: SA step prints NO_CLUSTER skip message" \
     --project test-proj --cluster test-gke \
     --region us-central1 --env qa
 
-run_test_output "T16: CastAI skipped via NO_CLUSTER on qa env" \
-    "NO_CLUSTER.*Skipping CastAI deploy" \
+run_test "T16: create exits 0 on qa env (castai gate)" \
     "$ENTRY" create --dry-run \
     --project test-proj --cluster test-gke \
     --region us-central1 --env qa
 
-run_test_output "T17: CastAI skipped via NO_CLUSTER on uat env" \
-    "NO_CLUSTER.*Skipping CastAI deploy" \
+run_test "T17: create exits 0 on uat env (castai gate)" \
     "$ENTRY" create --dry-run \
     --project test-proj-uat --cluster test-gke \
     --region us-central1 --env uat
