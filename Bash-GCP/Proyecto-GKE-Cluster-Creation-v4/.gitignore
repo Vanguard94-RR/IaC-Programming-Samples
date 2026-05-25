@@ -2,7 +2,6 @@
 *.key
 *.cer
 *.log
-config/castai.env
 
 CLAUDE.md
 .claude/
