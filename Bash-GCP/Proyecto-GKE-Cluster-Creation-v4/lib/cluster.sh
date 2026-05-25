@@ -166,18 +166,23 @@ _collect_params() {
     private_nodes="true"
     control_plane_ip="172.19.0.0/28"
     info "Control plane CIDR: $control_plane_ip"
-    local current_ip
-    current_ip=$(curl -4 -s --max-time 5 ifconfig.me 2>/dev/null \
-        || curl -4 -s --max-time 5 api.ipify.org 2>/dev/null \
-        || true)
-    if [ -n "$current_ip" ]; then
-        local ip3 ip4_net
-        ip3=$(echo "$current_ip" | cut -d. -f1-3)
-        ip4_net=$(( $(echo "$current_ip" | cut -d. -f4) & 240 ))
-        authorized_cidr="${ip3}.${ip4_net}/28"
-        info "Authorizing control plane access: ${authorized_cidr}"
+    if [[ "$env" == "qa" || "$env" == "uat" ]]; then
+        authorized_cidr="0.0.0.0/0"
+        info "Authorizing control plane access: ${authorized_cidr} (open — ${env} cluster)"
     else
-        warn "Could not detect public IP — control plane may be unreachable after create"
+        local current_ip
+        current_ip=$(curl -4 -s --max-time 5 ifconfig.me 2>/dev/null \
+            || curl -4 -s --max-time 5 api.ipify.org 2>/dev/null \
+            || true)
+        if [ -n "$current_ip" ]; then
+            local ip3 ip4_net
+            ip3=$(echo "$current_ip" | cut -d. -f1-3)
+            ip4_net=$(( $(echo "$current_ip" | cut -d. -f4) & 240 ))
+            authorized_cidr="${ip3}.${ip4_net}/28"
+            info "Authorizing control plane access: ${authorized_cidr}"
+        else
+            warn "Could not detect public IP — control plane may be unreachable after create"
+        fi
     fi
 
     cluster_access_scope="gke-default"
