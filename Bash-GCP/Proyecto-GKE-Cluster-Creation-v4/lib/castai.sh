@@ -36,19 +36,7 @@ deploy_castai() {
     local api_url="${CASTAI_API_URL:-https://api.cast.ai}"
     local tracking_id="${CASTAI_TRACKING_ID}"
 
-    # shellcheck disable=SC2154
-    if ! run_or_dry gcloud container clusters get-credentials "${cluster_name}" \
-        --region "${region}" --project "${project_id}" --quiet; then
-        error "Could not get cluster credentials"
-        return 1
-    fi
-
-    if ! kubectl cluster-info &>/dev/null; then
-        error "Cannot connect to cluster"
-        return 1
-    fi
-
-    if [ "$DRY_RUN" = "true" ]; then
+    if [ "${DRY_RUN:-false}" = "true" ]; then
         local token_short="${CASTAI_API_TOKEN:0:20}..."
         local cred_short="${CREDENTIALS_SCRIPT_API_TOKEN:0:20}..."
         info "[DRY-RUN] Would execute:"
@@ -61,6 +49,18 @@ deploy_castai() {
         info "  PROVIDER=gke SEND_ONBOARDING_LOGS_FEATURE_FLAG=true \\"
         info "  /bin/bash -c \"\$(curl -fsSL -H 'X-Tracking-ID: ${tracking_id}' '${api_url}/v1/scripts/connect-and-enable-castai.sh')\""
         return 0
+    fi
+
+    # shellcheck disable=SC2154
+    if ! run_or_dry gcloud container clusters get-credentials "${cluster_name}" \
+        --region "${region}" --project "${project_id}" --quiet; then
+        error "Could not get cluster credentials"
+        return 1
+    fi
+
+    if ! kubectl cluster-info &>/dev/null; then
+        error "Cannot connect to cluster"
+        return 1
     fi
 
     info "Downloading CastAI install script"
