@@ -237,6 +237,7 @@ cmd_create() {
         read_input confirm_existing "${CYAN}Continue with existing cluster? (Y/N): ${NC}"
         [[ ! "${confirm_existing:-N}" =~ ^[Yy]$ ]] && { info "Aborted."; return 0; }
         skip_create=true
+        STEP_TOTAL=$((STEP_TOTAL - 1))
     fi
 
     step "Enabling GCP APIs"
