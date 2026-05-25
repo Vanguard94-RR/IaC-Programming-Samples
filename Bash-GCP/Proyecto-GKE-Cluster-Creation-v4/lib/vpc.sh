@@ -33,6 +33,10 @@ cmd_vpc_select() {
 
     local vpc_exists
     vpc_exists=$(gcloud compute networks list --project="${project_id}" \
+        --filter="name~-vpc$" \
+        --format="value(name)" 2>/dev/null | head -1 || true)
+    [ -z "$vpc_exists" ] && vpc_exists=$(gcloud compute networks list \
+        --project="${project_id}" \
         --format="value(name)" 2>/dev/null | head -1 || true)
 
     local menu_opt
@@ -63,9 +67,14 @@ cmd_vpc_select() {
             detected_subnet=$(gcloud compute networks subnets list \
                 --network="$VPC_NAME" \
                 --project="${project_id}" \
+                --filter="region:${region} AND NOT name~^gke- AND name~-subnet$" \
+                --format="value(name)" 2>/dev/null | head -1 || true)
+            [ -z "$detected_subnet" ] && detected_subnet=$(gcloud compute networks subnets list \
+                --network="$VPC_NAME" \
+                --project="${project_id}" \
                 --filter="region:${region} AND NOT name~^gke-" \
                 --format="value(name)" 2>/dev/null | head -1 || true)
-            prompt_or_arg SUBNET_NAME "$detected_subnet" "Subnet name" "${detected_subnet:-$VPC_NAME}"
+            prompt_or_arg SUBNET_NAME "$detected_subnet" "Subnet name" "${detected_subnet:-${project_id}-subnet}"
             if ! gcloud compute networks subnets describe "$SUBNET_NAME" \
                 --project="${project_id}" --region="${region}" &>/dev/null; then
                 error "Subnet '$SUBNET_NAME' not found in region '${region}'. Use option 2 to create it."
