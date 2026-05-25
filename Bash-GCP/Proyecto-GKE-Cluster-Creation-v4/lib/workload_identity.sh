@@ -14,10 +14,9 @@ create_workload_identity_assets() {
         return 0
     fi
 
-    local namespace ksa_name iam_sa_name
-    prompt_or_arg namespace "" "Kubernetes namespace" "apps"
-    prompt_or_arg ksa_name "" "Kubernetes Service Account name" "apps-gke"
-    prompt_or_arg iam_sa_name "" "IAM Service Account name" "apps-sa"
+    local namespace="apps"
+    local ksa_name="apps-gke"
+    local iam_sa_name="apps-sa"
 
     info "Namespace:  $namespace"
     info "KSA:        $ksa_name"
