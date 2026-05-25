@@ -112,6 +112,23 @@ run_test_output "T15: SA step prints NO_CLUSTER skip message" \
     --project test-proj --cluster test-gke \
     --region us-central1 --env qa
 
+run_test_output "T16: CastAI skipped via NO_CLUSTER on qa env" \
+    "NO_CLUSTER.*Skipping CastAI deploy" \
+    "$ENTRY" create --dry-run \
+    --project test-proj --cluster test-gke \
+    --region us-central1 --env qa
+
+run_test_output "T17: CastAI skipped via NO_CLUSTER on uat env" \
+    "NO_CLUSTER.*Skipping CastAI deploy" \
+    "$ENTRY" create --dry-run \
+    --project test-proj-uat --cluster test-gke \
+    --region us-central1 --env uat
+
+run_test_fail "T18: CastAI deploy not triggered on pro env" \
+    grep -q "CastAI Deploy" <("$ENTRY" create --dry-run \
+        --project test-proj-pro --cluster test-gke \
+        --region us-central1 --env pro 2>&1)
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 echo ""
