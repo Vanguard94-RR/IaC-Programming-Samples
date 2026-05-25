@@ -63,6 +63,15 @@ deploy_castai() {
         return 1
     fi
 
+    if ! command -v helm &>/dev/null; then
+        info "helm not found — installing"
+        if ! curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash; then
+            error "helm installation failed"
+            return 1
+        fi
+        success "helm installed: $(helm version --short)"
+    fi
+
     info "Downloading CastAI install script"
     local castai_script
     if ! castai_script=$(curl -fsSL \
