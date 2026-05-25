@@ -30,6 +30,7 @@ fleet_id=""
 cluster_version=""
 cluster_access_scope=""
 authorized_cidr=""
+env=""
 
 get_cluster_versions() {
     local target_region="${1:-us-central1}"
@@ -113,7 +114,7 @@ _collect_params() {
     region="${ARG_REGION:-us-central1}"
     info "Region: $region"
 
-    local env="${ARG_ENV:-}"
+    env="${ARG_ENV:-}"
     if [ -z "$env" ]; then
         case "$project_id" in
             *-pro) env="pro" ;;
