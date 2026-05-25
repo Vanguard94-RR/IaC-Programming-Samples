@@ -222,7 +222,11 @@ cmd_create() {
     STEP_CURRENT=0
     _collect_params
     # shellcheck disable=SC2034
-    [[ "${project_id:-}" =~ -pro$ ]] && STEP_TOTAL=12 || STEP_TOTAL=11
+    if [[ "${project_id:-}" =~ -pro$ ]] || [[ "$env" == "qa" || "$env" == "uat" ]]; then
+        STEP_TOTAL=12
+    else
+        STEP_TOTAL=11
+    fi
 
     local skip_create=false
     if [ "${NO_CLUSTER:-0}" != "1" ] && \
@@ -343,7 +347,7 @@ cmd_create() {
     fi
 
     if [[ "$env" == "qa" || "$env" == "uat" ]]; then
-        deploy_castai
+        deploy_castai || warn "CastAI deploy failed — continuing to workload identity assets"
     fi
 
     create_workload_identity_assets
