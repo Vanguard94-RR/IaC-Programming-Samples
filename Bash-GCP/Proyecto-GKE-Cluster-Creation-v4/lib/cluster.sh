@@ -166,23 +166,18 @@ _collect_params() {
     private_nodes="true"
     control_plane_ip="172.19.0.0/28"
     info "Control plane CIDR: $control_plane_ip"
-    if [[ "$env" == "qa" || "$env" == "uat" ]]; then
-        authorized_cidr="0.0.0.0/0"
-        info "Authorizing control plane access: ${authorized_cidr} (open — ${env} cluster)"
+    local current_ip
+    current_ip=$(curl -4 -s --max-time 5 ifconfig.me 2>/dev/null \
+        || curl -4 -s --max-time 5 api.ipify.org 2>/dev/null \
+        || true)
+    if [ -n "$current_ip" ]; then
+        local ip3 ip4_net
+        ip3=$(echo "$current_ip" | cut -d. -f1-3)
+        ip4_net=$(( $(echo "$current_ip" | cut -d. -f4) & 240 ))
+        authorized_cidr="${ip3}.${ip4_net}/28"
+        info "Authorizing control plane access: ${authorized_cidr}"
     else
-        local current_ip
-        current_ip=$(curl -4 -s --max-time 5 ifconfig.me 2>/dev/null \
-            || curl -4 -s --max-time 5 api.ipify.org 2>/dev/null \
-            || true)
-        if [ -n "$current_ip" ]; then
-            local ip3 ip4_net
-            ip3=$(echo "$current_ip" | cut -d. -f1-3)
-            ip4_net=$(( $(echo "$current_ip" | cut -d. -f4) & 240 ))
-            authorized_cidr="${ip3}.${ip4_net}/28"
-            info "Authorizing control plane access: ${authorized_cidr}"
-        else
-            warn "Could not detect public IP — control plane may be unreachable after create"
-        fi
+        warn "Could not detect public IP — control plane may be unreachable after create"
     fi
 
     cluster_access_scope="gke-default"
@@ -193,12 +188,12 @@ _build_cluster_flags() {
     location_flag="--region=${region}"
     node_locations_flag="--node-locations=${zone}"
 
-    local _fixed_cidr="35.196.197.123/32"
+    local _fixed_cidr="0.0.0.0/0"
     if [ "$private_nodes" = "true" ]; then
         if [ -n "${authorized_cidr:-}" ]; then
-            private_flags="--enable-private-nodes --no-enable-private-endpoint --master-ipv4-cidr=${control_plane_ip} --enable-master-authorized-networks --master-authorized-networks=${authorized_cidr},${_fixed_cidr}"
+            private_flags="--enable-private-nodes --master-ipv4-cidr=${control_plane_ip} --enable-master-authorized-networks --master-authorized-networks=${authorized_cidr}"
         else
-            private_flags="--enable-private-nodes --no-enable-private-endpoint --master-ipv4-cidr=${control_plane_ip} --enable-master-authorized-networks --master-authorized-networks=${_fixed_cidr}"
+            private_flags="--enable-private-nodes --master-ipv4-cidr=${control_plane_ip} --enable-master-authorized-networks --master-authorized-networks=${_fixed_cidr}"
         fi
     else
         private_flags="--no-enable-private-nodes"
@@ -338,18 +333,6 @@ cmd_create() {
         success "Using existing cluster: $cluster_name"
     fi
 
-    if [[ "$env" == "qa" || "$env" == "uat" ]] && [ "${NO_CLUSTER:-0}" != "1" ]; then
-        step "Applying open access policy (${env})"
-        run_or_dry gcloud container clusters update "$cluster_name" \
-            --project="$project_id" --region="$region" \
-            --no-enable-private-endpoint
-        run_or_dry gcloud container clusters update "$cluster_name" \
-            --project="$project_id" --region="$region" \
-            --enable-master-authorized-networks \
-            --master-authorized-networks=0.0.0.0/0
-        success "Access policy applied: public endpoint open, 0.0.0.0/0 authorized"
-    fi
-
     register_fleet
 
     if [ "${NO_CLUSTER:-0}" = "1" ]; then
@@ -389,6 +372,10 @@ _print_cluster_summary() {
     printf '%b\n' "${CYAN}╠══════════════════════════════════════════════════════╣${NC}"
     printf '%b\n' "${CYAN}║${NC}  ${DIM}VPC${NC}        ${WHITE}${VPC_NAME}${NC}"
     printf '%b\n' "${CYAN}║${NC}  ${DIM}Subnet${NC}     ${WHITE}${SUBNET_NAME}${NC}"
+    printf '%b\n' "${CYAN}║${NC}  ${DIM}Router${NC}     ${WHITE}${project_id}-router${NC}"
+    printf '%b\n' "${CYAN}║${NC}  ${DIM}NAT${NC}        ${WHITE}${project_id}-nat${NC}"
+    printf '%b\n' "${CYAN}║${NC}  ${DIM}NAT IP${NC}     ${WHITE}${NAT_IP_NAME}${NC}"
+    printf '%b\n' "${CYAN}╠══════════════════════════════════════════════════════╣${NC}"
     printf '%b\n' "${CYAN}║${NC}  ${DIM}Fleet${NC}      ${WHITE}${fleet_id}${NC}"
     printf '%b\n' "${CYAN}╠══════════════════════════════════════════════════════╣${NC}"
     printf '%b\n' "${CYAN}║${NC}  ${DIM}Namespace${NC}  ${WHITE}apps${NC}"

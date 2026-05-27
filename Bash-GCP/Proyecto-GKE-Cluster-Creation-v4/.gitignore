@@ -5,10 +5,10 @@
 
 CLAUDE.md
 .claude/
-docs/
+docs/*
 
 # Operator runtime files — not in repo
 cluster.csv
 data-script.csv
 REVIEW.md
-logs/
+logs/GKE/Deprecated/Proyecto-GKE-Cluster-Creation-v3
