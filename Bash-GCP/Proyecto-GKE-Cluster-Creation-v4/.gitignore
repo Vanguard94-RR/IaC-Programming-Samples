@@ -12,3 +12,9 @@ cluster.csv
 data-script.csv
 REVIEW.md
 logs/GKE/Deprecated/Proyecto-GKE-Cluster-Creation-v3
+
+# Environment configs - NEVER track these files
+*.env
+castai.env
+config/*.env
+!config/*.env.example
