@@ -1,0 +1,5 @@
+project_id     = "gnp-plus-qa"
+cluster_name   = "gke-gnp-plus-qa"
+cluster_zone   = "us-central1-a"
+namespace      = "default"
+static_ip_name = "ingress-plus"

@@ -1,0 +1,97 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bys-ingress
+  annotations:
+    networking.gke.io/v1.FrontendConfig: http-redirect-config
+    kubernetes.io/ingress.global-static-ip-name: ingress-gnp-protecciondatosper-qa
+    ingress.gcp.kubernetes.io/pre-shared-cert: gnp-protecciondatosper-qa-ssl-cert
+  namespace: apps
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /gmm/bup/desbloqueo/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: gke-gnp-pdp-bys-msv-bup-desbloqueo
+                port:
+                  number: 8080
+          - path: /gmm/bup/bloqueo/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: gke-gnp-pdp-bys-msv-bup-bloqueo
+                port:
+                  number: 8080
+          - path: /gmm/bup/supresion/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: gke-gnp-pdp-bys-msv-bup-supresion
+                port:
+                  number: 8080
+          - path: /gmm/iwc/desbloqueo/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: gke-gnp-pdp-bys-msv-iwc-desbloqueo
+                port:
+                  number: 8080
+          - path: /gmm/iwc/bloqueo/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: gke-gnp-pdp-bys-msv-iwc-bloqueo
+                port:
+                  number: 8080
+          - path: /gmm/iwc/supresion/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: gke-gnp-pdp-bys-msv-iwc-supresion
+                port:
+                  number: 8080
+          - path: /gmm/iwcfd/desbloqueo/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: gke-gnp-pdp-bys-msv-iwcfd-desbloqueo
+                port:
+                  number: 8080
+          - path: /gmm/iwcfd/bloqueo/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: gke-gnp-pdp-bys-msv-iwcfd-bloqueo
+                port:
+                  number: 8080
+          - path: /gmm/iwcfd/supresion/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: gke-gnp-pdp-bys-msv-iwcfd-supresion
+                port:
+                  number: 8080
+          - path: /gmm/filenet/desbloqueo/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: gke-gnp-pdp-bys-msv-filenet-desbloqueo
+                port:
+                  number: 8080
+          - path: /gmm/filenet/bloqueo/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: gke-gnp-pdp-bys-msv-filenet-bloqueo
+                port:
+                  number: 8080
+          - path: /gmm/filenet/supresion/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: gke-gnp-pdp-bys-msv-filenet-supresion
+                port:
+                  number: 8080

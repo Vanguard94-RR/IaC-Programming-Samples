@@ -1,0 +1,5 @@
+project_id       = "gnp-protecciondatosper-qa"
+cluster_name     = "gke-gnp-protecciondatosper-qa"
+cluster_location = "us-central1"
+namespace        = "apps"
+static_ip_name   = "ingress-gnp-protecciondatosper-qa"
