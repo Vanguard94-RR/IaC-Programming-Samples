@@ -14,31 +14,72 @@ fi
 
 BUCKET="${PROJECT_ID}-tf-state"
 TF_DIR="$SCRIPT_DIR/terraform"
+STATE_PREFIX="ingress/"
 
-step "Backend init — $PROJECT_ID"
-info "State bucket: gs://${BUCKET} (in project ${PROJECT_ID})"
-info "State prefix: ingress/"
+step "Backend initialization — $PROJECT_ID"
+info "State bucket: gs://${BUCKET}"
+info "State prefix: ${STATE_PREFIX}"
 
-# Create bucket if it does not exist
-if ! gcloud storage buckets describe "gs://${BUCKET}" \
-       --project="$PROJECT_ID" &>/dev/null; then
-  info "Creating bucket gs://${BUCKET}..."
+# ── Idempotency check: bucket exists? ──────────────────────────────────────
+_bucket_exists() {
+  gcloud storage buckets describe "gs://${BUCKET}" \
+    --project="$PROJECT_ID" &>/dev/null
+}
+
+if _bucket_exists; then
+  ok "Bucket exists: gs://${BUCKET}"
+else
+  step "Creating bucket gs://${BUCKET}..."
   gcloud storage buckets create "gs://${BUCKET}" \
     --project="$PROJECT_ID" \
-    --uniform-bucket-level-access
+    --uniform-bucket-level-access || {
+      error "Bucket creation failed. Check permissions in $PROJECT_ID"
+      exit 1
+    }
   ok "Bucket created: gs://${BUCKET}"
-else
-  ok "Bucket exists: gs://${BUCKET}"
 fi
 
-# Enable object versioning for state protection
-gcloud storage buckets update "gs://${BUCKET}" --versioning 2>/dev/null \
-  && ok "Versioning enabled" || warn "Could not enable versioning (check permissions)"
+# ── Idempotency check: versioning already enabled? ────────────────────────
+step "Enabling versioning (state protection)"
+if gcloud storage buckets describe "gs://${BUCKET}" --project="$PROJECT_ID" \
+     --format="value(versioning.enabled)" | grep -q "true"; then
+  ok "Versioning already enabled"
+else
+  if gcloud storage buckets update "gs://${BUCKET}" \
+       --project="$PROJECT_ID" --versioning 2>/dev/null; then
+    ok "Versioning enabled"
+  else
+    warn "Could not enable versioning (check IAM permissions)"
+  fi
+fi
 
-# Initialize Terraform with the project-specific backend
-info "Running terraform init..."
-cd "$TF_DIR"
-terraform init -reconfigure -input=false \
-  -backend-config="bucket=${BUCKET}" \
-  -backend-config="prefix=ingress"
-ok "Terraform initialized — state: gs://${BUCKET}/ingress/"
+# ── Idempotency check: terraform already initialized? ──────────────────────
+step "Terraform initialization"
+if [[ -d "$TF_DIR/.terraform" ]]; then
+  ok "Terraform working directory exists"
+  # Check if backend is already configured for this bucket
+  if grep -q "$BUCKET" "$TF_DIR/.terraform/terraform.tfstate" 2>/dev/null; then
+    ok "Backend already configured for: $BUCKET"
+  else
+    warn "Backend may be configured for different bucket, reconfiguring..."
+    cd "$TF_DIR"
+    terraform init -reconfigure -input=false \
+      -backend-config="bucket=${BUCKET}" \
+      -backend-config="prefix=${STATE_PREFIX}" || {
+        error "Terraform reconfiguration failed"
+        exit 1
+      }
+  fi
+else
+  step "Running terraform init..."
+  cd "$TF_DIR"
+  terraform init -input=false \
+    -backend-config="bucket=${BUCKET}" \
+    -backend-config="prefix=${STATE_PREFIX}" || {
+      error "Terraform initialization failed"
+      exit 1
+    }
+fi
+
+ok "Backend ready: gs://${BUCKET}/${STATE_PREFIX}"
+info "State file will be stored at: gs://${BUCKET}/${STATE_PREFIX}terraform.tfstate"

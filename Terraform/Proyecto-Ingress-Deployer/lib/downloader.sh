@@ -34,25 +34,46 @@ download_ingress_yaml() {
     return 0
   fi
 
+  # Convert GitLab blob URL → GitLab API /repository/files/:path/raw endpoint
+  # Pattern: https://gitlab.com/<namespace>/<project>/-/blob/<ref>/<file_path>
+  if [[ "$url" =~ ^(https://gitlab\.[^/]+)/(.+)/-/blob/([^/]+)/(.+)$ ]]; then
+    local gl_host="${BASH_REMATCH[1]}"
+    local gl_project="${BASH_REMATCH[2]}"
+    local gl_ref="${BASH_REMATCH[3]}"
+    local gl_file="${BASH_REMATCH[4]%%\?*}"  # strip ?ref_type=tags and any query params
+    local gl_project_enc gl_file_enc
+    gl_project_enc=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1],''))" "$gl_project")
+    gl_file_enc=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1],''))" "$gl_file")
+    url="${gl_host}/api/v4/projects/${gl_project_enc}/repository/files/${gl_file_enc}/raw?ref=${gl_ref}"
+    info "GitLab URL → API: $url"
+  fi
+
   info "Downloading ingress YAML from: $url"
 
-  # Use gcloud token for private GitLab/GCP URLs; fall back to unauthenticated
-  local token
-  token=$(gcloud auth print-access-token 2>/dev/null || true)
-
   local http_code
-  if [[ -n "$token" ]]; then
+  # GitLab API: use PRIVATE-TOKEN only — gcloud Bearer token causes SAML redirect
+  if [[ "$url" =~ /api/v4/projects/ ]] && [[ -n "${GITLAB_TOKEN:-}" ]]; then
     http_code=$(curl -fsSL \
-      -H "Authorization: Bearer ${token}" \
-      -H "PRIVATE-TOKEN: ${GITLAB_TOKEN:-}" \
+      -H "PRIVATE-TOKEN: ${GITLAB_TOKEN}" \
       --output "$dest" \
       --write-out "%{http_code}" \
       "$url" 2>/dev/null)
   else
-    http_code=$(curl -fsSL \
-      --output "$dest" \
-      --write-out "%{http_code}" \
-      "$url" 2>/dev/null)
+    # GCP/other URLs: use gcloud Bearer token; fall back to unauthenticated
+    local token
+    token=$(gcloud auth print-access-token 2>/dev/null || true)
+    if [[ -n "$token" ]]; then
+      http_code=$(curl -fsSL \
+        -H "Authorization: Bearer ${token}" \
+        --output "$dest" \
+        --write-out "%{http_code}" \
+        "$url" 2>/dev/null)
+    else
+      http_code=$(curl -fsSL \
+        --output "$dest" \
+        --write-out "%{http_code}" \
+        "$url" 2>/dev/null)
+    fi
   fi
 
   if [[ "$http_code" -ge 200 ]] && [[ "$http_code" -lt 300 ]]; then

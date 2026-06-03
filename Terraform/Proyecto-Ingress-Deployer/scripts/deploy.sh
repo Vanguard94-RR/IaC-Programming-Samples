@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 CENTRAL_PROJECT="${CENTRAL_PROJECT:-gnp-fleets-qa}"
 TICKETS_BASE="${TICKETS_BASE:-/home/admin/Documents/GNP/Tickets}"
+# Same bucket as Terraform state — set after PROJECT_ID is known
 # shellcheck source=../lib/ui.sh
 . "$SCRIPT_DIR/lib/ui.sh"
 # shellcheck source=../lib/downloader.sh
@@ -14,6 +15,27 @@ TICKETS_BASE="${TICKETS_BASE:-/home/admin/Documents/GNP/Tickets}"
 . "$SCRIPT_DIR/lib/cloud_armor.sh"
 
 TF_DIR="$SCRIPT_DIR/terraform"
+
+# ── Idempotency Flags ──────────────────────────────────────────────────────
+SKIP_DOWNLOAD="${SKIP_DOWNLOAD:-false}"
+DRY_RUN_ONLY="${DRY_RUN_ONLY:-false}"
+
+# Parse command-line flags
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --skip-download)
+      SKIP_DOWNLOAD="true"
+      shift
+      ;;
+    --dry-run-only)
+      DRY_RUN_ONLY="true"
+      shift
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
 
 # ── Interactive UI or CI env vars ──────────────────────────────────────────
 _prompt() {
@@ -60,6 +82,24 @@ if [[ "${CI:-false}" != "true" ]]; then
   _prompt INGRESS_URL "Ingress YAML URL or path"
 fi
 
+# ── GitLab token resolution ────────────────────────────────────────────────
+# Auto-load from well-known path if URL is GitLab and token not in env
+_GITLAB_TOKEN_FILE="${GITLAB_TOKEN_FILE:-/home/admin/Documents/GNP/PersonalGitLabToken}"
+if [[ "$INGRESS_URL" =~ gitlab\. ]] && [[ -z "${GITLAB_TOKEN:-}" ]]; then
+  if [[ -f "$_GITLAB_TOKEN_FILE" ]]; then
+    GITLAB_TOKEN=$(tr -d '[:space:]' < "$_GITLAB_TOKEN_FILE")
+    export GITLAB_TOKEN
+    info "GitLab token loaded from $_GITLAB_TOKEN_FILE"
+  elif [[ "${CI:-false}" != "true" ]]; then
+    read -rsp "GitLab Personal Access Token: " GITLAB_TOKEN
+    echo
+    export GITLAB_TOKEN
+  else
+    error "GitLab URL requires GITLAB_TOKEN env var"
+    exit 1
+  fi
+fi
+
 # ── Validate early required values ────────────────────────────────────────
 for var in TICKET_ID PROJECT_ID INGRESS_URL; do
   if [[ -z "${!var:-}" ]]; then
@@ -78,17 +118,51 @@ mkdir -p "$TICKET_DIR" "$MANIFESTS_DIR"
 LOG_FILE="$TICKET_DIR/ingress-deployer-$(date +%Y%m%d).log"
 export LOG_FILE
 
+# Bucket = same as Terraform state: gs://<project>-tf-state
+# Path: ingress-artifacts/<ticket>/<date>/
+GCS_BUCKET="${GCS_BUCKET:-gs://${PROJECT_ID}-tf-state}"
+_GCS_PREFIX="${GCS_BUCKET}/ingress-artifacts/${TICKET_ID}/$(date +%Y%m%d)"
+
+# Upload a file to GCS — non-fatal, warn on failure
+_gcs_upload() {
+  local src="$1" label="${2:-$(basename "$1")}"
+  if [[ -z "${GCS_BUCKET:-}" ]]; then return 0; fi
+  if gsutil cp "$src" "${_GCS_PREFIX}/$(basename "$src")" &>/dev/null; then
+    ok "GCS upload: $label → ${_GCS_PREFIX}/"
+  else
+    warn "GCS upload failed: $label (continuing)"
+  fi
+}
+
 # ── Auth check ─────────────────────────────────────────────────────────────
 step "Authentication check"
 if ! gcloud auth print-access-token &>/dev/null; then
-  error "Not authenticated. Run: gcloud auth application-default login"
+  error "Not authenticated. Run: gcloud auth login"
   exit 1
 fi
 ok "gcloud authentication verified"
 
+# ── Terraform state lock check (early detection for recovery) ──────────────
+step "Terraform state lock check"
+_TF_LOCK="$TF_DIR/.terraform.lock.hcl"
+if [[ -f "$_TF_LOCK" ]]; then
+  warn "Terraform lock file detected: $_TF_LOCK"
+  error "Another terraform process may be running, or a previous run failed."
+  error "To recover, run: terraform force-unlock <LOCK_ID>"
+  error "See .terraform/ directory for details."
+  exit 1
+fi
+ok "No state lock detected"
+
 # ── Download ingress YAML ──────────────────────────────────────────────────
 step "Downloading ingress YAML"
-download_ingress_yaml "$INGRESS_URL" "$INGRESS_YAML"
+
+# Idempotency: skip if local copy is valid YAML
+if [[ "$SKIP_DOWNLOAD" == "true" ]] && [[ -f "$INGRESS_YAML" ]] && yq . "$INGRESS_YAML" &>/dev/null; then
+  ok "Reusing local manifest: $INGRESS_YAML (--skip-download)"
+else
+  download_ingress_yaml "$INGRESS_URL" "$INGRESS_YAML"
+fi
 
 # Validate the downloaded file is valid YAML
 if ! yq . "$INGRESS_YAML" &>/dev/null; then
@@ -168,6 +242,8 @@ fi
 if [[ "$(yq '.metadata.namespace' "$INGRESS_YAML")" == "null" ]]; then
   yq -i ".metadata.namespace = \"$NAMESPACE\"" "$INGRESS_YAML"
   info "Injected namespace '$NAMESPACE' into ingress YAML"
+else
+  info "Namespace already present in ingress YAML: $(yq '.metadata.namespace' "$INGRESS_YAML")"
 fi
 
 # Inject SSL certificate annotation if provided
@@ -183,14 +259,48 @@ fi
 
 # ── Generate / overwrite environments/<project>.tfvars ────────────────────
 step "Generating tfvars"
-CLUSTER_NAME=$(gcloud container clusters list \
-  --project="$PROJECT_ID" --format="value(name)" --limit=1 2>/dev/null || echo "")
-CLUSTER_LOCATION=$(gcloud container clusters list \
-  --project="$PROJECT_ID" --format="value(location)" --limit=1 2>/dev/null || echo "")
 
-if [[ -z "$CLUSTER_NAME" ]]; then
-  error "No GKE cluster found in project $PROJECT_ID"
-  exit 1
+# Cluster selection: use env var, or auto-detect with prompt when multiple exist
+if [[ -z "${CLUSTER_NAME:-}" ]]; then
+  mapfile -t _clusters < <(gcloud container clusters list \
+    --project="$PROJECT_ID" --format="value(name,location)" 2>/dev/null || true)
+
+  if [[ ${#_clusters[@]} -eq 0 ]]; then
+    error "No GKE cluster found in project $PROJECT_ID"
+    exit 1
+  elif [[ ${#_clusters[@]} -eq 1 ]]; then
+    CLUSTER_NAME=$(awk '{print $1}' <<< "${_clusters[0]}")
+    CLUSTER_LOCATION=$(awk '{print $2}' <<< "${_clusters[0]}")
+    info "Cluster auto-detected: $CLUSTER_NAME ($CLUSTER_LOCATION)"
+  else
+    if [[ "${CI:-false}" == "true" ]]; then
+      error "Multiple clusters found in $PROJECT_ID — set CLUSTER_NAME env var"
+      exit 1
+    fi
+    step "Select cluster for $PROJECT_ID"
+    for i in "${!_clusters[@]}"; do
+      printf "  [%d] %s\n" "$((i+1))" "${_clusters[$i]}"
+    done
+    _sel=""
+    while true; do
+      read -rp "Cluster number [1-${#_clusters[@]}]: " _sel
+      if [[ "$_sel" =~ ^[0-9]+$ ]] && (( _sel >= 1 && _sel <= ${#_clusters[@]} )); then
+        break
+      fi
+      warn "Invalid selection, try again"
+    done
+    CLUSTER_NAME=$(awk '{print $1}' <<< "${_clusters[$((_sel-1))]}")
+    CLUSTER_LOCATION=$(awk '{print $2}' <<< "${_clusters[$((_sel-1))]}")
+    ok "Selected: $CLUSTER_NAME ($CLUSTER_LOCATION)"
+  fi
+else
+  # CLUSTER_NAME provided — look up its location if not set
+  if [[ -z "${CLUSTER_LOCATION:-}" ]]; then
+    CLUSTER_LOCATION=$(gcloud container clusters list \
+      --project="$PROJECT_ID" --filter="name=$CLUSTER_NAME" \
+      --format="value(location)" 2>/dev/null || echo "")
+  fi
+  info "Cluster from env: $CLUSTER_NAME (${CLUSTER_LOCATION:-unknown})"
 fi
 
 cat > "$TFVARS" << TFVARS
@@ -216,6 +326,79 @@ info "Static IP:    $STATIC_IP_NAME"
 info "Ticket:       $TICKET_ID"
 info "Log:          $LOG_FILE"
 
+# ── Diff current vs new ingress (spec only — paths and services) ──────────
+step "Ingress diff (current → new)"
+_diff_spec() {
+  local label="$1" kind="$2" name="$3" new_yaml="$4"
+  local tmp_cur tmp_new
+  tmp_cur=$(mktemp) tmp_new=$(mktemp)
+
+  local raw_cur
+  raw_cur=$(kubectl get "$kind" "$name" -n "$NAMESPACE" -o yaml 2>/dev/null || true)
+  if [[ -z "$raw_cur" ]]; then
+    info "$label: not found in cluster — will be created"
+    rm -f "$tmp_cur" "$tmp_new"; return 0
+  fi
+
+  # Compare spec + user-managed annotations (exclude GKE controller-owned keys)
+  printf '%s' "$raw_cur" | yq '{
+    "spec": .spec,
+    "annotations": (.metadata.annotations // {} | del(
+      .["ingress.kubernetes.io/backends"],
+      .["ingress.kubernetes.io/forwarding-rule"],
+      .["ingress.kubernetes.io/https-forwarding-rule"],
+      .["ingress.kubernetes.io/https-target-proxy"],
+      .["ingress.kubernetes.io/target-proxy"],
+      .["ingress.kubernetes.io/url-map"],
+      .["ingress.kubernetes.io/ssl-cert"],
+      .["kubectl.kubernetes.io/last-applied-configuration"]
+    ))
+  }' > "$tmp_cur" 2>/dev/null
+
+  yq '{
+    "spec": .spec,
+    "annotations": (.metadata.annotations // {} | del(
+      .["ingress.kubernetes.io/backends"],
+      .["ingress.kubernetes.io/forwarding-rule"],
+      .["ingress.kubernetes.io/https-forwarding-rule"],
+      .["ingress.kubernetes.io/https-target-proxy"],
+      .["ingress.kubernetes.io/target-proxy"],
+      .["ingress.kubernetes.io/url-map"],
+      .["ingress.kubernetes.io/ssl-cert"],
+      .["kubectl.kubernetes.io/last-applied-configuration"]
+    ))
+  }' "$new_yaml" > "$tmp_new" 2>/dev/null
+
+  local delta
+  delta=$(diff --color=always -u \
+    --label "current ($name)" \
+    --label "new     ($name)" \
+    "$tmp_cur" "$tmp_new" 2>/dev/null || true)
+
+  if [[ -z "$delta" ]]; then
+    ok "$label: no changes (spec + annotations)"
+  else
+    warn "$label: changes detected"
+    printf '%s\n' "$delta"
+  fi
+  rm -f "$tmp_cur" "$tmp_new"
+}
+
+if kubectl get ingress "$INGRESS_NAME" -n "$NAMESPACE" &>/dev/null 2>&1; then
+  _diff_spec "Ingress $INGRESS_NAME" "ingress" "$INGRESS_NAME" "$INGRESS_YAML"
+else
+  info "Ingress $INGRESS_NAME not found — fresh deployment"
+fi
+
+if [[ -f "$FRONTENDCONFIG_YAML" ]]; then
+  _fc_diff=$(yq '.metadata.name' "$FRONTENDCONFIG_YAML" 2>/dev/null || true)
+  if [[ -n "$_fc_diff" ]] && kubectl get frontendconfig "$_fc_diff" -n "$NAMESPACE" &>/dev/null 2>&1; then
+    _diff_spec "FrontendConfig $_fc_diff" "frontendconfig" "$_fc_diff" "$FRONTENDCONFIG_YAML"
+  else
+    info "FrontendConfig $_fc_diff not found — will be created"
+  fi
+fi
+
 # ── Backup existing ingress (apply only) ──────────────────────────────────
 if [[ "$ACTION" == "apply" ]]; then
   step "Backup existing ingress"
@@ -224,6 +407,7 @@ if [[ "$ACTION" == "apply" ]]; then
     kubectl get ingress -n "$NAMESPACE" "$INGRESS_NAME" -o yaml > "$BACKUP_FILE"
     ok "Backup saved: $BACKUP_FILE"
     info "Rollback: kubectl apply -f $BACKUP_FILE"
+    _gcs_upload "$BACKUP_FILE" "ingress backup"
   else
     info "No existing ingress found — fresh deployment"
   fi
@@ -294,8 +478,13 @@ _do_apply() {
   terraform apply -input=false -no-color "$PLAN_FILE" \
     | tee -a "$LOG_FILE"
   ok "Apply complete"
+  # Upload applied manifests for rollback reference
+  _gcs_upload "$INGRESS_YAML" "ingress.yaml"
+  [[ -f "$FRONTENDCONFIG_YAML" ]] && _gcs_upload "$FRONTENDCONFIG_YAML" "frontendconfig.yaml"
+  _gcs_upload "$LOG_FILE" "deploy.log"
   step "Waiting for ingress stabilization"
-  wait_for_ingress_ip "$NAMESPACE" "$INGRESS_NAME" 420
+  wait_for_ingress_ip "$NAMESPACE" "$INGRESS_NAME" 1200 \
+    || warn "Ingress IP timeout — LB still provisioning. Check GKE console."
   attach_cloud_armor "$PROJECT_ID" "$NAMESPACE"
 }
 
@@ -305,6 +494,15 @@ case "$ACTION" in
     terraform plan -var-file="$TFVARS" -input=false -no-color -out="$PLAN_FILE" \
       | tee -a "$LOG_FILE"
     ok "Plan complete — saved: $PLAN_FILE"
+    _gcs_upload "$PLAN_FILE" "terraform.tfplan"
+    
+    # Exit early if dry-run-only is set
+    if [[ "$DRY_RUN_ONLY" == "true" ]]; then
+      step "Dry-run complete (--dry-run-only)"
+      ok "No changes applied. Review plan: $PLAN_FILE"
+      exit 0
+    fi
+    
     if [[ "${CI:-false}" != "true" ]]; then
       read -rp "Apply this plan? [y/N]: " _confirm
       if [[ "${_confirm,,}" == "y" ]]; then
@@ -319,12 +517,54 @@ case "$ACTION" in
     terraform plan -var-file="$TFVARS" -input=false -no-color -out="$PLAN_FILE" \
       | tee -a "$LOG_FILE"
     ok "Plan complete — saved: $PLAN_FILE"
+    _gcs_upload "$PLAN_FILE" "terraform.tfplan"
     _do_apply
     ;;
   destroy)
+    _kubectl_delete_with_finalizer_fallback() {
+      local kind="$1" name="$2" ns="$3" state_addr="$4"
+
+      if ! kubectl get "$kind" -n "$ns" "$name" &>/dev/null 2>&1; then
+        info "$kind/$name not found — skipping"
+        terraform state rm "$state_addr" 2>/dev/null || true
+        return 0
+      fi
+
+      info "Deleting $kind/$name — waiting up to 15m for GKE LB deprovision..."
+      kubectl delete "$kind" -n "$ns" "$name" --ignore-not-found 2>/dev/null || true
+
+      if ! kubectl wait --for=delete "$kind/$name" -n "$ns" --timeout=1200s 2>/dev/null; then
+        warn "GKE did not remove finalizer in 15m — forcing finalizer removal"
+        kubectl patch "$kind/$name" -n "$ns" \
+          -p '{"metadata":{"finalizers":[]}}' --type=merge 2>/dev/null || true
+        # Wait up to 30s more after force-patch
+        kubectl wait --for=delete "$kind/$name" -n "$ns" --timeout=30s 2>/dev/null || true
+      fi
+
+      ok "$kind/$name deleted"
+      terraform state rm "$state_addr" 2>/dev/null || true
+    }
+
+    step "Deleting ingress"
+    _kubectl_delete_with_finalizer_fallback \
+      "ingress" "$INGRESS_NAME" "$NAMESPACE" \
+      "module.ingress.kubernetes_manifest.ingress"
+
+    if [[ -f "$FRONTENDCONFIG_YAML" ]]; then
+      _fc_del=$(yq '.metadata.name' "$FRONTENDCONFIG_YAML" 2>/dev/null || true)
+      if [[ -n "$_fc_del" ]]; then
+        step "Deleting FrontendConfig"
+        _kubectl_delete_with_finalizer_fallback \
+          "frontendconfig" "$_fc_del" "$NAMESPACE" \
+          "module.ingress.kubernetes_manifest.frontendconfig[0]"
+      fi
+    fi
+
+    step "Destroying static IP"
     terraform destroy -var-file="$TFVARS" -input=false -auto-approve -no-color \
+      -target="module.ingress.google_compute_global_address.ingress" \
       | tee -a "$LOG_FILE"
-    ok "Destroy complete"
+    ok "Destroy complete (namespace preserved)"
     ;;
 esac
 
