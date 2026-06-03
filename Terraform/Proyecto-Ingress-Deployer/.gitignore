@@ -8,5 +8,8 @@ terraform/.terraform/
 # Logs
 *.log
 
+# Docs
+docs/
+
 # OS
 .DS_Store
