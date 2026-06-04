@@ -508,7 +508,6 @@ _do_apply() {
   ok "Apply complete"
   # Upload applied manifests for rollback reference
   _gcs_upload "$INGRESS_YAML" "ingress.yaml"
-  [[ -f "$FRONTENDCONFIG_YAML" ]] && _gcs_upload "$FRONTENDCONFIG_YAML" "frontendconfig.yaml"
   for _cf in "$COMPANIONS_DIR"/*.yaml; do
     [[ -f "$_cf" ]] && _gcs_upload "$_cf" "companions/$(basename "$_cf")"
   done
