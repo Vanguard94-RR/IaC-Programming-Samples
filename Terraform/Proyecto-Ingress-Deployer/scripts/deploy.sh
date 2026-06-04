@@ -432,11 +432,13 @@ if [[ "$ACTION" != "destroy" ]]; then
       "$NAMESPACE" "Namespace $NAMESPACE"
   fi
 
-  if gcloud compute addresses describe "$STATIC_IP_NAME" \
-       --global --project="$PROJECT_ID" &>/dev/null 2>&1; then
-    _tf_import "module.ingress.google_compute_global_address.ingress" \
-      "projects/${PROJECT_ID}/global/addresses/${STATIC_IP_NAME}" \
-      "Static IP $STATIC_IP_NAME"
+  if [[ -n "${STATIC_IP_NAME:-}" ]]; then
+    if gcloud compute addresses describe "$STATIC_IP_NAME" \
+         --global --project="$PROJECT_ID" &>/dev/null 2>&1; then
+      _tf_import "module.ingress.google_compute_global_address.ingress[0]" \
+        "projects/${PROJECT_ID}/global/addresses/${STATIC_IP_NAME}" \
+        "Static IP $STATIC_IP_NAME"
+    fi
   fi
 
   if kubectl get ingress -n "$NAMESPACE" "$INGRESS_NAME" &>/dev/null 2>&1; then
@@ -553,7 +555,7 @@ case "$ACTION" in
 
     step "Destroying static IP"
     terraform destroy -var-file="$TFVARS" -input=false -auto-approve -no-color \
-      -target="module.ingress.google_compute_global_address.ingress" \
+      -target="module.ingress.google_compute_global_address.ingress[0]" \
       | tee -a "$LOG_FILE"
     ok "Destroy complete (namespace preserved)"
     ;;
