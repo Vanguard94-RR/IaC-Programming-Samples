@@ -51,16 +51,17 @@ extract_companions() {
      | select(.kind != "Deployment")
      | select(.kind != "ConfigMap")
      | select(.kind != "Secret")
-     | .kind + "/" + .metadata.name' \
-    "$src" 2>/dev/null || true)
+     | .kind + "/" + (.metadata.namespace // "_") + "/" + .metadata.name' \
+    "$src" || true)
 
   [[ -z "$companions" ]] && return 0
 
-  while IFS='/' read -r kind name; do
+  while IFS='/' read -r kind ns name; do
     [[ -z "$kind" || -z "$name" ]] && continue
-    local out="$companions_dir/${kind}-${name}.yaml"
-    yq "select(.kind == \"$kind\" and .metadata.name == \"$name\")" "$src" > "$out"
+    local ns_part="${ns:-_}"
+    local out="$companions_dir/${kind}-${ns_part}-${name}.yaml"
+    yq "select(.kind == \"$kind\" and (.metadata.namespace // \"_\") == \"${ns_part}\" and .metadata.name == \"$name\")" "$src" > "$out"
     clean_ingress_yaml "$out" "$out"
-    ok "Companion extracted: $kind/$name"
+    ok "Companion extracted: $kind/$ns_part/$name"
   done <<< "$companions"
 }

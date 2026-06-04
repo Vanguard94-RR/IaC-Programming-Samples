@@ -147,12 +147,12 @@ YAML
   source "$SCRIPT_DIR/lib/yaml_cleaner.sh"
   extract_companions "$src" "$companions_dir"
 
-  # BackendConfig extracted
-  [[ -f "$companions_dir/BackendConfig-test-backendconfig.yaml" ]] &&
+  # BackendConfig extracted (with namespace in filename)
+  [[ -f "$companions_dir/BackendConfig-apps-test-backendconfig.yaml" ]] &&
   # Ingress NOT extracted
-  ! [[ -f "$companions_dir/Ingress-test-ingress.yaml" ]] &&
+  ! [[ -f "$companions_dir/Ingress-apps-test-ingress.yaml" ]] &&
   # Service NOT extracted (blocklisted)
-  ! [[ -f "$companions_dir/Service-test-service.yaml" ]]
+  ! [[ -f "$companions_dir/Service-apps-test-service.yaml" ]]
 }
 check "extract_companions extracts BackendConfig, skips Ingress and Service" 0 \
   "_test_extract_companions"
