@@ -577,15 +577,19 @@ case "$ACTION" in
       "ingress" "$INGRESS_NAME" "$NAMESPACE" \
       "module.ingress.kubernetes_manifest.ingress"
 
-    if [[ -f "$FRONTENDCONFIG_YAML" ]]; then
-      _fc_del=$(yq '.metadata.name' "$FRONTENDCONFIG_YAML" 2>/dev/null || true)
-      if [[ -n "$_fc_del" ]]; then
-        step "Deleting FrontendConfig"
+    for _cf in "$COMPANIONS_DIR"/*.yaml; do
+      [[ -f "$_cf" ]] || continue
+      _cf_kind=$(yq '.kind' "$_cf")
+      _cf_name_val=$(yq '.metadata.name' "$_cf")
+      if echo "$_LIFECYCLE_KINDS" | grep -qw "$_cf_kind"; then
+        step "Deleting companion $_cf_kind/$_cf_name_val"
         _kubectl_delete_with_finalizer_fallback \
-          "frontendconfig" "$_fc_del" "$NAMESPACE" \
-          "module.ingress.kubernetes_manifest.frontendconfig[0]"
+          "$_cf_kind" "$_cf_name_val" "$NAMESPACE" \
+          "module.ingress.kubernetes_manifest.companion[\"${_cf_kind}/${_cf_name_val}\"]"
+      else
+        info "Skipping destroy for create-only companion: $_cf_kind/$_cf_name_val"
       fi
-    fi
+    done
 
     step "Destroying static IP"
     terraform destroy -var-file="$TFVARS" -input=false -auto-approve -no-color \
