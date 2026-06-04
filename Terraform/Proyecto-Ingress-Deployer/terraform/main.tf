@@ -36,8 +36,20 @@ provider "kubernetes" {
 }
 
 locals {
-  manifests_dir       = "${path.module}/../manifests/${var.project_id}"
-  frontendconfig_yaml = "${local.manifests_dir}/frontendconfig.yaml"
+  manifests_dir  = "${path.module}/../manifests/${var.project_id}"
+  companions_dir = "${local.manifests_dir}/companions"
+
+  # Build companion_manifests map from companions/*.yaml files.
+  # Key: "Kind/name" (read from YAML content, not filename)
+  # Value: absolute path to companion YAML file
+  # try() handles the case where companions/ dir doesn't exist yet.
+  _companion_yaml_files = try(fileset(local.companions_dir, "*.yaml"), toset([]))
+
+  companion_manifests = {
+    for f in local._companion_yaml_files :
+    "${yamldecode(file("${local.companions_dir}/${f}")).kind}/${yamldecode(file("${local.companions_dir}/${f}")).metadata.name}"
+    => "${local.companions_dir}/${f}"
+  }
 }
 
 module "ingress" {
@@ -47,5 +59,5 @@ module "ingress" {
   namespace           = var.namespace
   static_ip_name      = var.static_ip_name
   ingress_yaml        = "${local.manifests_dir}/ingress.yaml"
-  frontendconfig_yaml = fileexists(local.frontendconfig_yaml) ? local.frontendconfig_yaml : ""
+  companion_manifests = local.companion_manifests
 }
