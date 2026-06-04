@@ -110,6 +110,77 @@ _test_ephemeral_validation() {
 check "deploy.sh does not require STATIC_IP_NAME (ephemeral mode)" 0 \
   "_test_ephemeral_validation"
 
+# Companion extraction: must extract BackendConfig, skip Ingress and Service
+_test_extract_companions() {
+  local src=/tmp/test-multidoc.yaml
+  local companions_dir=/tmp/test-companions
+  rm -rf "$companions_dir"
+
+  cat > "$src" << 'YAML'
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: test-ingress
+  namespace: apps
+spec:
+  rules: []
+---
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: test-backendconfig
+  namespace: apps
+spec:
+  timeoutSec: 1800
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-service
+  namespace: apps
+spec:
+  ports:
+  - port: 8080
+YAML
+
+  source "$SCRIPT_DIR/lib/ui.sh"
+  source "$SCRIPT_DIR/lib/yaml_cleaner.sh"
+  extract_companions "$src" "$companions_dir"
+
+  # BackendConfig extracted
+  [[ -f "$companions_dir/BackendConfig-test-backendconfig.yaml" ]] &&
+  # Ingress NOT extracted
+  ! [[ -f "$companions_dir/Ingress-test-ingress.yaml" ]] &&
+  # Service NOT extracted (blocklisted)
+  ! [[ -f "$companions_dir/Service-test-service.yaml" ]]
+}
+check "extract_companions extracts BackendConfig, skips Ingress and Service" 0 \
+  "_test_extract_companions"
+
+# extract_companions: empty result when no matching docs
+_test_extract_companions_empty() {
+  local src=/tmp/test-ingress-only.yaml
+  local companions_dir=/tmp/test-companions-empty
+  rm -rf "$companions_dir"
+
+  cat > "$src" << 'YAML'
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: test-ingress
+  namespace: apps
+spec:
+  rules: []
+YAML
+
+  source "$SCRIPT_DIR/lib/ui.sh"
+  source "$SCRIPT_DIR/lib/yaml_cleaner.sh"
+  extract_companions "$src" "$companions_dir"
+  [[ -d "$companions_dir" ]] && [[ -z "$(ls -A "$companions_dir")" ]]
+}
+check "extract_companions produces empty dir when no companion docs" 0 \
+  "_test_extract_companions_empty"
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]]

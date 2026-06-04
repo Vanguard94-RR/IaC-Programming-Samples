@@ -25,3 +25,42 @@ clean_ingress_yaml() {
   )' "$input" > "$tmp"
   mv "$tmp" "$output"
 }
+
+# Allowlist: apiGroup prefixes that identify IaC companion resources
+_COMPANION_GROUPS="cloud\\.google\\.com|networking\\.gke\\.io"
+
+# Lifecycle companions: destroyed alongside the ingress on ACTION=destroy
+_LIFECYCLE_KINDS="BackendConfig FrontendConfig"
+
+# Create-only companions: deployed but never destroyed by this script
+_CREATE_ONLY_KINDS="ManagedCertificate"
+
+# extract_companions <source-yaml> <companions-dir>
+# Extracts all IaC companion documents from a (possibly multi-document) YAML file.
+# Each companion is written to <companions-dir>/Kind-name.yaml and cleaned.
+# Skips: Ingress, Service, Deployment, ConfigMap, Secret regardless of apiGroup.
+extract_companions() {
+  local src="$1" companions_dir="$2"
+  mkdir -p "$companions_dir"
+
+  local companions
+  companions=$(yq \
+    'select(.apiVersion | test("^('"$_COMPANION_GROUPS"')/"))
+     | select(.kind != "Ingress")
+     | select(.kind != "Service")
+     | select(.kind != "Deployment")
+     | select(.kind != "ConfigMap")
+     | select(.kind != "Secret")
+     | .kind + "/" + .metadata.name' \
+    "$src" 2>/dev/null || true)
+
+  [[ -z "$companions" ]] && return 0
+
+  while IFS='/' read -r kind name; do
+    [[ -z "$kind" || -z "$name" ]] && continue
+    local out="$companions_dir/${kind}-${name}.yaml"
+    yq "select(.kind == \"$kind\" and .metadata.name == \"$name\")" "$src" > "$out"
+    clean_ingress_yaml "$out" "$out"
+    ok "Companion extracted: $kind/$name"
+  done <<< "$companions"
+}
