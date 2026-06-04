@@ -181,6 +181,84 @@ YAML
 check "extract_companions produces empty dir when no companion docs" 0 \
   "_test_extract_companions_empty"
 
+# _LIFECYCLE_KINDS includes BackendConfig and FrontendConfig, not ManagedCertificate
+_test_lifecycle_kinds() {
+  source "$SCRIPT_DIR/lib/ui.sh"
+  source "$SCRIPT_DIR/lib/yaml_cleaner.sh"
+  echo "$_LIFECYCLE_KINDS" | grep -qw "BackendConfig" &&
+  echo "$_LIFECYCLE_KINDS" | grep -qw "FrontendConfig" &&
+  ! echo "$_LIFECYCLE_KINDS" | grep -qw "ManagedCertificate"
+}
+check "_LIFECYCLE_KINDS includes BackendConfig/FrontendConfig, excludes ManagedCertificate" 0 \
+  "_test_lifecycle_kinds"
+
+# extract_companions: networking.gke.io FrontendConfig is extracted
+_test_extract_frontendconfig() {
+  local src=/tmp/test-fc-multidoc.yaml
+  local companions_dir=/tmp/test-companions-fc
+  rm -rf "$companions_dir"
+
+  cat > "$src" << 'YAML'
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: test-ingress
+  namespace: apps
+spec:
+  rules: []
+---
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  name: test-fc
+  namespace: apps
+spec:
+  redirectToHttps:
+    enabled: true
+YAML
+
+  source "$SCRIPT_DIR/lib/ui.sh"
+  source "$SCRIPT_DIR/lib/yaml_cleaner.sh"
+  extract_companions "$src" "$companions_dir"
+  [[ -f "$companions_dir/FrontendConfig-apps-test-fc.yaml" ]]
+}
+check "extract_companions extracts FrontendConfig from networking.gke.io" 0 \
+  "_test_extract_frontendconfig"
+
+# extract_companions: ManagedCertificate is extracted (create-only companion)
+_test_extract_managedcert() {
+  local src=/tmp/test-cert-multidoc.yaml
+  local companions_dir=/tmp/test-companions-cert
+  rm -rf "$companions_dir"
+
+  cat > "$src" << 'YAML'
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: test-ingress
+  namespace: apps
+spec:
+  rules: []
+---
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: test-cert
+  namespace: apps
+spec:
+  domains:
+  - example.com
+YAML
+
+  source "$SCRIPT_DIR/lib/ui.sh"
+  source "$SCRIPT_DIR/lib/yaml_cleaner.sh"
+  extract_companions "$src" "$companions_dir"
+  [[ -f "$companions_dir/ManagedCertificate-apps-test-cert.yaml" ]] &&
+  ! echo "$_LIFECYCLE_KINDS" | grep -qw "ManagedCertificate"
+}
+check "extract_companions extracts ManagedCertificate as create-only companion" 0 \
+  "_test_extract_managedcert"
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]]
