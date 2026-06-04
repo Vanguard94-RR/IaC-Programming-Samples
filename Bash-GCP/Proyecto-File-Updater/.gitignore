@@ -5,3 +5,5 @@ promotion.log
 promotion-report.json
 *.tmp
 .DS_Store
+docs/
+PHASE1_DESIGN.md
