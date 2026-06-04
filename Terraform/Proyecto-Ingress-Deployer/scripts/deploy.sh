@@ -175,7 +175,7 @@ fi
 
 if [[ "${CI:-false}" != "true" ]]; then
   _prompt NAMESPACE      "Namespace" "${_yaml_namespace:-}"
-  _prompt STATIC_IP_NAME "Static IP name" "${_yaml_static_ip:-}"
+  _prompt STATIC_IP_NAME "Static IP name (leave empty for ephemeral IP)" "${_yaml_static_ip:-}"
   _prompt_action
 else
   NAMESPACE="${NAMESPACE:-$_yaml_namespace}"
@@ -183,7 +183,7 @@ else
 fi
 
 # ── Validate all required values ──────────────────────────────────────────
-for var in TICKET_ID PROJECT_ID NAMESPACE STATIC_IP_NAME INGRESS_URL ACTION; do
+for var in TICKET_ID PROJECT_ID NAMESPACE INGRESS_URL ACTION; do
   if [[ -z "${!var:-}" ]]; then
     error "Missing required value: $var"
     exit 1
@@ -316,7 +316,7 @@ INGRESS_NAME=$(yq 'select(.kind == "Ingress") | .metadata.name' "$INGRESS_YAML" 
 info "Project:      $PROJECT_ID"
 info "Namespace:    $NAMESPACE"
 info "Ingress:      $INGRESS_NAME"
-info "Static IP:    $STATIC_IP_NAME"
+info "Static IP:    ${STATIC_IP_NAME:-ephemeral}"
 info "Ticket:       $TICKET_ID"
 info "Log:          $LOG_FILE"
 
