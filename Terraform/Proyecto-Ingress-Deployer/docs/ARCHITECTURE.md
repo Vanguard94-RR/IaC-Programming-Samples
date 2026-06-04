@@ -27,7 +27,7 @@ flowchart TB
     gitlab["📦 GitLab\ningress YAML source"]
     gcp["☁️ GCP Project\nN independent environments"]
     gke["⚙️ GKE Cluster\nKubernetes"]
-    gcs["🗄️ GCS Bucket\n&lt;project&gt;-tf-state"]
+    gcs["🗄️ GCS Bucket\nPROJECT-tf-state"]
     armor["🛡️ Cloud Armor\nsecurity policy"]
 
     eng -->|"ticket · project · URL · action"| deployer
@@ -106,42 +106,40 @@ sequenceDiagram
     participant GKE as GKE Cluster
     participant GCS as GCS Bucket
 
-    Eng->>D: make deploy
-    Note over Eng,D: ticket ID · project · YAML URL · action
+    Eng->>D: make deploy (ticket, project, URL, action)
 
-    D->>GCP: gcloud auth print-access-token
-    D->>GL: GET ingress YAML (PRIVATE-TOKEN header)
-    GL-->>D: ingress.yaml (single or multi-document)
+    D->>GCP: auth check
+    D->>GL: download ingress YAML via PRIVATE-TOKEN
+    GL->>D: ingress.yaml
 
-    D->>D: clean_ingress_yaml() — strip controller fields
-    D->>D: yq select(.kind=="Ingress") — extract single doc
-    D->>GCP: list clusters · list SSL certs
-    GCP-->>D: cluster name · location · cert name
+    D->>D: clean YAML, strip GKE controller fields
+    D->>D: extract single Ingress document
+    D->>GCP: list clusters and SSL certs
+    GCP->>D: cluster name, location, cert name
 
-    D->>D: generate environments/&lt;project&gt;.tfvars
+    D->>D: generate project.tfvars
     D->>GKE: get-credentials
-    D->>D: diff current vs new ingress (spec + annotations)
+    D->>D: diff current vs new ingress
     D->>GCS: backup current ingress YAML
 
-    D->>TF: init-backend.sh (create bucket if missing · terraform init)
-    D->>TF: terraform import (namespace · static IP · Ingress · FrontendConfig)
-    Note over TF: idempotent — skips if already in state
+    D->>TF: init backend (GCS bucket)
+    D->>TF: import existing resources (idempotent)
+    Note over TF: namespace, static IP, Ingress, FrontendConfig
 
-    D->>TF: terraform plan -out plan.tfplan
-    TF-->>D: plan output
-    D->>GCS: upload plan.tfplan
+    D->>TF: plan
+    TF->>D: plan summary
+    D->>GCS: upload plan file
 
-    D->>Eng: show plan — confirm apply? [y/N]
-    Eng-->>D: y
+    D->>Eng: confirm apply?
+    Eng->>D: yes
 
-    D->>TF: terraform apply plan.tfplan
-    TF->>GKE: apply Ingress manifest (field_manager force_conflicts)
-    TF->>GKE: apply FrontendConfig manifest
-    TF->>GCP: create / update static IP
+    D->>TF: apply
+    TF->>GKE: apply Ingress + FrontendConfig
+    TF->>GCP: create or update static IP
 
-    D->>GCS: upload deploy.log · ingress.yaml · frontendconfig.yaml
-    D->>GKE: wait for IP assignment (timeout 20 min)
-    D->>GCP: attach Cloud Armor policy to backend services
+    D->>GCS: upload log and manifests
+    D->>GKE: wait for IP assignment
+    D->>GCP: attach Cloud Armor policy
 ```
 
 ---
@@ -152,9 +150,9 @@ One GCS bucket per GCP project. Versioning is enabled automatically by `init-bac
 
 ```mermaid
 graph TB
-    subgraph gcs["GCS: &lt;project&gt;-tf-state  —  versioning enabled"]
-        tfstate["ingress/terraform.tfstate\n★ all versions retained — rollback available"]
-        subgraph art["ingress-artifacts/&lt;TICKET&gt;/&lt;YYYYMMDD&gt;/"]
+    subgraph gcs["GCS — PROJECT-tf-state  versioning enabled"]
+        tfstate["ingress/terraform.tfstate\nall versions retained"]
+        subgraph art["ingress-artifacts / TICKET / YYYYMMDD"]
             plan["plan-HHMMSS.tfplan"]
             backup["ingress_backup_HHMMSS.yaml"]
             fc["frontendconfig.yaml"]
@@ -162,10 +160,10 @@ graph TB
         end
     end
 
-    deploy["deploy.sh"] -->|"terraform init --backend-config bucket=..."| tfstate
-    deploy -->|"gsutil cp — _gcs_upload()"| art
-    tf["Terraform"] <-->|"read · lock · write"| tfstate
-    tf -->|"terraform import — idempotent"| tfstate
+    deploy["deploy.sh"] -->|"terraform init backend"| tfstate
+    deploy -->|"gsutil cp"| art
+    tf["Terraform"] -->|"read and write state"| tfstate
+    tf -->|"terraform import idempotent"| tfstate
 
     style tfstate fill:#3d1f00,stroke:#f0a500,color:#f0a500
     style art fill:#161b22,stroke:#30363d
