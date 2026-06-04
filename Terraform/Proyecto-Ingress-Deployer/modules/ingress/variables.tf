@@ -9,8 +9,9 @@ variable "namespace" {
 }
 
 variable "static_ip_name" {
-  description = "google_compute_global_address name. Must exist before ingress controller processes the Ingress resource."
+  description = "google_compute_global_address name. Empty string = ephemeral IP (no GCP address created)."
   type        = string
+  default     = ""
 }
 
 variable "ingress_yaml" {

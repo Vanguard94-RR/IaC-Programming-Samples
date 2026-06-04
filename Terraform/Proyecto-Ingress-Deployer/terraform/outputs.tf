@@ -1,5 +1,5 @@
 output "static_ip_address" {
-  description = "Static IP address assigned to the ingress load balancer"
+  description = "Reserved static IP address, or empty string when ephemeral IP mode is active."
   value       = module.ingress.static_ip_address
 }
 

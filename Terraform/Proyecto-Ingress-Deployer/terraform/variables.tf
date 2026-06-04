@@ -24,6 +24,7 @@ variable "namespace" {
 }
 
 variable "static_ip_name" {
-  description = "Name for google_compute_global_address. Must match ingress annotation kubernetes.io/ingress.global-static-ip-name"
+  description = "Name for google_compute_global_address. Empty string = ephemeral IP (no GCP address created)."
   type        = string
+  default     = ""
 }

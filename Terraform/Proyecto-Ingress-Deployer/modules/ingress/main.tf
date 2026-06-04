@@ -9,10 +9,10 @@ resource "kubernetes_namespace_v1" "ingress" {
   }
 }
 
-# 2. Static IP — must exist in GCP before GKE's ingress controller processes the Ingress.
-#    GKE reads kubernetes.io/ingress.global-static-ip-name at LB provisioning time.
-#    If the address does not exist yet, the LB is provisioned with an ephemeral IP.
+# 2. Static IP — optional. Empty static_ip_name = GKE provisions an ephemeral IP.
+#    When set, must exist before ingress controller processes the Ingress.
 resource "google_compute_global_address" "ingress" {
+  count   = var.static_ip_name != "" ? 1 : 0
   name    = var.static_ip_name
   project = var.project_id
 }
@@ -39,7 +39,7 @@ resource "kubernetes_manifest" "ingress" {
 
   depends_on = [
     kubernetes_namespace_v1.ingress,
-    google_compute_global_address.ingress,
     kubernetes_manifest.frontendconfig,
+    google_compute_global_address.ingress,
   ]
 }

@@ -1,6 +1,6 @@
 output "static_ip_address" {
-  description = "The reserved static IP address"
-  value       = google_compute_global_address.ingress.address
+  description = "The reserved static IP address. Empty string when static_ip_name is not set."
+  value       = var.static_ip_name != "" ? google_compute_global_address.ingress[0].address : ""
 }
 
 output "ingress_name" {
