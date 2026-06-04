@@ -43,9 +43,8 @@ validate:
 	@echo "✓ All dependencies present"
 	@echo "✓ Run 'make help' for next steps"
 
-# Clean temporary files
+# Clean temporary files — never deletes .terraform.lock.hcl (provider lock, must be versioned)
 clean:
 	@find . -name "*.tfplan" -delete
-	@find . -name ".terraform.lock.hcl" -delete
 	@find . -name "*.log" -o -name "*~" | xargs rm -f 2>/dev/null || true
 	@echo "Clean completed"

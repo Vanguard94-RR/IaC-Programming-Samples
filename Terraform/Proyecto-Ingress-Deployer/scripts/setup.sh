@@ -54,7 +54,7 @@ print_banner "Ingress Deployer — Dependency Setup"
 # ---------------------------------------------------------------------------
 step "Creating configuration directories"
 mkdir -p "$INGRESS_CONFIG_DIR"
-success "Config directory ready: $INGRESS_CONFIG_DIR"
+ok "Config directory ready: $INGRESS_CONFIG_DIR"
 
 # ---------------------------------------------------------------------------
 # Step 2: OS Detection
@@ -259,7 +259,7 @@ _install_terraform_tarball() {
 
     export PATH="$tf_home/bin:$PATH"
     _patch_bashrc "$tf_home/bin"
-    success "Terraform installed to $tf_home ($(terraform version | head -1 | grep -oP 'v[0-9.]+'))"
+    ok "Terraform installed to $tf_home ($(terraform version | head -1 | grep -oP 'v[0-9.]+'))"
 }
 
 # ---------------------------------------------------------------------------
@@ -321,7 +321,7 @@ _install_gcloud_script() {
     fi
     _patch_bashrc "$install_dir/bin"
     export PATH="$install_dir/bin:$PATH"
-    success "gcloud installed to $install_dir"
+    ok "gcloud installed to $install_dir"
 }
 
 # ---------------------------------------------------------------------------
@@ -392,7 +392,7 @@ _install_kubectl_tarball() {
     mv "$tmp" "$kubectl_home/bin/kubectl"
     export PATH="$kubectl_home/bin:$PATH"
     _patch_bashrc "$kubectl_home/bin"
-    success "kubectl installed to $kubectl_home"
+    ok "kubectl installed to $kubectl_home"
 }
 
 # ---------------------------------------------------------------------------
@@ -461,7 +461,7 @@ _install_yq_tarball() {
     mv "$tmp" "$yq_home/bin/yq"
     export PATH="$yq_home/bin:$PATH"
     _patch_bashrc "$yq_home/bin"
-    success "yq installed to $yq_home"
+    ok "yq installed to $yq_home"
 }
 
 # ---------------------------------------------------------------------------

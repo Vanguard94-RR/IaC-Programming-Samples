@@ -29,6 +29,10 @@ download_ingress_yaml() {
       error "Local file not found: $local_path"
       return 1
     fi
+    if [[ "$local_path" -ef "$dest" ]]; then
+      ok "Local YAML already in place: $dest"
+      return 0
+    fi
     cp "$local_path" "$dest"
     ok "Copied local YAML → $dest"
     return 0

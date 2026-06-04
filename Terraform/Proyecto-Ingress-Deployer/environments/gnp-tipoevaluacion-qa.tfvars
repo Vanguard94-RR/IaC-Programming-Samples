@@ -1,0 +1,5 @@
+project_id       = "gnp-tipoevaluacion-qa"
+cluster_name     = "gke-tipoevaluacion-qa"
+cluster_location = "us-central1-c"
+namespace        = "apps"
+static_ip_name   = "ip-tipoevaluacion"

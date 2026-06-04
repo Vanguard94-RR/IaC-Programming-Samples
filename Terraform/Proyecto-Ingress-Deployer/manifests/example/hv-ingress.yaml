@@ -1,0 +1,55 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    ingress.gcp.kubernetes.io/pre-shared-cert: wildcarddigicertgnpcommx2027
+    ingress.kubernetes.io/backends: '{"k8s1-9c65767a-apps-gke-gnp-hogar-cotizaciones-svc-8080-ace4c473":"HEALTHY","k8s1-9c65767a-apps-gke-gnp-hogar-documentos-svc-8080-df2307e5":"HEALTHY","k8s1-9c65767a-kube-system-default-http-backend-80-8b063eb8":"HEALTHY"}'
+    ingress.kubernetes.io/forwarding-rule: k8s2-fr-h3mekfon-apps-hv-ingress-vf8sujpv
+    ingress.kubernetes.io/https-forwarding-rule: k8s2-fs-h3mekfon-apps-hv-ingress-vf8sujpv
+    ingress.kubernetes.io/https-target-proxy: k8s2-ts-h3mekfon-apps-hv-ingress-vf8sujpv
+    ingress.kubernetes.io/ssl-cert: wildcarddigicertgnpcommx2027
+    ingress.kubernetes.io/target-proxy: k8s2-tp-h3mekfon-apps-hv-ingress-vf8sujpv
+    ingress.kubernetes.io/url-map: k8s2-um-h3mekfon-apps-hv-ingress-vf8sujpv
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"networking.k8s.io/v1","kind":"Ingress","metadata":{"annotations":{"kubernetes.io/ingress.global-static-ip-name":"hogarversatil-ingress","networking.gke.io/v1.FrontendConfig":"http-redirect-config"},"name":"hv-ingress","namespace":"apps"},"spec":{"ingressClassName":"gce","rules":[{"http":{"paths":[{"backend":{"service":{"name":"gke-gnp-hogar-cotizaciones-svc","port":{"number":8080}}},"path":"/cotizaciones/*","pathType":"ImplementationSpecific"},{"backend":{"service":{"name":"gke-gnp-hogar-documentos-svc","port":{"number":8080}}},"path":"/documentos/*","pathType":"ImplementationSpecific"},{"backend":{"service":{"name":"gke-gnp-hogar-documentos-svc","port":{"number":8080}}},"path":"/polizas/*","pathType":"ImplementationSpecific"}]}}]}}
+    kubernetes.io/ingress.class: gce
+    kubernetes.io/ingress.global-static-ip-name: hogarversatil-ingress
+    networking.gke.io/v1.FrontendConfig: http-redirect-config
+  creationTimestamp: '2026-06-03T21:47:08Z'
+  finalizers:
+  - networking.gke.io/ingress-finalizer-V2
+  generation: 1
+  name: hv-ingress
+  namespace: apps
+  resourceVersion: '1780560235149183000'
+  uid: 04bcac75-d31a-4b1e-9360-0293d90cc300
+spec:
+  ingressClassName: gce
+  rules:
+  - http:
+      paths:
+      - backend:
+          service:
+            name: gke-gnp-hogar-cotizaciones-svc
+            port:
+              number: 8080
+        path: /cotizaciones/*
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: gke-gnp-hogar-documentos-svc
+            port:
+              number: 8080
+        path: /documentos/*
+        pathType: ImplementationSpecific
+      - backend:
+          service:
+            name: gke-gnp-hogar-documentos-svc
+            port:
+              number: 8080
+        path: /polizas/*
+        pathType: ImplementationSpecific
+status:
+  loadBalancer:
+    ingress:
+    - ip: 8.228.229.216

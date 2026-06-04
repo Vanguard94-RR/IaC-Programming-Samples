@@ -142,17 +142,6 @@ if ! gcloud auth print-access-token &>/dev/null; then
 fi
 ok "gcloud authentication verified"
 
-# ── Terraform state lock check (early detection for recovery) ──────────────
-step "Terraform state lock check"
-_TF_LOCK="$TF_DIR/.terraform.lock.hcl"
-if [[ -f "$_TF_LOCK" ]]; then
-  warn "Terraform lock file detected: $_TF_LOCK"
-  error "Another terraform process may be running, or a previous run failed."
-  error "To recover, run: terraform force-unlock <LOCK_ID>"
-  error "See .terraform/ directory for details."
-  exit 1
-fi
-ok "No state lock detected"
 
 # ── Download ingress YAML ──────────────────────────────────────────────────
 step "Downloading ingress YAML"
@@ -171,9 +160,9 @@ if ! yq . "$INGRESS_YAML" &>/dev/null; then
 fi
 
 # ── Auto-detect namespace, static IP and SSL cert from YAML ───────────────
-_yaml_namespace=$(yq '.metadata.namespace // ""' "$INGRESS_YAML")
-_yaml_static_ip=$(yq '.metadata.annotations["kubernetes.io/ingress.global-static-ip-name"] // ""' "$INGRESS_YAML")
-_yaml_ssl_cert=$(yq '.metadata.annotations["ingress.gcp.kubernetes.io/pre-shared-cert"] // ""' "$INGRESS_YAML")
+_yaml_namespace=$(yq 'select(.kind == "Ingress") | .metadata.namespace // ""' "$INGRESS_YAML" | head -1)
+_yaml_static_ip=$(yq 'select(.kind == "Ingress") | .metadata.annotations["kubernetes.io/ingress.global-static-ip-name"] // ""' "$INGRESS_YAML" | head -1)
+_yaml_ssl_cert=$(yq 'select(.kind == "Ingress") | .metadata.annotations["ingress.gcp.kubernetes.io/pre-shared-cert"] // ""' "$INGRESS_YAML" | head -1)
 
 # Auto-discover SSL cert from project (user never has this value)
 SSL_CERT_NAME=$(gcloud compute ssl-certificates list \
@@ -206,15 +195,20 @@ case "$ACTION" in
   *) error "Action must be: plan, apply, or destroy"; exit 1 ;;
 esac
 
-ok "YAML valid: $(yq '.metadata.name' "$INGRESS_YAML")"
+ok "YAML valid: $(yq 'select(.kind == "Ingress") | .metadata.name' "$INGRESS_YAML" | head -1)"
 
 # Strip GKE controller-managed fields to prevent drift and field manager conflicts
 step "Cleaning YAML"
 clean_ingress_yaml "$INGRESS_YAML" "$INGRESS_YAML"
 ok "Ingress YAML cleaned"
 
+# Extract only Ingress document — yamldecode requires single-document YAML
+yq 'select(.kind == "Ingress")' "$INGRESS_YAML" > "${INGRESS_YAML}.tmp" \
+  && mv "${INGRESS_YAML}.tmp" "$INGRESS_YAML"
+ok "Extracted Ingress document (single-document for Terraform)"
+
 # Generate FrontendConfig from ingress annotation (always managed by this deployer)
-_fc_name=$(yq '.metadata.annotations["networking.gke.io/v1.FrontendConfig"] // ""' "$INGRESS_YAML")
+_fc_name=$(yq 'select(.kind == "Ingress") | .metadata.annotations["networking.gke.io/v1.FrontendConfig"] // ""' "$INGRESS_YAML" | head -1)
 if [[ -n "$_fc_name" ]]; then
   cat > "$FRONTENDCONFIG_YAML" << FCEOF
 apiVersion: networking.gke.io/v1beta1
@@ -239,16 +233,16 @@ if [[ -f "$FRONTENDCONFIG_YAML" ]]; then
 fi
 
 # Inject namespace into manifests if absent (kubernetes_manifest requires explicit namespace)
-if [[ "$(yq '.metadata.namespace' "$INGRESS_YAML")" == "null" ]]; then
-  yq -i ".metadata.namespace = \"$NAMESPACE\"" "$INGRESS_YAML"
+if [[ "$(yq 'select(.kind == "Ingress") | .metadata.namespace' "$INGRESS_YAML" | head -1)" == "null" ]]; then
+  yq -i '(select(.kind == "Ingress") | .metadata.namespace) = "'"$NAMESPACE"'"' "$INGRESS_YAML"
   info "Injected namespace '$NAMESPACE' into ingress YAML"
 else
-  info "Namespace already present in ingress YAML: $(yq '.metadata.namespace' "$INGRESS_YAML")"
+  info "Namespace already present in ingress YAML: $(yq 'select(.kind == "Ingress") | .metadata.namespace' "$INGRESS_YAML" | head -1)"
 fi
 
 # Inject SSL certificate annotation if provided
 if [[ -n "${SSL_CERT_NAME:-}" ]]; then
-  yq -i ".metadata.annotations[\"ingress.gcp.kubernetes.io/pre-shared-cert\"] = \"$SSL_CERT_NAME\"" "$INGRESS_YAML"
+  yq -i '(select(.kind == "Ingress") | .metadata.annotations["ingress.gcp.kubernetes.io/pre-shared-cert"]) = "'"$SSL_CERT_NAME"'"' "$INGRESS_YAML"
   info "Injected SSL cert: $SSL_CERT_NAME"
 fi
 if [[ -f "$FRONTENDCONFIG_YAML" ]] && \
@@ -318,7 +312,7 @@ _get_credentials "$PROJECT_ID" "$CLUSTER_NAME" "${CLUSTER_LOCATION:-us-central1}
 ok "Connected to $CLUSTER_NAME (${CLUSTER_LOCATION:-us-central1})"
 
 # ── Parse ingress metadata for kubectl commands ────────────────────────────
-INGRESS_NAME=$(yq '.metadata.name' "$INGRESS_YAML")
+INGRESS_NAME=$(yq 'select(.kind == "Ingress") | .metadata.name' "$INGRESS_YAML" | head -1)
 info "Project:      $PROJECT_ID"
 info "Namespace:    $NAMESPACE"
 info "Ingress:      $INGRESS_NAME"
@@ -340,34 +334,25 @@ _diff_spec() {
     rm -f "$tmp_cur" "$tmp_new"; return 0
   fi
 
-  # Compare spec + user-managed annotations (exclude GKE controller-owned keys)
-  printf '%s' "$raw_cur" | yq '{
-    "spec": .spec,
-    "annotations": (.metadata.annotations // {} | del(
-      .["ingress.kubernetes.io/backends"],
-      .["ingress.kubernetes.io/forwarding-rule"],
-      .["ingress.kubernetes.io/https-forwarding-rule"],
-      .["ingress.kubernetes.io/https-target-proxy"],
-      .["ingress.kubernetes.io/target-proxy"],
-      .["ingress.kubernetes.io/url-map"],
-      .["ingress.kubernetes.io/ssl-cert"],
-      .["kubectl.kubernetes.io/last-applied-configuration"]
-    ))
-  }' > "$tmp_cur" 2>/dev/null
+  # Extract spec + user-managed annotations, strip all GKE controller-owned keys
+  _extract_comparable() {
+    yq '{
+      "spec": .spec,
+      "annotations": (.metadata.annotations // {} | del(
+        .["ingress.kubernetes.io/backends"],
+        .["ingress.kubernetes.io/forwarding-rule"],
+        .["ingress.kubernetes.io/https-forwarding-rule"],
+        .["ingress.kubernetes.io/https-target-proxy"],
+        .["ingress.kubernetes.io/target-proxy"],
+        .["ingress.kubernetes.io/url-map"],
+        .["ingress.kubernetes.io/ssl-cert"],
+        .["kubectl.kubernetes.io/last-applied-configuration"]
+      ))
+    }'
+  }
 
-  yq '{
-    "spec": .spec,
-    "annotations": (.metadata.annotations // {} | del(
-      .["ingress.kubernetes.io/backends"],
-      .["ingress.kubernetes.io/forwarding-rule"],
-      .["ingress.kubernetes.io/https-forwarding-rule"],
-      .["ingress.kubernetes.io/https-target-proxy"],
-      .["ingress.kubernetes.io/target-proxy"],
-      .["ingress.kubernetes.io/url-map"],
-      .["ingress.kubernetes.io/ssl-cert"],
-      .["kubectl.kubernetes.io/last-applied-configuration"]
-    ))
-  }' "$new_yaml" > "$tmp_new" 2>/dev/null
+  printf '%s' "$raw_cur" | _extract_comparable > "$tmp_cur" 2>/dev/null
+  _extract_comparable < "$new_yaml"  > "$tmp_new" 2>/dev/null
 
   local delta
   delta=$(diff --color=always -u \
@@ -424,11 +409,11 @@ _tf_import() {
     info "$label already in state"
     return 0
   fi
-  terraform state rm "$addr" 2>/dev/null || true
   if terraform import -var-file="$TFVARS" "$addr" "$import_id"; then
     ok "$label imported"
   else
     warn "Import failed for $label — apply may encounter conflicts"
+    terraform state rm "$addr" 2>/dev/null || true
   fi
 }
 

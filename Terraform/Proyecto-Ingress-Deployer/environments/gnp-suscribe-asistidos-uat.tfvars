@@ -1,0 +1,5 @@
+project_id       = "gnp-suscribe-asistidos-uat"
+cluster_name     = "gke-gnp-suscribe-asistidos-uat"
+cluster_location = "us-central1-a"
+namespace        = "default"
+static_ip_name   = "asistido-ingress"

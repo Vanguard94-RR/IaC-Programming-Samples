@@ -1,0 +1,5 @@
+project_id       = "gnp-hogarversatil-qa"
+cluster_name     = "gke-gnp-hogarversatil-qa"
+cluster_location = "us-central1"
+namespace        = "apps"
+static_ip_name   = "hogarversatil-ingress"

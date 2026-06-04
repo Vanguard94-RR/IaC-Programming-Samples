@@ -17,6 +17,8 @@ clean_ingress_yaml() {
     .metadata.finalizers,
     .metadata.annotations["ingress.kubernetes.io/backends"],
     .metadata.annotations["ingress.kubernetes.io/forwarding-rule"],
+    .metadata.annotations["ingress.kubernetes.io/https-forwarding-rule"],
+    .metadata.annotations["ingress.kubernetes.io/https-target-proxy"],
     .metadata.annotations["ingress.kubernetes.io/target-proxy"],
     .metadata.annotations["ingress.kubernetes.io/url-map"],
     .status
