@@ -464,9 +464,10 @@ if [[ "$ACTION" != "destroy" ]]; then
   for _cf in "$COMPANIONS_DIR"/*.yaml; do
     [[ -f "$_cf" ]] || continue
     _cf_kind=$(yq '.kind' "$_cf")
+    _cf_ns=$(yq '.metadata.namespace // ""' "$_cf")
     _cf_name_val=$(yq '.metadata.name' "$_cf")
     _cf_api=$(yq '.apiVersion' "$_cf")
-    _cf_key="${_cf_kind}/${_cf_name_val}"
+    _cf_key="${_cf_kind}/${_cf_ns}/${_cf_name_val}"
     if kubectl get "$_cf_kind" "$_cf_name_val" -n "$NAMESPACE" &>/dev/null 2>&1; then
       _tf_import \
         "module.ingress.kubernetes_manifest.companion[\"${_cf_key}\"]" \
@@ -475,17 +476,20 @@ if [[ "$ACTION" != "destroy" ]]; then
     fi
   done
 
-  # One-time state migration: frontendconfig[0] → companion["FrontendConfig/<name>"]
+  # One-time state migration: frontendconfig[0] → companion["FrontendConfig/namespace/name"]
   if terraform state list 2>/dev/null | grep -q "kubernetes_manifest\.frontendconfig\[0\]"; then
     _fc_legacy_file=$(ls "$COMPANIONS_DIR"/FrontendConfig-*.yaml 2>/dev/null | head -1 || true)
-    if [[ -n "$_fc_legacy_file" ]]; then
-      _fc_legacy_key="FrontendConfig/$(yq '.metadata.name' "$_fc_legacy_file")"
-      info "Migrating legacy FrontendConfig state → companion[\"$_fc_legacy_key\"]"
-      terraform state mv \
-        "module.ingress.kubernetes_manifest.frontendconfig[0]" \
-        "module.ingress.kubernetes_manifest.companion[\"${_fc_legacy_key}\"]" \
-        2>/dev/null || warn "State migration skipped — may cause re-create on next plan"
+    if [[ -z "$_fc_legacy_file" ]]; then
+      error "Legacy FrontendConfig state found but no FrontendConfig companion file in companions/. Move the companion file first."
+      exit 1
     fi
+    _fc_legacy_ns=$(yq '.metadata.namespace // ""' "$_fc_legacy_file")
+    _fc_legacy_name=$(yq '.metadata.name' "$_fc_legacy_file")
+    _fc_legacy_key="FrontendConfig/${_fc_legacy_ns}/${_fc_legacy_name}"
+    info "Migrating legacy FrontendConfig state → companion[\"$_fc_legacy_key\"]"
+    terraform state mv \
+      "module.ingress.kubernetes_manifest.frontendconfig[0]" \
+      "module.ingress.kubernetes_manifest.companion[\"${_fc_legacy_key}\"]"
   fi
 fi
 
@@ -580,21 +584,24 @@ case "$ACTION" in
     for _cf in "$COMPANIONS_DIR"/*.yaml; do
       [[ -f "$_cf" ]] || continue
       _cf_kind=$(yq '.kind' "$_cf")
+      _cf_ns=$(yq '.metadata.namespace // ""' "$_cf")
       _cf_name_val=$(yq '.metadata.name' "$_cf")
       if echo "$_LIFECYCLE_KINDS" | grep -qw "$_cf_kind"; then
         step "Deleting companion $_cf_kind/$_cf_name_val"
         _kubectl_delete_with_finalizer_fallback \
           "$_cf_kind" "$_cf_name_val" "$NAMESPACE" \
-          "module.ingress.kubernetes_manifest.companion[\"${_cf_kind}/${_cf_name_val}\"]"
+          "module.ingress.kubernetes_manifest.companion[\"${_cf_kind}/${_cf_ns}/${_cf_name_val}\"]"
       else
         info "Skipping destroy for create-only companion: $_cf_kind/$_cf_name_val"
       fi
     done
 
-    step "Destroying static IP"
-    terraform destroy -var-file="$TFVARS" -input=false -auto-approve -no-color \
-      -target="module.ingress.google_compute_global_address.ingress[0]" \
-      | tee -a "$LOG_FILE"
+    if [[ -n "${STATIC_IP_NAME:-}" ]]; then
+      step "Destroying static IP"
+      terraform destroy -var-file="$TFVARS" -input=false -auto-approve -no-color \
+        -target="module.ingress.google_compute_global_address.ingress[0]" \
+        | tee -a "$LOG_FILE"
+    fi
     ok "Destroy complete (namespace preserved)"
     ;;
 esac

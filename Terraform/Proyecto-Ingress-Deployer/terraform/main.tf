@@ -40,14 +40,19 @@ locals {
   companions_dir = "${local.manifests_dir}/companions"
 
   # Build companion_manifests map from companions/*.yaml files.
-  # Key: "Kind/name" (read from YAML content, not filename)
+  # Key: "Kind/namespace/name" (read from YAML content, not filename)
   # Value: absolute path to companion YAML file
   # try() handles the case where companions/ dir doesn't exist yet.
   _companion_yaml_files = try(fileset(local.companions_dir, "*.yaml"), toset([]))
 
-  companion_manifests = {
+  _companion_data = {
     for f in local._companion_yaml_files :
-    "${yamldecode(file("${local.companions_dir}/${f}")).kind}/${yamldecode(file("${local.companions_dir}/${f}")).metadata.name}"
+    f => yamldecode(file("${local.companions_dir}/${f}"))
+  }
+
+  companion_manifests = {
+    for f, d in local._companion_data :
+    "${d.kind}/${d.metadata.namespace}/${d.metadata.name}"
     => "${local.companions_dir}/${f}"
   }
 }
