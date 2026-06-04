@@ -19,8 +19,8 @@ variable "ingress_yaml" {
   type        = string
 }
 
-variable "frontendconfig_yaml" {
-  description = "Absolute path to FrontendConfig YAML manifest. Empty string skips FrontendConfig."
-  type        = string
-  default     = ""
+variable "companion_manifests" {
+  description = "Map of Kind-namespace-name => absolute file path for IaC companion resources (BackendConfig, FrontendConfig, ManagedCertificate, etc.)."
+  type        = map(string)
+  default     = {}
 }

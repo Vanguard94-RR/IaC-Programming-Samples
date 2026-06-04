@@ -17,10 +17,11 @@ resource "google_compute_global_address" "ingress" {
   project = var.project_id
 }
 
-# 3. FrontendConfig — referenced by ingress annotation networking.gke.io/v1.FrontendConfig
-resource "kubernetes_manifest" "frontendconfig" {
-  count    = var.frontendconfig_yaml != "" ? 1 : 0
-  manifest = yamldecode(file(var.frontendconfig_yaml))
+# 3. Companion IaC resources — BackendConfig, FrontendConfig, ManagedCertificate, etc.
+#    Extracted from source YAML by deploy.sh into manifests/<project>/companions/.
+resource "kubernetes_manifest" "companion" {
+  for_each = var.companion_manifests
+  manifest = yamldecode(file(each.value))
 
   field_manager {
     force_conflicts = true
@@ -39,7 +40,7 @@ resource "kubernetes_manifest" "ingress" {
 
   depends_on = [
     kubernetes_namespace_v1.ingress,
-    kubernetes_manifest.frontendconfig,
+    kubernetes_manifest.companion,
     google_compute_global_address.ingress,
   ]
 }
