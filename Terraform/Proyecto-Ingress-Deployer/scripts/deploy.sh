@@ -460,13 +460,31 @@ if [[ "$ACTION" != "destroy" ]]; then
       "Ingress $INGRESS_NAME"
   fi
 
-  if [[ -f "$FRONTENDCONFIG_YAML" ]]; then
-    fc_name=$(yq '.metadata.name' "$FRONTENDCONFIG_YAML" 2>/dev/null || true)
-    if [[ -n "$fc_name" ]] && \
-       kubectl get frontendconfig -n "$NAMESPACE" "$fc_name" &>/dev/null 2>&1; then
-      _tf_import "module.ingress.kubernetes_manifest.frontendconfig[0]" \
-        "apiVersion=networking.gke.io/v1beta1,kind=FrontendConfig,namespace=${NAMESPACE},name=${fc_name}" \
-        "FrontendConfig $fc_name"
+  # Import pre-existing companion resources
+  for _cf in "$COMPANIONS_DIR"/*.yaml; do
+    [[ -f "$_cf" ]] || continue
+    _cf_kind=$(yq '.kind' "$_cf")
+    _cf_name_val=$(yq '.metadata.name' "$_cf")
+    _cf_api=$(yq '.apiVersion' "$_cf")
+    _cf_key="${_cf_kind}/${_cf_name_val}"
+    if kubectl get "$_cf_kind" "$_cf_name_val" -n "$NAMESPACE" &>/dev/null 2>&1; then
+      _tf_import \
+        "module.ingress.kubernetes_manifest.companion[\"${_cf_key}\"]" \
+        "apiVersion=${_cf_api},kind=${_cf_kind},namespace=${NAMESPACE},name=${_cf_name_val}" \
+        "Companion ${_cf_key}"
+    fi
+  done
+
+  # One-time state migration: frontendconfig[0] → companion["FrontendConfig/<name>"]
+  if terraform state list 2>/dev/null | grep -q "kubernetes_manifest\.frontendconfig\[0\]"; then
+    _fc_legacy_file=$(ls "$COMPANIONS_DIR"/FrontendConfig-*.yaml 2>/dev/null | head -1 || true)
+    if [[ -n "$_fc_legacy_file" ]]; then
+      _fc_legacy_key="FrontendConfig/$(yq '.metadata.name' "$_fc_legacy_file")"
+      info "Migrating legacy FrontendConfig state → companion[\"$_fc_legacy_key\"]"
+      terraform state mv \
+        "module.ingress.kubernetes_manifest.frontendconfig[0]" \
+        "module.ingress.kubernetes_manifest.companion[\"${_fc_legacy_key}\"]" \
+        2>/dev/null || warn "State migration skipped — may cause re-create on next plan"
     fi
   fi
 fi
