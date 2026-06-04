@@ -245,6 +245,12 @@ if [[ -n "${SSL_CERT_NAME:-}" ]]; then
   yq -i '(select(.kind == "Ingress") | .metadata.annotations["ingress.gcp.kubernetes.io/pre-shared-cert"]) = "'"$SSL_CERT_NAME"'"' "$INGRESS_YAML"
   info "Injected SSL cert: $SSL_CERT_NAME"
 fi
+if [[ -n "${STATIC_IP_NAME:-}" ]]; then
+  yq -i '(select(.kind == "Ingress") | .metadata.annotations["kubernetes.io/ingress.global-static-ip-name"]) = "'"$STATIC_IP_NAME"'"' "$INGRESS_YAML"
+  info "Injected static IP annotation: $STATIC_IP_NAME"
+else
+  info "No static IP name set — GKE will assign an ephemeral IP"
+fi
 if [[ -f "$FRONTENDCONFIG_YAML" ]] && \
    [[ "$(yq '.metadata.namespace' "$FRONTENDCONFIG_YAML")" == "null" ]]; then
   yq -i ".metadata.namespace = \"$NAMESPACE\"" "$FRONTENDCONFIG_YAML"
