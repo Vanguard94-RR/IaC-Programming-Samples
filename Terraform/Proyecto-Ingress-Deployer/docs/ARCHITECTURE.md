@@ -250,14 +250,4 @@ gcloud auth application-default login   # ADC (Terraform GCS backend)
 
 ---
 
-### FrontendConfig not created → ingress stuck with "Missing resources" warning
-
-**Symptom:** GCP console shows "Missing one or more resources" on the ingress detail page. IP never assigned.
-
-**Root cause:** Ingress references a `FrontendConfig` resource via annotation `networking.gke.io/v1.FrontendConfig: <name>` but the `FrontendConfig` object doesn't exist in the target namespace.
-
-**Fix:** `deploy.sh` auto-generates `frontendconfig.yaml` from the ingress annotation and applies it via the Terraform module. For manually-created ingresses, apply the FrontendConfig before or alongside the ingress.
-
----
-
 *See [README.md](../README.md) for operational usage, deployment commands, and troubleshooting reference.*
