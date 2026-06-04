@@ -100,6 +100,16 @@ check "deploy.sh exits 1 with invalid action in CI mode" 1 \
   "CI=true PROJECT_ID=x NAMESPACE=x STATIC_IP_NAME=x INGRESS_URL=x TICKET_ID=x ACTION=noop \
    bash ${SCRIPT_DIR}/scripts/deploy.sh"
 
+# Ephemeral IP: deploy.sh must NOT fail on missing STATIC_IP_NAME
+_test_ephemeral_validation() {
+  local out
+  out=$(CI=true PROJECT_ID=x NAMESPACE=x INGRESS_URL=x TICKET_ID=x ACTION=plan \
+    bash "${SCRIPT_DIR}/scripts/deploy.sh" 2>&1 || true)
+  ! echo "$out" | grep -q "Missing required value: STATIC_IP_NAME"
+}
+check "deploy.sh does not require STATIC_IP_NAME (ephemeral mode)" 0 \
+  "_test_ephemeral_validation"
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]]
