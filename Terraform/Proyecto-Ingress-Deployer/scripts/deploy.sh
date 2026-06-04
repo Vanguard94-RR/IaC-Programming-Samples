@@ -111,9 +111,10 @@ done
 MANIFESTS_DIR="$SCRIPT_DIR/manifests/${PROJECT_ID}"
 INGRESS_YAML="$MANIFESTS_DIR/ingress.yaml"
 FRONTENDCONFIG_YAML="$MANIFESTS_DIR/frontendconfig.yaml"
+COMPANIONS_DIR="$MANIFESTS_DIR/companions"
 TFVARS="$SCRIPT_DIR/environments/${PROJECT_ID}.tfvars"
 TICKET_DIR="$TICKETS_BASE/$TICKET_ID"
-mkdir -p "$TICKET_DIR" "$MANIFESTS_DIR"
+mkdir -p "$TICKET_DIR" "$MANIFESTS_DIR" "$COMPANIONS_DIR"
 
 LOG_FILE="$TICKET_DIR/ingress-deployer-$(date +%Y%m%d).log"
 export LOG_FILE
@@ -197,6 +198,11 @@ esac
 
 ok "YAML valid: $(yq 'select(.kind == "Ingress") | .metadata.name' "$INGRESS_YAML" | head -1)"
 
+# Extract companion IaC resources from multi-document YAML before Ingress extraction
+step "Extracting companion resources"
+extract_companions "$INGRESS_YAML" "$COMPANIONS_DIR"
+ok "Companion extraction complete"
+
 # Strip GKE controller-managed fields to prevent drift and field manager conflicts
 step "Cleaning YAML"
 clean_ingress_yaml "$INGRESS_YAML" "$INGRESS_YAML"
@@ -207,10 +213,13 @@ yq 'select(.kind == "Ingress")' "$INGRESS_YAML" > "${INGRESS_YAML}.tmp" \
   && mv "${INGRESS_YAML}.tmp" "$INGRESS_YAML"
 ok "Extracted Ingress document (single-document for Terraform)"
 
-# Generate FrontendConfig from ingress annotation (always managed by this deployer)
+# Generate FrontendConfig if annotation present but not already extracted as companion
 _fc_name=$(yq 'select(.kind == "Ingress") | .metadata.annotations["networking.gke.io/v1.FrontendConfig"] // ""' "$INGRESS_YAML" | head -1)
 if [[ -n "$_fc_name" ]]; then
-  cat > "$FRONTENDCONFIG_YAML" << FCEOF
+  _fc_companion=$(ls "$COMPANIONS_DIR"/FrontendConfig-*-"${_fc_name}".yaml 2>/dev/null | head -1 || true)
+  if [[ -z "$_fc_companion" ]]; then
+    _fc_companion="$COMPANIONS_DIR/FrontendConfig-${NAMESPACE}-${_fc_name}.yaml"
+    cat > "$_fc_companion" << FCEOF
 apiVersion: networking.gke.io/v1beta1
 kind: FrontendConfig
 metadata:
@@ -222,14 +231,13 @@ spec:
     responseCodeName: MOVED_PERMANENTLY_DEFAULT
   sslPolicy: sslsecure
 FCEOF
-  ok "FrontendConfig generated: $_fc_name"
+    clean_ingress_yaml "$_fc_companion" "$_fc_companion"
+    ok "FrontendConfig generated: $_fc_name → companions/"
+  else
+    info "FrontendConfig already extracted from source YAML: $_fc_name"
+  fi
 else
   info "No FrontendConfig annotation — skipping"
-fi
-
-if [[ -f "$FRONTENDCONFIG_YAML" ]]; then
-  clean_ingress_yaml "$FRONTENDCONFIG_YAML" "$FRONTENDCONFIG_YAML"
-  ok "FrontendConfig YAML cleaned"
 fi
 
 # Inject namespace into manifests if absent (kubernetes_manifest requires explicit namespace)
@@ -251,11 +259,13 @@ if [[ -n "${STATIC_IP_NAME:-}" ]]; then
 else
   info "No static IP name set — GKE will assign an ephemeral IP"
 fi
-if [[ -f "$FRONTENDCONFIG_YAML" ]] && \
-   [[ "$(yq '.metadata.namespace' "$FRONTENDCONFIG_YAML")" == "null" ]]; then
-  yq -i ".metadata.namespace = \"$NAMESPACE\"" "$FRONTENDCONFIG_YAML"
-  info "Injected namespace '$NAMESPACE' into FrontendConfig YAML"
-fi
+for _cf in "$COMPANIONS_DIR"/*.yaml; do
+  [[ -f "$_cf" ]] || continue
+  if [[ "$(yq '.metadata.namespace // "null"' "$_cf")" == "null" ]]; then
+    yq -i ".metadata.namespace = \"$NAMESPACE\"" "$_cf"
+    info "Injected namespace into companion: $(basename "$_cf")"
+  fi
+done
 
 # ── Generate / overwrite environments/<project>.tfvars ────────────────────
 step "Generating tfvars"
@@ -381,14 +391,17 @@ else
   info "Ingress $INGRESS_NAME not found — fresh deployment"
 fi
 
-if [[ -f "$FRONTENDCONFIG_YAML" ]]; then
-  _fc_diff=$(yq '.metadata.name' "$FRONTENDCONFIG_YAML" 2>/dev/null || true)
-  if [[ -n "$_fc_diff" ]] && kubectl get frontendconfig "$_fc_diff" -n "$NAMESPACE" &>/dev/null 2>&1; then
-    _diff_spec "FrontendConfig $_fc_diff" "frontendconfig" "$_fc_diff" "$FRONTENDCONFIG_YAML"
+for _cf in "$COMPANIONS_DIR"/*.yaml; do
+  [[ -f "$_cf" ]] || continue
+  _cf_kind=$(yq '.kind' "$_cf")
+  _cf_name_val=$(yq '.metadata.name' "$_cf")
+  if kubectl get "$_cf_kind" "$_cf_name_val" -n "$NAMESPACE" &>/dev/null 2>&1; then
+    _diff_spec "Companion ${_cf_kind}/${_cf_name_val}" \
+      "${_cf_kind,,}" "$_cf_name_val" "$_cf"
   else
-    info "FrontendConfig $_fc_diff not found — will be created"
+    info "Companion ${_cf_kind}/${_cf_name_val} not found — will be created"
   fi
-fi
+done
 
 # ── Backup existing ingress (apply only) ──────────────────────────────────
 if [[ "$ACTION" == "apply" ]]; then
@@ -474,6 +487,9 @@ _do_apply() {
   # Upload applied manifests for rollback reference
   _gcs_upload "$INGRESS_YAML" "ingress.yaml"
   [[ -f "$FRONTENDCONFIG_YAML" ]] && _gcs_upload "$FRONTENDCONFIG_YAML" "frontendconfig.yaml"
+  for _cf in "$COMPANIONS_DIR"/*.yaml; do
+    [[ -f "$_cf" ]] && _gcs_upload "$_cf" "companions/$(basename "$_cf")"
+  done
   _gcs_upload "$LOG_FILE" "deploy.log"
   step "Waiting for ingress stabilization"
   wait_for_ingress_ip "$NAMESPACE" "$INGRESS_NAME" 1200 \
