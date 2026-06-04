@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rh-evaluaciones-ingress
+  namespace: apps
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: "ip-tipoevaluacion"
+    ingress.gcp.kubernetes.io/pre-shared-cert: wildcarddigicertgnpcommx-2020
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: rh-evaluaciones-service
+                port:
+                  number: 8080

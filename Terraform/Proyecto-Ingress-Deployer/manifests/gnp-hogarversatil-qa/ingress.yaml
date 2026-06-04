@@ -1,0 +1,39 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    ingress.gcp.kubernetes.io/pre-shared-cert: gnp-hogarversatil-qa-ssl-cert
+    ingress.kubernetes.io/ssl-cert: wildcarddigicertgnpcommx2027
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"networking.k8s.io/v1","kind":"Ingress","metadata":{"annotations":{"kubernetes.io/ingress.global-static-ip-name":"hogarversatil-ingress","networking.gke.io/v1.FrontendConfig":"http-redirect-config"},"name":"hv-ingress","namespace":"apps"},"spec":{"ingressClassName":"gce","rules":[{"http":{"paths":[{"backend":{"service":{"name":"gke-gnp-hogar-cotizaciones-svc","port":{"number":8080}}},"path":"/cotizaciones/*","pathType":"ImplementationSpecific"},{"backend":{"service":{"name":"gke-gnp-hogar-documentos-svc","port":{"number":8080}}},"path":"/documentos/*","pathType":"ImplementationSpecific"},{"backend":{"service":{"name":"gke-gnp-hogar-documentos-svc","port":{"number":8080}}},"path":"/polizas/*","pathType":"ImplementationSpecific"}]}}]}}
+    kubernetes.io/ingress.class: gce
+    kubernetes.io/ingress.global-static-ip-name: hogarversatil-ingress
+    networking.gke.io/v1.FrontendConfig: http-redirect-config
+  name: hv-ingress
+  namespace: apps
+spec:
+  ingressClassName: gce
+  rules:
+    - http:
+        paths:
+          - backend:
+              service:
+                name: gke-gnp-hogar-cotizaciones-svc
+                port:
+                  number: 8080
+            path: /cotizaciones/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: gke-gnp-hogar-documentos-svc
+                port:
+                  number: 8080
+            path: /documentos/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: gke-gnp-hogar-documentos-svc
+                port:
+                  number: 8080
+            path: /polizas/*
+            pathType: ImplementationSpecific

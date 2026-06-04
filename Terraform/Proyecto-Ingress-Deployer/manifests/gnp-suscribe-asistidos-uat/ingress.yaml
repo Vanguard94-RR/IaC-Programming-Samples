@@ -1,0 +1,90 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: asistido-ingress
+    networking.gke.io/v1.FrontendConfig: http-redirect-config
+    ingress.gcp.kubernetes.io/pre-shared-cert: wildcarddigicertgnpcommx-mayo-2020
+  name: asistido-ingress
+  namespace: default
+spec:
+  rules:
+    - http:
+        paths:
+          - backend:
+              service:
+                name: asistidos-seguridad-app
+                port:
+                  number: 8090
+            path: /api/asistido/seguridad/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: asistidos-documentos-app
+                port:
+                  number: 8091
+            path: /api/asistido/documentos/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: asistidos-suscripcion-app
+                port:
+                  number: 8092
+            path: /api/asistido/suscripcion/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: asistidos-configuracion-app
+                port:
+                  number: 8093
+            path: /api/asistido/configuracion/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: asistidos-administracion-roles-app
+                port:
+                  number: 8094
+            path: /api/asistido/roles/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: motor-rc-asistidos-backend
+                port:
+                  number: 8030
+            path: /api/asistido/motor/rc/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: motor-rc-diversos-backend
+                port:
+                  number: 8032
+            path: /api/diversos/motor/rc/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: motor-suscribe-multirriesgo-app
+                port:
+                  number: 8035
+            path: /api/multiriesgo/motor/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: batch-app
+                port:
+                  number: 8098
+            path: /api/batch/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: motor-suscribe-transportes-app
+                port:
+                  number: 8080
+            path: /api/transportes/motor/*
+            pathType: ImplementationSpecific
+            # - backend:
+            #     service:
+            #       name: amis-transversal
+            #       port:
+            #         number: 8080
+            #   path: /danios/amis/transversal/*
+            #   pathType: ImplementationSpecific
