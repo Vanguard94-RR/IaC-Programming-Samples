@@ -8,8 +8,9 @@ terraform/.terraform/
 # Logs
 *.log
 
-# Docs
-docs/
+# Docs (generated/brainstorm only — tracked docs like ARCHITECTURE.md are committed explicitly)
+docs/superpowers/
+.superpowers/
 
 # OS
 .DS_Store

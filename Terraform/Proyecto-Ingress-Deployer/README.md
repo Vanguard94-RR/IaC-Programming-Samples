@@ -99,6 +99,8 @@ export GITLAB_TOKEN=glpat-xxxxx
 
 ## Architecture
 
+> For full architecture diagrams (system context, component map, deploy sequence, state management, and operational gotchas) see **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
+
 ### Data Flow
 
 ```
