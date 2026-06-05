@@ -259,6 +259,20 @@ YAML
 check "extract_companions extracts ManagedCertificate as create-only companion" 0 \
   "_test_extract_managedcert"
 
+# network_checks.sh sources cleanly
+check "network_checks.sh sources cleanly" 0 \
+  "bash -c 'source ${SCRIPT_DIR}/lib/ui.sh && source ${SCRIPT_DIR}/lib/network_checks.sh'"
+
+# check_ip_conflicts returns 0 when IP not found (gcloud returns empty)
+_test_check_ip_no_conflict() {
+  source "$SCRIPT_DIR/lib/ui.sh"
+  source "$SCRIPT_DIR/lib/network_checks.sh"
+  # Non-existent project/IP → gcloud returns empty string → function returns 0
+  check_ip_conflicts "nonexistent-proj-x" "nonexistent-ip-x" "test-ingress"
+}
+check "check_ip_conflicts returns 0 when IP not found" 0 \
+  "_test_check_ip_no_conflict"
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]]
