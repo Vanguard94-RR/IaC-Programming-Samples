@@ -13,6 +13,8 @@ TICKETS_BASE="${TICKETS_BASE:-/home/admin/Documents/GNP/Tickets}"
 . "$SCRIPT_DIR/lib/yaml_cleaner.sh"
 # shellcheck source=../lib/cloud_armor.sh
 . "$SCRIPT_DIR/lib/cloud_armor.sh"
+# shellcheck source=../lib/network_checks.sh
+. "$SCRIPT_DIR/lib/network_checks.sh"
 
 TF_DIR="$SCRIPT_DIR/terraform"
 
@@ -491,6 +493,12 @@ if [[ "$ACTION" != "destroy" ]]; then
       "module.ingress.kubernetes_manifest.frontendconfig[0]" \
       "module.ingress.kubernetes_manifest.companion[\"${_fc_legacy_key}\"]"
   fi
+fi
+
+# IP conflict pre-flight: detect forwarding rules that would block LB provisioning
+if [[ -n "${STATIC_IP_NAME:-}" ]] && [[ "$ACTION" != "destroy" ]]; then
+  step "IP conflict pre-flight check"
+  check_ip_conflicts "$PROJECT_ID" "$STATIC_IP_NAME" "$INGRESS_NAME"
 fi
 
 # ── Terraform validate ─────────────────────────────────────────────────────

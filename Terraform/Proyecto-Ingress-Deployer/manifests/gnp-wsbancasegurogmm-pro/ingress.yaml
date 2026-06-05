@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wsbancagmm-ingress
+  namespace: apps
+  annotations:
+    networking.gke.io/v1.FrontendConfig: http-redirect-config
+    kubernetes.io/ingress.global-static-ip-name: ip-wsbancagmm
+    ingress.gcp.kubernetes.io/pre-shared-cert: wildcarddigicertgnpcommx2023
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /wsbs/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: ms-wsbancaseguros
+                port:
+                  number: 8080
+          - path: /bancasegurosapi/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: gke-gnp-wsbancasegurogmm-oauth
+                port:
+                  number: 8080

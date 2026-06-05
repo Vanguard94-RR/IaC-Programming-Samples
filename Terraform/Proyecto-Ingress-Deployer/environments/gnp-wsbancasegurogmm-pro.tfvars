@@ -1,0 +1,5 @@
+project_id       = "gnp-wsbancasegurogmm-pro"
+cluster_name     = "gke-gnp-wsbancasegurogmm-pro"
+cluster_location = "us-central1-f"
+namespace        = "apps"
+static_ip_name   = "ip-wsbancagmm"

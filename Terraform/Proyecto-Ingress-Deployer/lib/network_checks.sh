@@ -31,6 +31,7 @@ check_ip_conflicts() {
         error "CI mode: delete manually → gcloud compute forwarding-rules delete $rule --global --project=$project_id"
         has_conflict=true
       else
+        local _confirm
         read -rp "Delete manual rule '$rule'? [y/N]: " _confirm
         if [[ "${_confirm,,}" == "y" ]]; then
           gcloud compute forwarding-rules delete "$rule" --global --project="$project_id" -q
@@ -47,6 +48,7 @@ check_ip_conflicts() {
         error "CI mode: delete manually → gcloud compute forwarding-rules delete $rule --global --project=$project_id"
         has_conflict=true
       else
+        local _confirm
         read -rp "Delete orphan GKE rule '$rule'? [y/N]: " _confirm
         if [[ "${_confirm,,}" == "y" ]]; then
           gcloud compute forwarding-rules delete "$rule" --global --project="$project_id" -q
@@ -66,7 +68,7 @@ check_ip_conflicts() {
 
   if [[ "$has_conflict" == "true" ]]; then
     error "IP conflict check failed — resolve conflicts before proceeding"
-    exit 1
+    return 1
   fi
 
   ok "IP conflict check passed: $ip is available"

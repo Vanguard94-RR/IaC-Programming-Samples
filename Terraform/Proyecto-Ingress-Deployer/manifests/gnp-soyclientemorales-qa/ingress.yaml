@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-morales
+  namespace: apps
+  annotations:
+    ingress.gcp.kubernetes.io/pre-shared-cert: wildcarddigicertgnpcommx2027
+spec:
+  ingressClassName: gce
+  rules:
+    - http:
+        paths:
+          - path: /morales-crmpersonas
+            pathType: Prefix
+            backend:
+              service:
+                name: morales-crmpersonas
+                port:
+                  number: 8080

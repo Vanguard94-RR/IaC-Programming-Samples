@@ -250,4 +250,25 @@ gcloud auth application-default login   # ADC (Terraform GCS backend)
 
 ---
 
+### Forwarding rules in conflict → LB sync Error 400
+
+**Symptom:** `Error syncing to GCP: error running load balancer syncing routine: ... googleapi: Error 400: Invalid value for field 'resource.IPAddress': '...'. Specified IP address is in-use and would result in a conflict.`
+
+**Root cause:** One or more GCP forwarding rules already occupy the static IP before the GKE LB controller can build its managed stack. Common sources:
+- Manual forwarding rules created outside GKE (e.g. a quick SSL termination rule named `https`)
+- Orphan `k8s2-fr-*` GKE rules from a previous incomplete LB creation
+
+**Fix (automated):** `deploy.sh` runs `check_ip_conflicts` before `terraform plan/apply` and offers to delete conflicting rules interactively.
+
+```bash
+# Manual resolution if needed
+gcloud compute forwarding-rules list \
+  --project=<project> --filter="IPAddress=<ip>"
+gcloud compute forwarding-rules delete <rule-name> --global --project=<project>
+```
+
+**Note:** If the conflicting rule belongs to a different GKE ingress, the deployer will not offer to delete it — coordinate with the team owning that ingress first.
+
+---
+
 *See [README.md](../README.md) for operational usage, deployment commands, and troubleshooting reference.*
