@@ -34,20 +34,8 @@ check_ip_conflicts() {
       # GKE-managed target proxy — check ownership via target name
       if echo "$target_base" | grep -q "$ingress_name"; then
         warn "GKE orphan rule '$rule' (target: $target_base) — incomplete LB stack from previous deploy"
-        if [[ "${CI:-false}" == "true" ]]; then
-          error "CI mode: delete manually → gcloud compute forwarding-rules delete $rule --global --project=$project_id"
-          has_conflict=true
-        else
-          local _confirm
-          read -rp "Delete orphan GKE rule '$rule'? [y/N]: " _confirm
-          if [[ "${_confirm,,}" == "y" ]]; then
-            gcloud compute forwarding-rules delete "$rule" --global --project="$project_id" -q
-            ok "Deleted orphan GKE rule: $rule"
-          else
-            error "Conflict not resolved: $rule still uses $ip"
-            has_conflict=true
-          fi
-        fi
+        gcloud compute forwarding-rules delete "$rule" --global --project="$project_id" -q
+        ok "Deleted orphan GKE rule: $rule"
       else
         # GKE-managed target — belongs to the current or a live ingress, not a conflict
         info "GKE-managed rule '$rule' (target: $target_base) — owned by active ingress, skipping"

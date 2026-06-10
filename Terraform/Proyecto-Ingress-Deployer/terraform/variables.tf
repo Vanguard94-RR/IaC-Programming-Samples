@@ -28,3 +28,9 @@ variable "static_ip_name" {
   type        = string
   default     = ""
 }
+
+variable "manifests_work_dir" {
+  description = "Override manifests directory (set by deploy.sh). Empty = use committed manifests at <root>/../manifests/<project_id>."
+  type        = string
+  default     = ""
+}

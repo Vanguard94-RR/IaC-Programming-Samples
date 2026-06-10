@@ -1,0 +1,5 @@
+project_id       = "gnp-soycliente-uat"
+cluster_name     = "gke-gnp-soycliente-uat"
+cluster_location = "us-central1-f"
+namespace        = "default"
+static_ip_name   = "ingress-soycliente"

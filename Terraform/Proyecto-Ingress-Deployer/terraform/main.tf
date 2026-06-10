@@ -10,6 +10,10 @@ terraform {
       source  = "hashicorp/kubernetes"
       version = ">= 2.7, < 3.0"
     }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.0"
+    }
   }
 
   backend "gcs" {}
@@ -36,13 +40,15 @@ provider "kubernetes" {
 }
 
 locals {
-  manifests_dir  = "${path.module}/../manifests/${var.project_id}"
+  # manifests_work_dir override: deploy.sh sets this to a TICKET_DIR working copy.
+  # Fallback to committed manifests when running terraform directly.
+  manifests_dir  = var.manifests_work_dir != "" ? var.manifests_work_dir : "${path.module}/../manifests/${var.project_id}"
   companions_dir = "${local.manifests_dir}/companions"
 
-  # Build companion_manifests map from companions/*.yaml files.
-  # Key: "Kind/namespace/name" (read from YAML content, not filename)
-  # Value: absolute path to companion YAML file
-  # try() handles the case where companions/ dir doesn't exist yet.
+  # Extract ingress name from YAML for null_resource.ingress_finalizer_cleanup trigger.
+  _ingress_yaml_content = yamldecode(file("${local.manifests_dir}/ingress.yaml"))
+  ingress_name          = try(local._ingress_yaml_content.metadata.name, "")
+
   _companion_yaml_files = try(fileset(local.companions_dir, "*.yaml"), toset([]))
 
   _companion_data = {
@@ -64,5 +70,6 @@ module "ingress" {
   namespace           = var.namespace
   static_ip_name      = var.static_ip_name
   ingress_yaml        = "${local.manifests_dir}/ingress.yaml"
+  ingress_name        = local.ingress_name
   companion_manifests = local.companion_manifests
 }

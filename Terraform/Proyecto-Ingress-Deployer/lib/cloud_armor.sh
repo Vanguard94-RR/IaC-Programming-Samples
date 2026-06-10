@@ -62,3 +62,8 @@ attach_cloud_armor() {
 
   ok "Cloud Armor done — attached: $attached, already set: $already, failed: $skipped"
 }
+
+# Entry point when invoked directly by Terraform local-exec provisioner
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  attach_cloud_armor "$1" "$2"
+fi

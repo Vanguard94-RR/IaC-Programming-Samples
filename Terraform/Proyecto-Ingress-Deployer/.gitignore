@@ -15,3 +15,8 @@ docs/superpowers/
 # OS
 .DS_Store
 manifests/x/
+
+#IA
+.claude/*
+.github/*
+AGENTS.md

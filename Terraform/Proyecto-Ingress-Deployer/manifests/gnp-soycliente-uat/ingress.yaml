@@ -1,0 +1,97 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-soycliente
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: ingress-soycliente
+    networking.gke.io/v1.FrontendConfig: http-redirect-config
+    ingress.gcp.kubernetes.io/pre-shared-cert: pubsub-receiver-ssl-20180531171625
+  namespace: default
+spec:
+  rules:
+    - http:
+        paths:
+          - backend:
+              service:
+                name: gke-gnp-soycliente-svc
+                port:
+                  number: 8080
+            path: /esd-soy-cliente/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: gke-gnp-soycliente-appocr-poliza-service
+                port:
+                  number: 8080
+            path: /esd-soy-cliente-appocr/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: gke-gnp-soycliente-pagos
+                port:
+                  number: 8080
+            path: /soycliente/pagos/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: gke-gnp-soycliente-liquidacion
+                port:
+                  number: 8080
+            path: /soycliente/liquidacion/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: gke-gnp-soycliente-utilerias
+                port:
+                  number: 8080
+            path: /soycliente/utilerias/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: gke-gnp-soycliente-polizascintillos
+                port:
+                  number: 8080
+            path: /soycliente/polizascintillos/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: autoservicio-postvclientes-service
+                port:
+                  number: 8080
+            path: /autoservicio-postvclientes-service/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: gke-gnp-soycliente-siniestrosautos
+                port:
+                  number: 8080
+            path: /soycliente/siniestrosautos/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: gke-gnp-soycliente-notificaciones-backend
+                port:
+                  number: 8080
+            path: /esd-soy-cliente-notificaciones/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: gke-gnp-autoservicio-consultas
+                port:
+                  number: 8080
+            path: /autoservicio/consultas/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: gke-gnp-soycliente-functions
+                port:
+                  number: 8080
+            path: /soycliente/functions/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: gke-gnp-orquestador-consultas
+                port:
+                  number: 8080
+            path: /vida-inversion/orquestador-consultas/*
+            pathType: ImplementationSpecific

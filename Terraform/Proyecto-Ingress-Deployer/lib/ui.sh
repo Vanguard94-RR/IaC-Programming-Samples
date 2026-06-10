@@ -16,7 +16,7 @@ _ts() { date '+%Y-%m-%d %H:%M:%S'; }
 
 _log_persist() {
   local level="$1"; shift
-  local msg="[$(_ts)] [$level] $*"
+  local msg; msg="[$(_ts)] [$level] $*"
   echo "$msg" >> "$LOG_FILE"
   gcloud logging write ingress-deployer "$msg" \
     --project="$CENTRAL_PROJECT" --severity="$level" 2>/dev/null || true

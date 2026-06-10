@@ -15,8 +15,18 @@ variable "static_ip_name" {
 }
 
 variable "ingress_yaml" {
-  description = "Absolute path to ingress YAML manifest (set by root module from path.module)"
+  description = "Absolute path to ingress YAML manifest (derived from manifests_dir in root module)."
   type        = string
+}
+
+variable "ingress_name" {
+  description = "Name of the Ingress resource — used by finalizer cleanup provisioner destroy trigger"
+  type        = string
+
+  validation {
+    condition     = var.ingress_name != null && var.ingress_name != ""
+    error_message = "ingress_name could not be read from ingress.yaml metadata.name — check YAML has metadata.name set."
+  }
 }
 
 variable "companion_manifests" {

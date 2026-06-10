@@ -273,6 +273,79 @@ _test_check_ip_no_conflict() {
 check "check_ip_conflicts returns 0 when IP not found" 0 \
   "_test_check_ip_no_conflict"
 
+# GAP-03: deploy.sh FrontendConfig block must use ${SSL_POLICY_NAME}, not hardcoded sslsecure
+_test_ssl_policy_name_in_deploy() {
+  # Static regression check: confirms deploy.sh's FrontendConfig heredoc uses the variable
+  # and does NOT contain a hardcoded sslsecure literal.
+  local deploy="$SCRIPT_DIR/scripts/deploy.sh"
+  grep -qF 'sslPolicy: ${SSL_POLICY_NAME}' "$deploy" &&
+  ! grep -qP 'sslPolicy:\s+sslsecure' "$deploy"
+}
+check "deploy.sh FrontendConfig uses SSL_POLICY_NAME variable (not hardcoded sslsecure)" 0 \
+  "_test_ssl_policy_name_in_deploy"
+
+# GAP-04: deploy.sh must redirect mutations to WORK_DIR (static regression check)
+_test_workdir_isolation_in_deploy() {
+  local deploy="$SCRIPT_DIR/scripts/deploy.sh"
+  grep -qF 'WORK_DIR="$TICKET_DIR/manifests-work"'       "$deploy" &&
+  grep -qF 'cp "$INGRESS_YAML" "$WORK_DIR/ingress.yaml"' "$deploy" &&
+  grep -qF 'INGRESS_YAML="$WORK_DIR/ingress.yaml"'       "$deploy" &&
+  grep -qF 'COMPANIONS_DIR="$WORK_DIR/companions"'        "$deploy"
+}
+check "deploy.sh WORK_DIR redirect lines are present (not a reimplementation)" 0 \
+  "_test_workdir_isolation_in_deploy"
+
+# discovery.sh sources cleanly
+check "discovery.sh sources cleanly" 0 \
+  "bash -c 'source ${SCRIPT_DIR}/lib/ui.sh && source ${SCRIPT_DIR}/lib/discovery.sh'"
+
+# normalize_static_ip_name: keyword variants → empty string
+_test_normalize_ephemeral() {
+  source "$SCRIPT_DIR/lib/ui.sh"
+  source "$SCRIPT_DIR/lib/discovery.sh"
+  [[ "$(normalize_static_ip_name "ephemeral")" == "" ]] &&
+  [[ "$(normalize_static_ip_name "efimera")" == "" ]] &&
+  [[ "$(normalize_static_ip_name "efim")" == "" ]] &&
+  [[ "$(normalize_static_ip_name "eph")" == "" ]] &&
+  [[ "$(normalize_static_ip_name "EPHEMERAL")" == "" ]] &&
+  [[ "$(normalize_static_ip_name "gnp-rpff")" == "gnp-rpff" ]] &&
+  [[ "$(normalize_static_ip_name "")" == "" ]]
+}
+check "normalize_static_ip_name converts keywords to empty, passthrough others" 0 \
+  "_test_normalize_ephemeral"
+
+# validate_static_ip: non-existent project/IP in CI mode → returns 0 (no prompt)
+_test_validate_ip_ci_missing() {
+  source "$SCRIPT_DIR/lib/ui.sh"
+  source "$SCRIPT_DIR/lib/discovery.sh"
+  CI=true validate_static_ip "nonexistent-proj-x" "nonexistent-ip-x"
+}
+check "validate_static_ip returns 0 in CI mode when IP not found" 0 \
+  "_test_validate_ip_ci_missing"
+
+# validate_namespace: non-blocking when namespace missing (kubectl fails → warn only)
+_test_validate_ns_missing() {
+  source "$SCRIPT_DIR/lib/ui.sh"
+  source "$SCRIPT_DIR/lib/discovery.sh"
+  # kubectl unavailable or namespace missing → warn but return 0
+  validate_namespace "nonexistent-ns-x" ""
+}
+check "validate_namespace returns 0 when namespace not found (non-blocking)" 0 \
+  "_test_validate_ns_missing"
+
+# detect_ingress_cluster returns 0 and emits nothing with empty cluster list
+_test_detect_no_clusters() {
+  source "$SCRIPT_DIR/lib/ui.sh"
+  source "$SCRIPT_DIR/lib/discovery.sh"
+  # gcloud returns empty → mapfile gets empty array → early return → no output, exit 0
+  gcloud() { return 0; }
+  local out
+  out=$(detect_ingress_cluster "nonexistent-proj-x" "test-ingress")
+  [[ -z "$out" ]]
+}
+check "detect_ingress_cluster returns 0 and emits nothing when no clusters" 0 \
+  "_test_detect_no_clusters"
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]]
