@@ -1,0 +1,5 @@
+project_id       = "gnp-stela-pro"
+cluster_name     = "gke-gnp-stela-pro"
+cluster_location = "us-central1-f"
+namespace        = "apps"
+static_ip_name   = "stela-ingress-elb"

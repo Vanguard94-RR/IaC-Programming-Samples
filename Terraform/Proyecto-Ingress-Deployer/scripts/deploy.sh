@@ -261,6 +261,13 @@ if [[ -n "${STATIC_IP_NAME:-}" ]]; then
 else
   info "No static IP name set — GKE will assign an ephemeral IP"
 fi
+# Inject legacy ingress class annotation when spec.ingressClassName=gce — required for clusters
+# without an IngressClass resource (controller silently ignores spec.ingressClassName otherwise)
+_ingress_class_name=$(yq 'select(.kind == "Ingress") | .spec.ingressClassName // ""' "$INGRESS_YAML" | head -1)
+if [[ "$_ingress_class_name" == "gce" ]]; then
+  yq -i '(select(.kind == "Ingress") | .metadata.annotations["kubernetes.io/ingress.class"]) = "gce"' "$INGRESS_YAML"
+  info "Injected legacy ingress class annotation: kubernetes.io/ingress.class=gce"
+fi
 for _cf in "$COMPANIONS_DIR"/*.yaml; do
   [[ -f "$_cf" ]] || continue
   if [[ "$(yq '.metadata.namespace // "null"' "$_cf")" == "null" ]]; then
@@ -521,7 +528,7 @@ _do_apply() {
   done
   _gcs_upload "$LOG_FILE" "deploy.log"
   step "Waiting for ingress stabilization"
-  wait_for_ingress_ip "$NAMESPACE" "$INGRESS_NAME" 1200 \
+  wait_for_ingress_ip "$NAMESPACE" "$INGRESS_NAME" 1800 \
     || warn "Ingress IP timeout — LB still provisioning. Check GKE console."
   attach_cloud_armor "$PROJECT_ID" "$NAMESPACE"
 }

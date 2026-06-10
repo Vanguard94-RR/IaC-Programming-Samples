@@ -1,0 +1,90 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rpff-ingress-core
+  namespace: default
+  annotations:
+    networking.gke.io/v1.FrontendConfig: http-redirect-config
+    kubernetes.io/ingress.global-static-ip-name: gnp-rpff
+    ingress.gcp.kubernetes.io/pre-shared-cert: wildcarddigicertgnpcommx-mayo-2020
+spec:
+  rules:
+    - http:
+        paths:
+          - backend:
+              service:
+                name: rpff-evaluador-reglas
+                port:
+                  number: 8080
+            path: /autos/rpff/evaluador/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: rpff-servicio-autoproceso
+                port:
+                  number: 8080
+            path: /autos/rpff/autosproceso/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: rpff-resolutor-reglas
+                port:
+                  number: 8080
+            path: /autos/rpff/resolutor/reglas/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: rpff-catalogos
+                port:
+                  number: 8080
+            path: /autos/rpff/catalogos/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: rpff-parser
+                port:
+                  number: 8080
+            path: /autos/rpff/parser/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: rpff-cron-resoluciones
+                port:
+                  number: 8080
+            path: /autos/rpff/resoluciones/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: rpff-servicio-autoproceso-flotillas
+                port:
+                  number: 8080
+            path: /autos/rpff/flotillas/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: rpff-servicio-notificador
+                port:
+                  number: 8080
+            path: /autos/rpff/notificador/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: rpff-servicio-masivos-flotillas
+                port:
+                  number: 8080
+            path: /autos/rpff/masivos/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: rpff-foliador
+                port:
+                  number: 8080
+            path: /autos/rpff/foliador/*
+            pathType: ImplementationSpecific
+          - backend:
+              service:
+                name: gnp-rpff-amis
+                port:
+                  number: 8080
+            path: /autos/rpff/amis/*
+            pathType: ImplementationSpecific

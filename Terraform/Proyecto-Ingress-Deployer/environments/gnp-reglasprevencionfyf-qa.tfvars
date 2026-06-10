@@ -1,0 +1,5 @@
+project_id       = "gnp-reglasprevencionfyf-qa"
+cluster_name     = "gke-gnp-reglasprevencionfyf-qa"
+cluster_location = "us-central1"
+namespace        = "default"
+static_ip_name   = "gnp-rpff"
