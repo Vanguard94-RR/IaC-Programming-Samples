@@ -22,4 +22,5 @@ manifests/x/
 .claude/*
 .github/*
 AGENTS.md
+CLAUDE.md
 .planning/*
