@@ -10,6 +10,7 @@ terraform/.terraform/
 
 # Docs (generated/brainstorm only — tracked docs like ARCHITECTURE.md are committed explicitly)
 docs/superpowers/*
+docs/runbooks/*
 docs/*
 .superpowers/
 
@@ -21,3 +22,4 @@ manifests/x/
 .claude/*
 .github/*
 AGENTS.md
+.planning/*
