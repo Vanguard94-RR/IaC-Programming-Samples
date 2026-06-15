@@ -1,10 +1,13 @@
-# 1. Namespace — created if missing; ignore label/annotation drift from other tools
+# 1. Namespace — create if missing, ignore changes if already managed by other tools
+# For pre-existing namespaces: use 'terraform import' to add to state
+#   terraform import 'module.ingress.kubernetes_namespace_v1.ingress' <namespace-name>
 resource "kubernetes_namespace_v1" "ingress" {
   metadata {
     name = var.namespace
   }
 
   lifecycle {
+    # Ignore label/annotation drift from other tools (e.g., Istio, kube-system)
     ignore_changes = [metadata[0].labels, metadata[0].annotations]
   }
 }
@@ -94,7 +97,8 @@ resource "null_resource" "cloud_armor" {
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
-    command     = "'${path.module}/../../lib/cloud_armor.sh' '${var.project_id}' '${var.namespace}'"
+    # Find lib/cloud_armor.sh by searching from this module's location
+    command     = "SCRIPT_DIR='${path.module}/../../lib' bash '${path.module}/../../lib/cloud_armor.sh' '${var.project_id}' '${var.namespace}'"
   }
 
   depends_on = [

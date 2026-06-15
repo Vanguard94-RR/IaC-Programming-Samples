@@ -1,0 +1,6 @@
+project_id         = "gnp-suscribe-asistidos-pro"
+cluster_name       = "gke-gnp-suscribe-asistidos-pro"
+cluster_location   = "us-central1-a"
+namespace          = "default"
+static_ip_name     = "ingress-asistidos"
+manifests_work_dir = "/home/admin/Documents/GNP/Tickets/CTASK0371629/manifests-work"

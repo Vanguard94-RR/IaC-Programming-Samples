@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 CENTRAL_PROJECT="${CENTRAL_PROJECT:-gnp-fleets-qa}"
-TICKETS_BASE="${TICKETS_BASE:-/home/admin/Documents/GNP/Tickets}"
+TICKETS_BASE="${TICKETS_BASE:-$HOME/Documents/GNP/Tickets}"
 # Set LOG_FILE before sourcing ui.sh so _log_persist writes to disk from first call
 LOG_FILE="$TICKETS_BASE/discover-$(date +%Y%m%d).log"
 mkdir -p "$TICKETS_BASE"

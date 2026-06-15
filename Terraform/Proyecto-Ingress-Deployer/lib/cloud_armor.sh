@@ -1,6 +1,41 @@
 #!/usr/bin/env bash
 # Cloud Armor policy attachment for ingress backend services
 
+# Helper: Find ui.sh by searching from current script location upward
+_find_ui_sh() {
+    local search_dir
+    # Start with script directory if available, otherwise current directory
+    search_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || search_dir="$(pwd)"
+    
+    # Try to find ui.sh in the same directory first
+    if [[ -f "$search_dir/ui.sh" ]]; then
+        echo "$search_dir/ui.sh"
+        return 0
+    fi
+    
+    # Try parent directory (if called from a different context)
+    if [[ -f "$(dirname "$search_dir")/ui.sh" ]]; then
+        echo "$(dirname "$search_dir")/ui.sh"
+        return 0
+    fi
+    
+    # Try lib directory at root (for when called from terraform modules)
+    if [[ -f "$(dirname "$search_dir")/../lib/ui.sh" ]]; then
+        echo "$(dirname "$search_dir")/../lib/ui.sh"
+        return 0
+    fi
+    
+    return 1
+}
+
+# Source UI functions
+UI_SH_PATH="$(_find_ui_sh)" || {
+    echo "ERROR: Could not find ui.sh" >&2
+    exit 1
+}
+# shellcheck source=./ui.sh
+. "$UI_SH_PATH"
+
 attach_cloud_armor() {
   local project_id="$1" namespace="$2"
 

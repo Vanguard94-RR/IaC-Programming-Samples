@@ -14,7 +14,9 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+# Export SCRIPT_DIR as environment variable for sourced scripts
+export SCRIPT_DIR
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 # shellcheck source=/dev/null
 . "$SCRIPT_DIR/lib/ui.sh"
@@ -474,6 +476,50 @@ ensure_kubectl
 ensure_yq
 
 # ---------------------------------------------------------------------------
+# Step 3b: Configure GitLab Token (optional but recommended)
+# ---------------------------------------------------------------------------
+step "GitLab Token Configuration"
+
+# Check if token already exists
+if [[ -f "$CONFIG_FILE" ]] && grep -q "GITLAB_TOKEN=" "$CONFIG_FILE" 2>/dev/null; then
+    # Extract existing token (mask it for display)
+    existing_token=$(grep "^GITLAB_TOKEN=" "$CONFIG_FILE" | cut -d= -f2)
+    token_display="${existing_token:0:10}...${existing_token: -4}"
+    
+    info "GitLab token already configured: $token_display"
+    
+    # Ask if user wants to update
+    printf "\nUpdate GitLab token? (y/N): "
+    read -r update_token
+    if [[ "$update_token" != "y" && "$update_token" != "Y" ]]; then
+        ok "Keeping existing GitLab token"
+        if [[ -n "$existing_token" ]]; then
+            export GITLAB_TOKEN="$existing_token"
+        fi
+    else
+        printf "Enter GitLab Personal Access Token (glpat-...): "
+        read -rs new_token
+        echo ""
+        if [[ -n "$new_token" ]]; then
+            export GITLAB_TOKEN="$new_token"
+            ok "GitLab token updated"
+        fi
+    fi
+else
+    # First time configuration
+    printf "\nGitLab Personal Access Token (for private repo access) - optional (press Enter to skip): "
+    read -rs gitlab_token
+    echo ""
+    
+    if [[ -n "$gitlab_token" ]]; then
+        export GITLAB_TOKEN="$gitlab_token"
+        ok "GitLab token configured"
+    else
+        info "Skipped GitLab token configuration"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 # Step 4: Save config marker and log
 # ---------------------------------------------------------------------------
 step "Saving configuration"
@@ -487,6 +533,19 @@ ARCH=$ARCH
 MARKER
 
 ok "Install marker: $INSTALL_MARKER"
+
+# Save GitLab token to config file if provided
+if [[ -n "${GITLAB_TOKEN:-}" ]]; then
+    # Ensure config directory and file exist
+    mkdir -p "$(dirname "$CONFIG_FILE")"
+    touch "$CONFIG_FILE"
+    chmod 600 "$CONFIG_FILE"  # Restrict permissions for security
+    
+    # Remove old token entry if exists, then add new one
+    sed -i '/^export GITLAB_TOKEN=/d' "$CONFIG_FILE" || true
+    echo "export GITLAB_TOKEN='$GITLAB_TOKEN'" >> "$CONFIG_FILE"
+    ok "GitLab token saved to $CONFIG_FILE (permissions: 600)"
+fi
 
 # Save log
 {

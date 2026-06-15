@@ -3,6 +3,24 @@
 # Supports public URLs and private GitLab instances using a gcloud access token.
 # Requires: curl, ui.sh sourced before this file.
 
+# Source UI functions if not already sourced
+if ! declare -f error >/dev/null 2>&1; then
+  # Helper: Find ui.sh by searching from current script location
+  _find_ui_sh() {
+      local search_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || search_dir="$(pwd)"
+      if [[ -f "$search_dir/ui.sh" ]]; then
+          echo "$search_dir/ui.sh"
+      elif [[ -f "$(dirname "$search_dir")/ui.sh" ]]; then
+          echo "$(dirname "$search_dir")/ui.sh"
+      elif [[ -f "$(dirname "$search_dir")/../lib/ui.sh" ]]; then
+          echo "$(dirname "$search_dir")/../lib/ui.sh"
+      fi
+  }
+  UI_SH_PATH="$(_find_ui_sh)" || { echo "ERROR: Could not find ui.sh" >&2; exit 1; }
+  # shellcheck source=./ui.sh
+  . "$UI_SH_PATH"
+fi
+
 # download_ingress_yaml <url> <destination-path>
 # Returns 0 on success, 1 on failure.
 download_ingress_yaml() {

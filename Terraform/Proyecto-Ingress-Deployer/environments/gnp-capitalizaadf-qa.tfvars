@@ -1,0 +1,6 @@
+project_id         = "gnp-capitalizaadf-qa"
+cluster_name       = "gke-gnp-capitalizaadf-qa"
+cluster_location   = "us-central1-f"
+namespace          = "apps"
+static_ip_name     = "ip-referencias"
+manifests_work_dir = "/home/admin/Documents/GNP/Tickets/CTASK0371701/manifests-work"

@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: referencias-ingress
+  namespace: apps
+  annotations:
+    networking.gke.io/v1.FrontendConfig: http-redirect-config
+    kubernetes.io/ingress.global-static-ip-name: ip-referencias
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /entidades/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: referencias-service
+                port:
+                  number: 8080

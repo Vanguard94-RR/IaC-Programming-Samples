@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+# Export SCRIPT_DIR as environment variable for sourced scripts
+export SCRIPT_DIR
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 CENTRAL_PROJECT="${CENTRAL_PROJECT:-gnp-fleets-qa}"
 # shellcheck source=../lib/ui.sh
 . "$SCRIPT_DIR/lib/ui.sh"
+# shellcheck source=../lib/path_helper.sh
+. "$SCRIPT_DIR/lib/path_helper.sh"
 
 PROJECT_ID="${1:-}"
 if [[ -z "$PROJECT_ID" ]]; then

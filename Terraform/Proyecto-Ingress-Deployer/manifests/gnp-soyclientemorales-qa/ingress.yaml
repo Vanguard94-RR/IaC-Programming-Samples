@@ -5,16 +5,29 @@ metadata:
   namespace: apps
   annotations:
     kubernetes.io/ingress.global-static-ip-name: "apps-ip-proyecto"
-    ingress.gcp.kubernetes.io/pre-shared-cert: wildcarddigicertgnpcommx2027
 spec:
-  ingressClassName: gce
+  ingressClassName: gce 
   rules:
-    - http:
-        paths:
-          - path: /apps-ingress/morales-crmpersonas
-            pathType: Prefix
-            backend:
-              service:
-                name: morales-crmpersonas
-                port:
-                  number: 8080
+  - http:
+      paths:
+      - path: /apps-ingress/morales-crmpersonas
+        pathType: Prefix 
+        backend:
+          service:
+            name: morales-crmpersonas
+            port:
+              number: 8080
+      - path: /apps-ingress/msv-herramientas
+        pathType: Prefix 
+        backend:
+          service:
+            name: morales-herramientas
+            port:
+              number: 8080
+      - path: /apps-ingress/msv-descargadocumentos
+        pathType: Prefix 
+        backend:
+          service:
+            name: msv-descargadocumentos
+            port:
+              number: 8080

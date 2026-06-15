@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+# Export SCRIPT_DIR as environment variable for sourced scripts
+export SCRIPT_DIR
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 CENTRAL_PROJECT="${CENTRAL_PROJECT:-gnp-fleets-qa}"
-TICKETS_BASE="${TICKETS_BASE:-/home/admin/Documents/GNP/Tickets}"
+TICKETS_BASE="${TICKETS_BASE:-$HOME/Documents/GNP/Tickets}"
 # Same bucket as Terraform state — set after PROJECT_ID is known
 # shellcheck source=../lib/ui.sh
 . "$SCRIPT_DIR/lib/ui.sh"
@@ -17,6 +19,12 @@ TICKETS_BASE="${TICKETS_BASE:-/home/admin/Documents/GNP/Tickets}"
 . "$SCRIPT_DIR/lib/network_checks.sh"
 # shellcheck source=../lib/discovery.sh
 . "$SCRIPT_DIR/lib/discovery.sh"
+# shellcheck source=../lib/path_helper.sh
+. "$SCRIPT_DIR/lib/path_helper.sh"
+# shellcheck source=../lib/ingress_checks.sh
+. "$SCRIPT_DIR/lib/ingress_checks.sh"
+# shellcheck source=../lib/gcp_auth.sh
+. "$SCRIPT_DIR/lib/gcp_auth.sh"
 
 TF_DIR="$SCRIPT_DIR/terraform"
 
@@ -89,7 +97,7 @@ fi
 
 # ── GitLab token resolution ────────────────────────────────────────────────
 # Auto-load from well-known path if URL is GitLab and token not in env
-_GITLAB_TOKEN_FILE="${GITLAB_TOKEN_FILE:-/home/admin/Documents/GNP/PersonalGitLabToken}"
+_GITLAB_TOKEN_FILE="${GITLAB_TOKEN_FILE:-$HOME/Documents/GNP/PersonalGitLabToken}"
 if [[ "$INGRESS_URL" =~ gitlab\. ]] && [[ -z "${GITLAB_TOKEN:-}" ]]; then
   if [[ -f "$_GITLAB_TOKEN_FILE" ]]; then
     GITLAB_TOKEN=$(tr -d '[:space:]' < "$_GITLAB_TOKEN_FILE")
@@ -579,6 +587,16 @@ if [[ -n "${STATIC_IP_NAME:-}" ]] && [[ "$ACTION" != "destroy" ]]; then
   step "IP conflict pre-flight check"
   check_ip_conflicts "$PROJECT_ID" "$STATIC_IP_NAME" "$INGRESS_NAME"
 fi
+
+# ── Auto-import existing namespace into Terraform state ──────────────────
+if [[ "$ACTION" != "destroy" ]]; then
+  step "Auto-importing namespace if it already exists in cluster..."
+  _TFVARS_ABSOLUTE="$SCRIPT_DIR/environments/${PROJECT_ID}.tfvars"
+  bash "$SCRIPT_DIR/scripts/auto-import-namespace.sh" "$NAMESPACE" "$TF_DIR" "$_TFVARS_ABSOLUTE" || true
+fi
+
+# ── Google Cloud credentials verification ────────────────────────────────
+verify_gcloud_auth || exit 1
 
 # ── Terraform validate ─────────────────────────────────────────────────────
 step "Terraform validate"
