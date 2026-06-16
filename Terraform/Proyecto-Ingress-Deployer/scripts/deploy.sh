@@ -1,14 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Export SCRIPT_DIR as environment variable for sourced scripts
-export SCRIPT_DIR
-SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+
+# HOME guard — before any ${HOME} expansion; ui.sh not yet sourced, use plain echo
+if [[ -z "${HOME:-}" ]]; then
+  if [[ -z "${USER:-}" ]]; then
+    echo "ERROR: HOME and USER are both unset. Cannot resolve default paths." >&2
+    exit 1
+  fi
+  export HOME="/home/$USER"
+  mkdir -p "$HOME"
+fi
+
 CENTRAL_PROJECT="${CENTRAL_PROJECT:-gnp-fleets-qa}"
-TICKETS_BASE="${TICKETS_BASE:-$HOME/Documents/GNP/Tickets}"
+TICKETS_BASE="${TICKETS_BASE:-${HOME}/.gnp/tickets}"
 # Same bucket as Terraform state — set after PROJECT_ID is known
 # shellcheck source=../lib/ui.sh
 . "$SCRIPT_DIR/lib/ui.sh"
+[[ "${TICKETS_BASE:-}" == */home/admin/* ]] && \
+  warn "TICKETS_BASE contains a machine-specific path. Export TICKETS_BASE=\${HOME}/.gnp/tickets in your shell profile."
 # shellcheck source=../lib/downloader.sh
 . "$SCRIPT_DIR/lib/downloader.sh"
 # shellcheck source=../lib/yaml_cleaner.sh
@@ -97,8 +108,10 @@ fi
 
 # ── GitLab token resolution ────────────────────────────────────────────────
 # Auto-load from well-known path if URL is GitLab and token not in env
-_GITLAB_TOKEN_FILE="${GITLAB_TOKEN_FILE:-$HOME/Documents/GNP/PersonalGitLabToken}"
-if [[ "$INGRESS_URL" =~ gitlab\. ]] && [[ -z "${GITLAB_TOKEN:-}" ]]; then
+_GITLAB_TOKEN_FILE="${GITLAB_TOKEN_FILE:-${HOME}/.gnp/gitlab-token}"
+[[ "${GITLAB_TOKEN_FILE:-}" == */home/admin/* ]] && \
+  warn "GITLAB_TOKEN_FILE contains a machine-specific path. Export GITLAB_TOKEN_FILE=\${HOME}/.gnp/gitlab-token in your shell profile."
+if [[ "${INGRESS_URL:-}" =~ gitlab\. ]] && [[ -z "${GITLAB_TOKEN:-}" ]]; then
   if [[ -f "$_GITLAB_TOKEN_FILE" ]]; then
     GITLAB_TOKEN=$(tr -d '[:space:]' < "$_GITLAB_TOKEN_FILE")
     export GITLAB_TOKEN
@@ -120,6 +133,10 @@ for var in TICKET_ID PROJECT_ID INGRESS_URL; do
     exit 1
   fi
 done
+if ! [[ "${TICKET_ID}" =~ ^(CTASK|TASK)[0-9]+$ ]]; then
+  error "Invalid ticket format. Use CTASK######## or TASK########"
+  exit 1
+fi
 
 MANIFESTS_DIR="$SCRIPT_DIR/manifests/${PROJECT_ID}"
 INGRESS_YAML="$MANIFESTS_DIR/ingress.yaml"
@@ -192,6 +209,27 @@ if [[ -n "$SSL_CERT_NAME" ]]; then
   info "SSL certificate detected: $SSL_CERT_NAME"
 else
   warn "No SSL certificate found in $PROJECT_ID — HTTPS frontend will not be configured"
+fi
+
+# Auto-detect namespace from cluster when not present in YAML
+if [[ -z "$_yaml_namespace" ]] && [[ -n "$_yaml_ingress_name" ]]; then
+  step "Namespace not in YAML — querying cluster for existing ingress"
+  _disc_cluster=$(gcloud container clusters list \
+    --project="$PROJECT_ID" --format="value(name,location)" --limit=1 2>/dev/null | head -1 || true)
+  if [[ -n "$_disc_cluster" ]]; then
+    _disc_cname=$(awk '{print $1}' <<< "$_disc_cluster")
+    _disc_cloc=$(awk '{print $2}' <<< "$_disc_cluster")
+    if _get_credentials "$PROJECT_ID" "$_disc_cname" "$_disc_cloc" &>/dev/null 2>&1; then
+      _yaml_namespace=$(kubectl get ingress -A \
+        --no-headers -o custom-columns='NAME:.metadata.name,NS:.metadata.namespace' 2>/dev/null \
+        | awk -v name="$_yaml_ingress_name" '$1 == name {print $2}' | head -1 || true)
+      if [[ -n "$_yaml_namespace" ]]; then
+        info "Namespace detected from cluster: $_yaml_namespace"
+        CLUSTER_NAME="${CLUSTER_NAME:-$_disc_cname}"
+        CLUSTER_LOCATION="${CLUSTER_LOCATION:-$_disc_cloc}"
+      fi
+    fi
+  fi
 fi
 
 if [[ "${CI:-false}" != "true" ]]; then
@@ -269,7 +307,7 @@ fi
 
 # Inject namespace into manifests if absent (kubernetes_manifest requires explicit namespace)
 if [[ "$(yq 'select(.kind == "Ingress") | .metadata.namespace' "$INGRESS_YAML" | head -1)" == "null" ]]; then
-  yq -i '(select(.kind == "Ingress") | .metadata.namespace) = "'"$NAMESPACE"'"' "$INGRESS_YAML"
+  NAMESPACE="$NAMESPACE" yq -i '(select(.kind == "Ingress") | .metadata.namespace) = env(NAMESPACE)' "$INGRESS_YAML"
   info "Injected namespace '$NAMESPACE' into ingress YAML"
 else
   info "Namespace already present in ingress YAML: $(yq 'select(.kind == "Ingress") | .metadata.namespace' "$INGRESS_YAML" | head -1)"
@@ -277,11 +315,11 @@ fi
 
 # Inject SSL certificate annotation if provided
 if [[ -n "${SSL_CERT_NAME:-}" ]]; then
-  yq -i '(select(.kind == "Ingress") | .metadata.annotations["ingress.gcp.kubernetes.io/pre-shared-cert"]) = "'"$SSL_CERT_NAME"'"' "$INGRESS_YAML"
+  SSL_CERT_NAME="$SSL_CERT_NAME" yq -i '(select(.kind == "Ingress") | .metadata.annotations["ingress.gcp.kubernetes.io/pre-shared-cert"]) = env(SSL_CERT_NAME)' "$INGRESS_YAML"
   info "Injected SSL cert: $SSL_CERT_NAME"
 fi
 if [[ -n "${STATIC_IP_NAME:-}" ]]; then
-  yq -i '(select(.kind == "Ingress") | .metadata.annotations["kubernetes.io/ingress.global-static-ip-name"]) = "'"$STATIC_IP_NAME"'"' "$INGRESS_YAML"
+  STATIC_IP_NAME="$STATIC_IP_NAME" yq -i '(select(.kind == "Ingress") | .metadata.annotations["kubernetes.io/ingress.global-static-ip-name"]) = env(STATIC_IP_NAME)' "$INGRESS_YAML"
   info "Injected static IP annotation: $STATIC_IP_NAME"
 else
   info "No static IP name set — GKE will assign an ephemeral IP"
@@ -296,7 +334,7 @@ fi
 for _cf in "$COMPANIONS_DIR"/*.yaml; do
   [[ -f "$_cf" ]] || continue
   if [[ "$(yq '.metadata.namespace // "null"' "$_cf")" == "null" ]]; then
-    yq -i ".metadata.namespace = \"$NAMESPACE\"" "$_cf"
+    NAMESPACE="$NAMESPACE" yq -i '.metadata.namespace = env(NAMESPACE)' "$_cf"
     info "Injected namespace into companion: $(basename "$_cf")"
   fi
 done
@@ -408,12 +446,13 @@ _diff_spec() {
   local label="$1" kind="$2" name="$3" new_yaml="$4"
   local tmp_cur tmp_new
   tmp_cur=$(mktemp) tmp_new=$(mktemp)
+  trap 'rm -f "$tmp_cur" "$tmp_new"' RETURN
 
   local raw_cur
   raw_cur=$(kubectl get "$kind" "$name" -n "$NAMESPACE" -o yaml 2>/dev/null || true)
   if [[ -z "$raw_cur" ]]; then
     info "$label: not found in cluster — will be created"
-    rm -f "$tmp_cur" "$tmp_new"; return 0
+    return 0
   fi
 
   # Extract spec + user-managed annotations, strip all GKE controller-owned keys
@@ -433,8 +472,8 @@ _diff_spec() {
     }'
   }
 
-  printf '%s' "$raw_cur" | _extract_comparable > "$tmp_cur" 2>/dev/null
-  _extract_comparable < "$new_yaml"  > "$tmp_new" 2>/dev/null
+  printf '%s' "$raw_cur" | _extract_comparable | yq 'sort_keys(..)' > "$tmp_cur" 2>/dev/null
+  _extract_comparable < "$new_yaml"  | yq 'sort_keys(..)' > "$tmp_new" 2>/dev/null
 
   local delta
   delta=$(diff --color=always -u \
@@ -448,7 +487,6 @@ _diff_spec() {
     warn "$label: changes detected"
     printf '%s\n' "$delta"
   fi
-  rm -f "$tmp_cur" "$tmp_new"
 }
 
 if kubectl get ingress "$INGRESS_NAME" -n "$NAMESPACE" &>/dev/null 2>&1; then
@@ -585,18 +623,8 @@ fi
 # IP conflict pre-flight: detect forwarding rules that would block LB provisioning
 if [[ -n "${STATIC_IP_NAME:-}" ]] && [[ "$ACTION" != "destroy" ]]; then
   step "IP conflict pre-flight check"
-  check_ip_conflicts "$PROJECT_ID" "$STATIC_IP_NAME" "$INGRESS_NAME"
+  check_ip_conflicts "$PROJECT_ID" "$STATIC_IP_NAME"
 fi
-
-# ── Auto-import existing namespace into Terraform state ──────────────────
-if [[ "$ACTION" != "destroy" ]]; then
-  step "Auto-importing namespace if it already exists in cluster..."
-  _TFVARS_ABSOLUTE="$SCRIPT_DIR/environments/${PROJECT_ID}.tfvars"
-  bash "$SCRIPT_DIR/scripts/auto-import-namespace.sh" "$NAMESPACE" "$TF_DIR" "$_TFVARS_ABSOLUTE" || true
-fi
-
-# ── Google Cloud credentials verification ────────────────────────────────
-verify_gcloud_auth || exit 1
 
 # ── Terraform validate ─────────────────────────────────────────────────────
 step "Terraform validate"

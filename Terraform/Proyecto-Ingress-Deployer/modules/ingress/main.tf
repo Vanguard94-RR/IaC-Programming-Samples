@@ -1,13 +1,10 @@
-# 1. Namespace — create if missing, ignore changes if already managed by other tools
-# For pre-existing namespaces: use 'terraform import' to add to state
-#   terraform import 'module.ingress.kubernetes_namespace_v1.ingress' <namespace-name>
+# 1. Namespace — created if missing; ignore label/annotation drift from other tools
 resource "kubernetes_namespace_v1" "ingress" {
   metadata {
     name = var.namespace
   }
 
   lifecycle {
-    # Ignore label/annotation drift from other tools (e.g., Istio, kube-system)
     ignore_changes = [metadata[0].labels, metadata[0].annotations]
   }
 }
@@ -26,6 +23,13 @@ resource "kubernetes_manifest" "companion" {
   for_each = var.companion_manifests
   manifest = yamldecode(file(each.value))
 
+  computed_fields = [
+    "metadata.annotations",
+    "metadata.labels",
+    "metadata.finalizers",
+    "status",
+  ]
+
   field_manager {
     force_conflicts = true
   }
@@ -36,6 +40,17 @@ resource "kubernetes_manifest" "companion" {
 # 4. Ingress — applied after all dependencies exist
 resource "kubernetes_manifest" "ingress" {
   manifest = yamldecode(file(var.ingress_yaml))
+
+  computed_fields = [
+    "metadata.annotations",
+    "metadata.labels",
+    "metadata.annotations[\"ingress.kubernetes.io/backends\"]",
+    "metadata.annotations[\"ingress.kubernetes.io/forwarding-rule\"]",
+    "metadata.annotations[\"ingress.kubernetes.io/target-proxy\"]",
+    "metadata.annotations[\"ingress.kubernetes.io/url-map\"]",
+    "metadata.finalizers",
+    "status",
+  ]
 
   timeouts {
     delete = "30m"
@@ -93,12 +108,15 @@ resource "null_resource" "cloud_armor" {
     ingress_manifest = sha256(file(var.ingress_yaml))
     project_id       = var.project_id
     namespace        = var.namespace
+    ingress_name     = var.ingress_name
   }
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
-    # Find lib/cloud_armor.sh by searching from this module's location
-    command     = "SCRIPT_DIR='${path.module}/../../lib' bash '${path.module}/../../lib/cloud_armor.sh' '${var.project_id}' '${var.namespace}'"
+    environment = {
+      FORCE_COLOR = "1"
+    }
+    command = "'${path.module}/../../lib/cloud_armor.sh' '${var.project_id}' '${var.namespace}' '${var.ingress_name}'"
   }
 
   depends_on = [

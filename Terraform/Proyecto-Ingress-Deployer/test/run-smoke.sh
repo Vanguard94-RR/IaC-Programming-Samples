@@ -96,9 +96,25 @@ _test_zone_detection() {
 check "_get_credentials zone/region detection regex" 0 "_test_zone_detection"
 
 # Task 8: deploy.sh — interactive UI is skipped when CI=true and required env vars missing
-check "deploy.sh exits 1 with invalid action in CI mode" 1 \
-  "CI=true PROJECT_ID=x NAMESPACE=x STATIC_IP_NAME=x INGRESS_URL=x TICKET_ID=x ACTION=noop \
-   bash ${SCRIPT_DIR}/scripts/deploy.sh"
+_test_invalid_action() {
+  local fixture
+  fixture=$(mktemp --suffix=.yaml)
+  cat > "$fixture" << 'YAML'
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: test-ingress
+  namespace: default
+spec: {}
+YAML
+  local exit_code=0
+  CI=true PROJECT_ID=x NAMESPACE=x STATIC_IP_NAME=x \
+    INGRESS_URL="file://${fixture}" TICKET_ID=x ACTION=noop \
+    bash "${SCRIPT_DIR}/scripts/deploy.sh" || exit_code=$?
+  rm -f "$fixture"
+  return "$exit_code"
+}
+check "deploy.sh exits 1 with invalid action in CI mode" 1 "_test_invalid_action"
 
 # Ephemeral IP: deploy.sh must NOT fail on missing STATIC_IP_NAME
 _test_ephemeral_validation() {
@@ -345,6 +361,16 @@ _test_detect_no_clusters() {
 }
 check "detect_ingress_cluster returns 0 and emits nothing when no clusters" 0 \
   "_test_detect_no_clusters"
+
+# GCP-04/GCP-05: kubernetes_manifest resources must have computed_fields configured
+_test_computed_fields_in_main_tf() {
+  local main_tf="$SCRIPT_DIR/modules/ingress/main.tf"
+  grep -q 'computed_fields' "$main_tf" &&
+  grep -q '"metadata.finalizers"' "$main_tf" &&
+  grep -q '"status"' "$main_tf"
+}
+check "kubernetes_manifest resources have computed_fields configured (main.tf)" 0 \
+  "_test_computed_fields_in_main_tf"
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"

@@ -14,9 +14,7 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-# Export SCRIPT_DIR as environment variable for sourced scripts
-export SCRIPT_DIR
-SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
 # shellcheck source=/dev/null
 . "$SCRIPT_DIR/lib/ui.sh"
@@ -284,10 +282,12 @@ ensure_gcloud() {
             ;;
         fedora)
             if command -v sudo &>/dev/null; then
-                sudo tee /etc/yum.repos.d/google-cloud-sdk.repo > /dev/null <<'REPO' 2>/dev/null
+                local _gcp_arch
+                _gcp_arch=$([ "$ARCH" = "arm64" ] && echo "arm" || echo "x86_64")
+                sudo tee /etc/yum.repos.d/google-cloud-sdk.repo > /dev/null <<REPO 2>/dev/null
 [google-cloud-cli]
 name=Google Cloud CLI
-baseurl=https://packages.cloud.google.com/yum/repos/cloud-sdk-el9-x86_64
+baseurl=https://packages.cloud.google.com/yum/repos/cloud-sdk-el9-${_gcp_arch}
 enabled=1
 gpgcheck=1
 repo_gpgcheck=0
@@ -420,9 +420,8 @@ ensure_yq() {
             fi
             ;;
         debian)
-            if command -v apt-get &>/dev/null; then
-                sudo apt-get install -y yq 2>/dev/null && ok "yq installed via apt" && return 0
-            fi
+            # apt-get yq on Debian installs kislyuk yq (Python, incompatible syntax).
+            # Always use the mikefarah tarball for guaranteed v4 compatibility.
             ;;
         macos)
             if command -v brew &>/dev/null; then
@@ -476,48 +475,40 @@ ensure_kubectl
 ensure_yq
 
 # ---------------------------------------------------------------------------
-# Step 3b: Configure GitLab Token (optional but recommended)
+# Step 3b: GNP directory + token provisioning
 # ---------------------------------------------------------------------------
-step "GitLab Token Configuration"
+step "GNP directory setup"
+mkdir -p "${HOME}/.gnp/tickets"
 
-# Check if token already exists
-if [[ -f "$CONFIG_FILE" ]] && grep -q "GITLAB_TOKEN=" "$CONFIG_FILE" 2>/dev/null; then
-    # Extract existing token (mask it for display)
-    existing_token=$(grep "^GITLAB_TOKEN=" "$CONFIG_FILE" | cut -d= -f2)
-    token_display="${existing_token:0:10}...${existing_token: -4}"
-    
-    info "GitLab token already configured: $token_display"
-    
-    # Ask if user wants to update
-    printf "\nUpdate GitLab token? (y/N): "
-    read -r update_token
-    if [[ "$update_token" != "y" && "$update_token" != "Y" ]]; then
-        ok "Keeping existing GitLab token"
-        if [[ -n "$existing_token" ]]; then
-            export GITLAB_TOKEN="$existing_token"
-        fi
+_old_token="${HOME}/Documents/GNP/PersonalGitLabToken"
+_new_token="${HOME}/.gnp/gitlab-token"
+
+if [[ -f "$_old_token" ]] && [[ ! -f "$_new_token" ]]; then
+    cp "$_old_token" "$_new_token"
+    chmod 600 "$_new_token"
+    warn "GitLab token migrated from $_old_token → $_new_token. Delete old file when ready."
+elif [[ ! -f "$_new_token" ]]; then
+    touch "$_new_token"
+    chmod 600 "$_new_token"
+fi
+
+# Prompt for token if file is empty (first setup or placeholder)
+if [[ ! -s "$_new_token" ]]; then
+    printf "GitLab Personal Access Token (glpat-...) [Enter to skip]: "
+    read -rs _pat
+    echo
+    if [[ -n "$_pat" ]]; then
+        printf '%s' "$_pat" > "$_new_token"
+        chmod 600 "$_new_token"
+        ok "GitLab token saved: $_new_token"
     else
-        printf "Enter GitLab Personal Access Token (glpat-...): "
-        read -rs new_token
-        echo ""
-        if [[ -n "$new_token" ]]; then
-            export GITLAB_TOKEN="$new_token"
-            ok "GitLab token updated"
-        fi
+        info "Skipped — fill in $_new_token before deploying from GitLab"
     fi
 else
-    # First time configuration
-    printf "\nGitLab Personal Access Token (for private repo access) - optional (press Enter to skip): "
-    read -rs gitlab_token
-    echo ""
-    
-    if [[ -n "$gitlab_token" ]]; then
-        export GITLAB_TOKEN="$gitlab_token"
-        ok "GitLab token configured"
-    else
-        info "Skipped GitLab token configuration"
-    fi
+    ok "GitLab token already configured: $_new_token"
 fi
+
+ok "GNP directories ready: ${HOME}/.gnp/"
 
 # ---------------------------------------------------------------------------
 # Step 4: Save config marker and log
@@ -533,19 +524,6 @@ ARCH=$ARCH
 MARKER
 
 ok "Install marker: $INSTALL_MARKER"
-
-# Save GitLab token to config file if provided
-if [[ -n "${GITLAB_TOKEN:-}" ]]; then
-    # Ensure config directory and file exist
-    mkdir -p "$(dirname "$CONFIG_FILE")"
-    touch "$CONFIG_FILE"
-    chmod 600 "$CONFIG_FILE"  # Restrict permissions for security
-    
-    # Remove old token entry if exists, then add new one
-    sed -i '/^export GITLAB_TOKEN=/d' "$CONFIG_FILE" || true
-    echo "export GITLAB_TOKEN='$GITLAB_TOKEN'" >> "$CONFIG_FILE"
-    ok "GitLab token saved to $CONFIG_FILE (permissions: 600)"
-fi
 
 # Save log
 {

@@ -1,0 +1,6 @@
+project_id         = "gnp-suscribe-uat"
+cluster_name       = "suscribe-cluster-uat"
+cluster_location   = "us-central1-a"
+namespace          = "default"
+static_ip_name     = "suscribe-backend-ip"
+manifests_work_dir = "/home/admin/.gnp/tickets/CTASK0372061/manifests-work"

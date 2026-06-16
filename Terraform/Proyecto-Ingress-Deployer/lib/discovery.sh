@@ -1,24 +1,6 @@
 #!/usr/bin/env bash
 # Requires: lib/ui.sh sourced first (ok, warn, error, info functions)
 
-# Source UI functions if not already sourced
-if ! declare -f error >/dev/null 2>&1; then
-  # Helper: Find ui.sh by searching from current script location
-  _find_ui_sh() {
-      local search_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || search_dir="$(pwd)"
-      if [[ -f "$search_dir/ui.sh" ]]; then
-          echo "$search_dir/ui.sh"
-      elif [[ -f "$(dirname "$search_dir")/ui.sh" ]]; then
-          echo "$(dirname "$search_dir")/ui.sh"
-      elif [[ -f "$(dirname "$search_dir")/../lib/ui.sh" ]]; then
-          echo "$(dirname "$search_dir")/../lib/ui.sh"
-      fi
-  }
-  UI_SH_PATH="$(_find_ui_sh)" || { echo "ERROR: Could not find ui.sh" >&2; exit 1; }
-  # shellcheck source=./ui.sh
-  . "$UI_SH_PATH"
-fi
-
 # normalize_static_ip_name <value>
 # Converts ephemeral keyword variants to "". Passes other values through unchanged.
 normalize_static_ip_name() {

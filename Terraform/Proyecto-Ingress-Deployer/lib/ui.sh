@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Shared UI and logging for ingress deployer scripts
 
-if [[ -t 1 ]] && [[ -z "${NO_COLOR:-}" ]]; then
+if { [[ -t 1 ]] || [[ "${FORCE_COLOR:-0}" == "1" ]]; } && [[ -z "${NO_COLOR:-}" ]]; then
   GREEN="\033[0;32m"; YELLOW="\033[1;33m"; RED="\033[0;31m"
   CYAN="\033[0;36m"; WHITE="\033[1;37m"; BOLD="\033[1m"; NC="\033[0m"
 else

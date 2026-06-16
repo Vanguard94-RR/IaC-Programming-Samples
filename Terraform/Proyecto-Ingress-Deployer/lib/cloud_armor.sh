@@ -1,46 +1,16 @@
 #!/usr/bin/env bash
 # Cloud Armor policy attachment for ingress backend services
 
-# Helper: Find ui.sh by searching from current script location upward
-_find_ui_sh() {
-    local search_dir
-    # Start with script directory if available, otherwise current directory
-    search_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || search_dir="$(pwd)"
-    
-    # Try to find ui.sh in the same directory first
-    if [[ -f "$search_dir/ui.sh" ]]; then
-        echo "$search_dir/ui.sh"
-        return 0
-    fi
-    
-    # Try parent directory (if called from a different context)
-    if [[ -f "$(dirname "$search_dir")/ui.sh" ]]; then
-        echo "$(dirname "$search_dir")/ui.sh"
-        return 0
-    fi
-    
-    # Try lib directory at root (for when called from terraform modules)
-    if [[ -f "$(dirname "$search_dir")/../lib/ui.sh" ]]; then
-        echo "$(dirname "$search_dir")/../lib/ui.sh"
-        return 0
-    fi
-    
-    return 1
-}
-
-# Source UI functions
-UI_SH_PATH="$(_find_ui_sh)" || {
-    echo "ERROR: Could not find ui.sh" >&2
-    exit 1
-}
-# shellcheck source=./ui.sh
-. "$UI_SH_PATH"
-
 attach_cloud_armor() {
-  local project_id="$1" namespace="$2"
+  local project_id="$1" namespace="$2" ingress_name="$3"
 
   if ! command -v gcloud &>/dev/null; then
     warn "gcloud not available — skipping Cloud Armor"
+    return 0
+  fi
+
+  if ! command -v jq &>/dev/null; then
+    warn "jq not available — skipping Cloud Armor"
     return 0
   fi
 
@@ -57,15 +27,22 @@ attach_cloud_armor() {
   fi
   info "Policy detected: $policy"
 
-  # Find all backend services in this namespace (GKE sets description with namespace/svc)
+  # Discover backends from ingress annotation (works on both k8s1- and k8s2- clusters)
+  local annotation_json
+  annotation_json=$(kubectl get ingress "$ingress_name" -n "$namespace" \
+    -o jsonpath='{.metadata.annotations.ingress\.kubernetes\.io/backends}' \
+    2>/dev/null || true)
+
+  if [[ -z "$annotation_json" ]]; then
+    warn "ingress.kubernetes.io/backends annotation not found on $ingress_name — LB may not be provisioned yet"
+    return 0
+  fi
+
   local backends
-  backends=$(gcloud compute backend-services list --global \
-    --project="$project_id" \
-    --filter="description~\"\\\"${namespace}/\"" \
-    --format="value(name)" 2>/dev/null || true)
+  backends=$(printf '%s' "$annotation_json" | jq -r 'keys[]' 2>/dev/null || true)
 
   if [[ -z "$backends" ]]; then
-    warn "No backend services found for namespace $namespace — skipping Cloud Armor"
+    warn "No backend services found in annotation for $ingress_name — skipping Cloud Armor"
     return 0
   fi
 
@@ -100,5 +77,7 @@ attach_cloud_armor() {
 
 # Entry point when invoked directly by Terraform local-exec provisioner
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-  attach_cloud_armor "$1" "$2"
+  _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  . "${_SCRIPT_DIR}/ui.sh"
+  attach_cloud_armor "$1" "$2" "$3"
 fi

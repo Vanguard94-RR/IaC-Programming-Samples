@@ -5,6 +5,7 @@ metadata:
   namespace: apps
   annotations:
     kubernetes.io/ingress.global-static-ip-name: "apps-ip-proyecto"
+    ingress.gcp.kubernetes.io/pre-shared-cert: wildcarddigicertgnpcommx2027
 spec:
   ingressClassName: gce 
   rules:

@@ -1,0 +1,137 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rc-ingress
+  annotations:
+    networking.gke.io/v1.FrontendConfig: http-redirect-config
+    kubernetes.io/ingress.global-static-ip-name: suscribe-backend-ip
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /api/ev/compute/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: motor-ev-backend
+                port:
+                  number: 8040
+          - path: /api/ev/config/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: transportes-configuracion-app
+                port:
+                  number: 8081
+          - path: /api/ev/cotizaciones/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: transportes-configuracion-app
+                port:
+                  number: 8081
+          - path: /api/rc/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: motor-rc-backend
+                port:
+                  number: 8030
+          - path: /api/comunes/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: semiautomaticos-comunes-app
+                port:
+                  number: 8080
+          - path: /api/rc/emision/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: rc-documentos-service
+                port:
+                  number: 8050
+          - path: /api/ac/compute/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: motor-ac-backend
+                port:
+                  number: 8015
+          - path: /api/ac/config/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: configuracion-ac-backend
+                port:
+                  number: 8031
+          - path: /api/ac/emision/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: ac-documentos-service
+                port:
+                  number: 8020
+          - path: /api/contratistas/configuracion/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: contratistas-configuracion-app
+                port:
+                  number: 8060
+          - path: /api/semiautomaticos/documentos/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: contratistas-documentos-app
+                port:
+                  number: 8070
+          - path: /api/contratistas/motor/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: contratistas-motor-app
+                port:
+                  number: 8090
+          - path: /danios/semiautomaticos/equipo-electronico/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: equipoelectronico-motor-app
+                port:
+                  number: 8010
+          - path: /danios/semiautomaticos/configuraciones/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: semiautomaticos-configuracion-app
+                port:
+                  number: 8180
+          - path: /api/analytics/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: semiautomaticos-analytics-app
+                port:
+                  number: 8080
+          - path: /api/emision/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: rc-orquestador-emision
+                port:
+                  number: 8080
+          - path: /danios/semiautomaticos/profesional/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: rcprofesional-backend
+                port:
+                  number: 8080
+          - path: /api/profesional/motor/rc/*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: rcprofesional-motor
+                port:
+                  number: 8080

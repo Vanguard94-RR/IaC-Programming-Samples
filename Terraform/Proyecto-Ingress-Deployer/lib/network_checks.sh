@@ -1,29 +1,11 @@
 #!/usr/bin/env bash
 # Requires: lib/ui.sh sourced first (ok, warn, error, info functions)
 
-# Source UI functions if not already sourced
-if ! declare -f error >/dev/null 2>&1; then
-  # Helper: Find ui.sh by searching from current script location
-  _find_ui_sh() {
-      local search_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || search_dir="$(pwd)"
-      if [[ -f "$search_dir/ui.sh" ]]; then
-          echo "$search_dir/ui.sh"
-      elif [[ -f "$(dirname "$search_dir")/ui.sh" ]]; then
-          echo "$(dirname "$search_dir")/ui.sh"
-      elif [[ -f "$(dirname "$search_dir")/../lib/ui.sh" ]]; then
-          echo "$(dirname "$search_dir")/../lib/ui.sh"
-      fi
-  }
-  UI_SH_PATH="$(_find_ui_sh)" || { echo "ERROR: Could not find ui.sh" >&2; exit 1; }
-  # shellcheck source=./ui.sh
-  . "$UI_SH_PATH"
-fi
-
-# check_ip_conflicts <project_id> <static_ip_name> <ingress_name>
+# check_ip_conflicts <project_id> <static_ip_name>
 # Pre-flight: detect forwarding rules that would block GKE LB from using the static IP.
 # Classifies rules and offers to delete them. Exits 1 if conflicts remain unresolved.
 check_ip_conflicts() {
-  local project_id="$1" static_ip_name="$2" ingress_name="$3"
+  local project_id="$1" static_ip_name="$2"
 
   local ip
   ip=$(gcloud compute addresses describe "$static_ip_name" \
@@ -48,17 +30,27 @@ check_ip_conflicts() {
       --project="$project_id" --format="value(target)" 2>/dev/null || true)
     target_base="${target##*/}"
 
-    if [[ "$target_base" =~ ^k8s2- ]]; then
-      # GKE-managed target proxy — check ownership via target name
-      if echo "$target_base" | grep -q "$ingress_name"; then
-        warn "GKE orphan rule '$rule' (target: $target_base) — incomplete LB stack from previous deploy"
+    if [[ "$rule" =~ ^k8s2- ]]; then
+      # GKE-managed rule (k8s2-* name). Orphan = target proxy no longer exists.
+      local _tp_exists
+      _tp_exists=$(gcloud compute target-https-proxies describe "$target_base" \
+        --global --project="$project_id" --format="value(name)" 2>/dev/null || \
+        gcloud compute target-http-proxies describe "$target_base" \
+        --global --project="$project_id" --format="value(name)" 2>/dev/null || true)
+      if [[ -z "$_tp_exists" ]]; then
+        warn "GKE orphan rule '$rule' (target proxy missing: $target_base) — deleting stale fragment"
         gcloud compute forwarding-rules delete "$rule" --global --project="$project_id" -q
         ok "Deleted orphan GKE rule: $rule"
       else
-        # GKE-managed target — belongs to the current or a live ingress, not a conflict
-        info "GKE-managed rule '$rule' (target: $target_base) — owned by active ingress, skipping"
+        info "GKE-managed rule '$rule' (target: $target_base) — active LB stack, skipping"
       fi
       continue
+    fi
+
+    # Non-k8s2 rule pointing at a GKE resource = manual rule hijacking GKE IP.
+    # Treat as conflict (same path as fully manual rules below).
+    if [[ "$target_base" =~ ^k8s2- ]]; then
+      warn "Manual rule '$rule' targets GKE resource '$target_base' — occupying $ip"
     fi
 
     warn "Manual forwarding rule '$rule' uses $ip — will conflict with GKE LB"
